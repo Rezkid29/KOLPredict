@@ -1,11 +1,23 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
+import { dbStorage as storage } from "./db-storage";
+import { seed } from "./seed";
 import type { InsertBet, User } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Seed database if empty
+  try {
+    const kols = await storage.getAllKols();
+    if (kols.length === 0) {
+      console.log("Database is empty, running seed...");
+      await seed();
+    }
+  } catch (error) {
+    console.error("Error checking/seeding database:", error);
+  }
 
   // WebSocket server for real-time updates
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
@@ -81,9 +93,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.query.userId as string;
       
       if (!userId) {
-        // Return first user as fallback for compatibility
-        const users = Array.from((storage as any).users.values());
-        const user = users[0];
+        // Return default user as fallback for compatibility
+        const user = await storage.getUserByUsername("trader1");
         if (!user) {
           return res.status(404).json({ message: "User not found" });
         }
@@ -150,9 +161,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.query.userId as string;
       
       if (!userId) {
-        // Fallback to first user for compatibility
-        const users = Array.from((storage as any).users.values()) as User[];
-        const user = users[0];
+        // Fallback to default user for compatibility
+        const user = await storage.getUserByUsername("trader1");
         if (!user) {
           return res.status(404).json({ message: "User not found" });
         }
@@ -181,9 +191,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (userId) {
         user = await storage.getUser(userId);
       } else {
-        // Fallback to first user for compatibility
-        const users = Array.from((storage as any).users.values()) as User[];
-        user = users[0];
+        // Fallback to default user for compatibility
+        user = await storage.getUserByUsername("trader1");
       }
       
       if (!user) {
@@ -302,6 +311,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to create comment" });
+    }
+  });
+
+  // Wallet deposit
+  app.post("/api/wallet/deposit", async (req, res) => {
+    try {
+      const { userId, amount } = req.body;
+
+      if (!userId || !amount) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const depositAmount = parseFloat(amount);
+      if (depositAmount <= 0 || depositAmount > 10000) {
+        return res.status(400).json({ message: "Invalid deposit amount (must be between $0.01 and $10,000)" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const currentBalance = parseFloat(user.balance);
+      const newBalance = (currentBalance + depositAmount).toFixed(2);
+
+      await storage.updateUserBalance(userId, newBalance);
+
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "deposit",
+        amount: amount.toString(),
+        balanceAfter: newBalance,
+        description: `Deposited ${depositAmount.toFixed(2)} PTS`,
+      });
+
+      res.json({
+        transaction,
+        newBalance,
+      });
+    } catch (error) {
+      console.error("Error processing deposit:", error);
+      res.status(500).json({ message: "Failed to process deposit" });
+    }
+  });
+
+  // Wallet withdrawal
+  app.post("/api/wallet/withdraw", async (req, res) => {
+    try {
+      const { userId, amount } = req.body;
+
+      if (!userId || !amount) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const withdrawAmount = parseFloat(amount);
+      if (withdrawAmount <= 0) {
+        return res.status(400).json({ message: "Invalid withdrawal amount" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const currentBalance = parseFloat(user.balance);
+      if (withdrawAmount > currentBalance) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      const newBalance = (currentBalance - withdrawAmount).toFixed(2);
+
+      await storage.updateUserBalance(userId, newBalance);
+
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "withdrawal",
+        amount: amount.toString(),
+        balanceAfter: newBalance,
+        description: `Withdrew ${withdrawAmount.toFixed(2)} PTS`,
+      });
+
+      res.json({
+        transaction,
+        newBalance,
+      });
+    } catch (error) {
+      console.error("Error processing withdrawal:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  // Get user transaction history
+  app.get("/api/wallet/transactions", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+      if (!userId) {
+        const user = await storage.getUserByUsername("trader1");
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        const transactions = await storage.getUserTransactions(user.id, limit);
+        return res.json(transactions);
+      }
+
+      const transactions = await storage.getUserTransactions(userId, limit);
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch transactions" });
     }
   });
 

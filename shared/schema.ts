@@ -60,6 +60,26 @@ export const comments = pgTable("comments", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const transactions = pgTable("transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  balanceAfter: decimal("balance_after", { precision: 10, scale: 2 }).notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const kolMetricsHistory = pgTable("kol_metrics_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  kolId: varchar("kol_id").notNull().references(() => kols.id),
+  followers: integer("followers").notNull(),
+  engagementRate: decimal("engagement_rate", { precision: 5, scale: 2 }).notNull(),
+  trending: boolean("trending").notNull().default(false),
+  trendingPercent: decimal("trending_percent", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   balance: true,
@@ -88,6 +108,16 @@ export const insertCommentSchema = createInsertSchema(comments).omit({
   createdAt: true,
 });
 
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertKolMetricsHistorySchema = createInsertSchema(kolMetricsHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -102,6 +132,12 @@ export type Bet = typeof bets.$inferSelect;
 
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 export type Comment = typeof comments.$inferSelect;
+
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+
+export type InsertKolMetricsHistory = z.infer<typeof insertKolMetricsHistorySchema>;
+export type KolMetricsHistory = typeof kolMetricsHistory.$inferSelect;
 
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };

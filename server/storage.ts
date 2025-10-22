@@ -4,6 +4,8 @@ import {
   type Market, type InsertMarket, type MarketWithKol,
   type Bet, type InsertBet, type BetWithMarket,
   type Comment, type InsertComment, type CommentWithUser,
+  type Transaction, type InsertTransaction,
+  type KolMetricsHistory, type InsertKolMetricsHistory,
   type LeaderboardEntry,
   type PriceHistoryPoint
 } from "@shared/schema";
@@ -48,6 +50,14 @@ export interface IStorage {
   // Comments
   getMarketComments(marketId: string): Promise<CommentWithUser[]>;
   createComment(comment: InsertComment): Promise<Comment>;
+  
+  // Transactions
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getUserTransactions(userId: string, limit?: number): Promise<Transaction[]>;
+  
+  // KOL metrics history
+  createKolMetricsHistory(history: InsertKolMetricsHistory): Promise<KolMetricsHistory>;
+  getKolMetricsHistory(kolId: string, days?: number): Promise<KolMetricsHistory[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -458,6 +468,38 @@ export class MemStorage implements IStorage {
     };
     this.comments.set(id, comment);
     return comment;
+  }
+
+  // Transaction methods (stub - not persisted in memory)
+  async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
+    const id = randomUUID();
+    const transaction: Transaction = {
+      ...insertTransaction,
+      id,
+      createdAt: new Date(),
+    };
+    return transaction;
+  }
+
+  async getUserTransactions(userId: string, limit: number = 50): Promise<Transaction[]> {
+    return [];
+  }
+
+  // KOL metrics history methods (stub - not persisted in memory)
+  async createKolMetricsHistory(insertHistory: InsertKolMetricsHistory): Promise<KolMetricsHistory> {
+    const id = randomUUID();
+    const history: KolMetricsHistory = {
+      ...insertHistory,
+      id,
+      createdAt: new Date(),
+      trending: insertHistory.trending ?? false,
+      trendingPercent: insertHistory.trendingPercent ?? null,
+    };
+    return history;
+  }
+
+  async getKolMetricsHistory(kolId: string, days: number = 30): Promise<KolMetricsHistory[]> {
+    return [];
   }
 }
 
