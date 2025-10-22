@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
-import type { MarketWithKol, BetWithMarket } from "@shared/schema";
+import type { MarketWithKol, BetWithMarket, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -33,7 +33,7 @@ export default function Home() {
     queryKey: ["/api/bets/recent"],
   });
 
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
   });
 
@@ -89,31 +89,32 @@ export default function Home() {
       <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username} />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden border-b border-border bg-gradient-to-br from-background via-background to-primary/5">
-        <div className="absolute inset-0 bg-grid-white/5 bg-[size:40px_40px]" />
-        <div className="container mx-auto px-4 py-16 md:py-24 relative">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <Badge variant="outline" className="gap-2 px-4 py-2 border-primary/30 text-primary">
+      <section className="relative overflow-hidden border-b border-border/50 bg-gradient-to-br from-background via-primary/5 to-background">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.1),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(120,119,198,0.08),rgba(255,255,255,0))]" />
+        <div className="container mx-auto px-4 py-20 md:py-28 relative">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+            <Badge variant="outline" className="gap-2 px-4 py-2.5 border-primary/40 text-primary backdrop-blur-sm bg-background/50">
               <Sparkles className="h-4 w-4" />
               Trade KOL Performance Markets
             </Badge>
-            <h1 className="text-4xl md:text-6xl font-display font-bold tracking-tight">
-              Bet on <span className="text-primary">Influence</span>
+            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight leading-tight">
+              Bet on <span className="text-primary bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">Influence</span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Trade prediction markets on Key Opinion Leader performance. Bet on follower growth, engagement rates, and real-time influence metrics.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-card-border">
-                <div className="flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-success opacity-75"></span>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-6">
+              <div className="flex items-center gap-2.5 px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
+                <div className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </div>
-                <span className="text-sm font-medium">{markets.length} Live Markets</span>
+                <span className="text-sm font-semibold">{markets.length} Live Markets</span>
               </div>
-              <div className="px-4 py-2 rounded-lg bg-card border border-card-border">
+              <div className="px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
                 <span className="text-sm text-muted-foreground">24h Volume: </span>
-                <span className="text-sm font-semibold">
+                <span className="text-sm font-bold tabular-nums">
                   {markets.reduce((sum, m) => sum + parseFloat(m.totalVolume), 0).toFixed(0)} PTS
                 </span>
               </div>
@@ -123,23 +124,23 @@ export default function Home() {
       </section>
 
       {/* Main Content */}
-      <section className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section className="container mx-auto px-4 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Markets Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Search and Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Search KOLs or markets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 border-border/60 transition-colors"
                   data-testid="input-search"
                 />
               </div>
-              <Button variant="outline" className="gap-2 shrink-0" data-testid="button-filter">
+              <Button variant="outline" size="default" className="gap-2 shrink-0" data-testid="button-filter">
                 <Filter className="h-4 w-4" />
                 Filter
               </Button>
@@ -147,21 +148,23 @@ export default function Home() {
 
             {/* Markets Grid */}
             {marketsLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-80 rounded-lg bg-card border border-card-border animate-pulse" />
+                  <div key={i} className="h-[450px] rounded-lg bg-card/50 border border-card-border/50 animate-pulse" />
                 ))}
               </div>
             ) : filteredMarkets.length === 0 ? (
-              <div className="text-center py-16">
-                <TrendingUp className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <div className="text-center py-20 px-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-6">
+                  <TrendingUp className="h-8 w-8 text-muted-foreground/60" />
+                </div>
                 <h3 className="text-xl font-semibold mb-2">No markets found</h3>
                 <p className="text-muted-foreground">
                   {searchQuery ? "Try a different search term" : "Check back soon for new markets"}
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="markets-grid">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5" data-testid="markets-grid">
                 {filteredMarkets.map((market) => (
                   <MarketCard
                     key={market.id}
@@ -176,7 +179,7 @@ export default function Home() {
 
           {/* Live Feed Column - Desktop */}
           <div className="hidden lg:block lg:col-span-1">
-            <div className="sticky top-20">
+            <div className="sticky top-24">
               <LiveFeed bets={bets} />
             </div>
           </div>
@@ -188,7 +191,7 @@ export default function Home() {
         <SheetTrigger asChild>
           <Button
             size="lg"
-            className="lg:hidden fixed bottom-6 right-6 z-40 rounded-full w-14 h-14 shadow-lg"
+            className="lg:hidden fixed bottom-6 right-6 z-40 rounded-full w-16 h-16 shadow-xl shadow-primary/20 border-2 border-primary/20 hover:shadow-2xl hover:shadow-primary/30 transition-all"
             data-testid="button-mobile-live-feed"
           >
             <Activity className="h-6 w-6" />
@@ -201,7 +204,7 @@ export default function Home() {
               Live Feed
             </SheetTitle>
           </SheetHeader>
-          <div className="mt-4">
+          <div className="mt-6">
             <LiveFeed bets={bets} />
           </div>
         </SheetContent>

@@ -47,32 +47,34 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md" data-testid="modal-bet">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {type === "buy" ? (
-              <TrendingUp className="h-5 w-5 text-success" />
-            ) : (
-              <TrendingDown className="h-5 w-5 text-destructive" />
-            )}
-            {type === "buy" ? "Buy Shares" : "Sell Shares"}
+          <DialogTitle className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-lg ${type === "buy" ? "bg-success/10 ring-1 ring-success/20" : "bg-destructive/10 ring-1 ring-destructive/20"}`}>
+              {type === "buy" ? (
+                <TrendingUp className="h-5 w-5 text-success" />
+              ) : (
+                <TrendingDown className="h-5 w-5 text-destructive" />
+              )}
+            </div>
+            <span className="text-xl">{type === "buy" ? "Buy Shares" : "Sell Shares"}</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-base">
             Place your bet on this KOL market
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Market info */}
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-            <Avatar className="h-12 w-12">
+          <div className="flex items-start gap-3.5 p-4 rounded-lg bg-muted/50 border border-border/50">
+            <Avatar className="h-14 w-14 ring-2 ring-border/50">
               <AvatarImage src={market.kol.avatar} alt={market.kol.name} />
               <AvatarFallback>{market.kol.name[0]}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-semibold">{market.kol.name}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-bold text-base">{market.kol.name}</p>
                 <Badge variant="secondary" className="text-xs">{market.kol.tier}</Badge>
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">
+              <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
                 {market.title}
               </p>
             </div>
@@ -159,11 +161,8 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
               Cancel
             </Button>
             <Button
-              className={`flex-1 font-semibold ${
-                type === "buy" 
-                  ? "bg-success hover:bg-success border-success-border" 
-                  : "bg-destructive hover:bg-destructive"
-              }`}
+              variant={type === "buy" ? "default" : "destructive"}
+              className="flex-1 font-semibold"
               onClick={handleConfirm}
               disabled={numShares <= 0 || totalCost > userBalance}
               data-testid="button-confirm-bet"

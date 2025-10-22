@@ -21,38 +21,40 @@ export function LiveFeed({ bets }: LiveFeedProps) {
   };
 
   return (
-    <Card className="overflow-hidden">
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <Card className="overflow-hidden border-border/60">
+      <div className="p-5 border-b border-border/50 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
           <Activity className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Live Feed</h2>
         </div>
-        <Badge variant="outline" className="gap-1.5 border-success text-success">
+        <Badge variant="outline" className="gap-2 border-success/40 text-success px-3 py-1">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
           </span>
-          Live
+          <span className="font-semibold text-xs">Live</span>
         </Badge>
       </div>
       
       <ScrollArea className="h-[500px]">
-        <div className="p-4 space-y-3" data-testid="live-feed-container">
+        <div className="p-5 space-y-3" data-testid="live-feed-container">
           {bets.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">No recent bets yet</p>
-              <p className="text-xs mt-1">Be the first to place a bet!</p>
+            <div className="text-center py-16 text-muted-foreground">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted/50 mb-5">
+                <Activity className="h-7 w-7 opacity-60" />
+              </div>
+              <p className="font-medium mb-1">No recent bets yet</p>
+              <p className="text-sm">Be the first to place a bet!</p>
             </div>
           ) : (
             bets.map((bet) => (
               <div
                 key={bet.id}
-                className="flex items-start gap-3 p-3 rounded-lg hover-elevate active-elevate-2 border border-border/50 transition-all"
+                className="flex items-start gap-3.5 p-4 rounded-lg hover-elevate active-elevate-2 border border-border/50 transition-all"
                 data-testid={`bet-item-${bet.id}`}
               >
-                <div className={`mt-0.5 p-1.5 rounded-md ${
-                  bet.type === "buy" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                <div className={`mt-0.5 p-2 rounded-lg ${
+                  bet.type === "buy" ? "bg-success/10 text-success ring-1 ring-success/20" : "bg-destructive/10 text-destructive ring-1 ring-destructive/20"
                 }`}>
                   {bet.type === "buy" ? (
                     <TrendingUp className="h-4 w-4" />
@@ -61,9 +63,9 @@ export function LiveFeed({ bets }: LiveFeedProps) {
                   )}
                 </div>
                 
-                <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium line-clamp-2">
+                    <p className="text-sm font-semibold line-clamp-2">
                       {bet.market.title}
                     </p>
                     <Badge
@@ -74,12 +76,12 @@ export function LiveFeed({ bets }: LiveFeedProps) {
                     </Badge>
                   </div>
                   
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{bet.market.kol.name}</span>
+                  <div className="flex items-center gap-2.5 text-xs text-muted-foreground flex-wrap">
+                    <span className="font-medium">{bet.market.kol.name}</span>
                     <span>•</span>
                     <span className="font-semibold">{bet.shares} shares</span>
                     <span>•</span>
-                    <span className="tabular-nums">{parseFloat(bet.amount).toFixed(2)} PTS</span>
+                    <span className="font-bold tabular-nums">{parseFloat(bet.amount).toFixed(2)} PTS</span>
                   </div>
                   
                   <p className="text-xs text-muted-foreground">

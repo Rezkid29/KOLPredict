@@ -74,27 +74,29 @@ export default function Portfolio() {
     <div className="min-h-screen bg-background">
       <Navbar balance={balance} username={user?.username} />
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-10">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <BarChart3 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl md:text-4xl font-display font-bold">Portfolio</h1>
+        <div className="mb-10">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
+              <BarChart3 className="h-6 w-6 text-primary" />
+            </div>
+            <h1 className="text-4xl md:text-5xl font-display font-bold">Portfolio</h1>
           </div>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-lg">
             Track your betting performance and history
           </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-primary/10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+          <Card className="p-6 hover-elevate transition-all border-border/60">
+            <div className="flex items-center gap-4">
+              <div className="p-3.5 rounded-xl bg-primary/10 ring-1 ring-primary/20">
                 <Wallet className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Current Balance</p>
+                <p className="text-sm text-muted-foreground font-medium mb-1">Current Balance</p>
                 <p className="text-2xl font-bold tabular-nums" data-testid="text-balance">
                   {balance.toFixed(2)} PTS
                 </p>
@@ -102,9 +104,9 @@ export default function Portfolio() {
             </div>
           </Card>
           
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <div className={`p-3 rounded-lg ${totalProfit >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+          <Card className="p-6 hover-elevate transition-all border-border/60">
+            <div className="flex items-center gap-4">
+              <div className={`p-3.5 rounded-xl ring-1 ${totalProfit >= 0 ? 'bg-success/10 ring-success/20' : 'bg-destructive/10 ring-destructive/20'}`}>
                 {totalProfit >= 0 ? (
                   <TrendingUp className="h-6 w-6 text-success" />
                 ) : (
@@ -112,7 +114,7 @@ export default function Portfolio() {
                 )}
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total P&L</p>
+                <p className="text-sm text-muted-foreground font-medium mb-1">Total P&L</p>
                 <p className={`text-2xl font-bold tabular-nums ${totalProfit >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-profit">
                   {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)} PTS
                 </p>
@@ -120,13 +122,13 @@ export default function Portfolio() {
             </div>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-accent/10">
-                <Target className="h-6 w-6 text-accent" />
+          <Card className="p-6 hover-elevate transition-all border-border/60">
+            <div className="flex items-center gap-4">
+              <div className="p-3.5 rounded-xl bg-accent/10 ring-1 ring-accent/20">
+                <Target className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Win Rate</p>
+                <p className="text-sm text-muted-foreground font-medium mb-1">Win Rate</p>
                 <p className="text-2xl font-bold tabular-nums" data-testid="text-winrate">
                   {winRate.toFixed(1)}%
                 </p>
@@ -134,17 +136,17 @@ export default function Portfolio() {
             </div>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-warning/10">
+          <Card className="p-6 hover-elevate transition-all border-border/60">
+            <div className="flex items-center gap-4">
+              <div className="p-3.5 rounded-xl bg-warning/10 ring-1 ring-warning/20">
                 <BarChart3 className="h-6 w-6 text-warning" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Active Bets</p>
+                <p className="text-sm text-muted-foreground font-medium mb-1">Active Bets</p>
                 <p className="text-2xl font-bold tabular-nums" data-testid="text-active-bets">
                   {activeBets.length}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-1">
                   {totalInvested.toFixed(0)} PTS invested
                 </p>
               </div>
@@ -153,31 +155,36 @@ export default function Portfolio() {
         </div>
 
         {/* Betting History */}
-        <Card className="overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h2 className="text-lg font-semibold">Betting History</h2>
+        <Card className="overflow-hidden border-border/60">
+          <div className="p-6 border-b border-border/50">
+            <h2 className="text-xl font-semibold mb-1">Betting History</h2>
             <p className="text-sm text-muted-foreground">
-              {bets.length} total bets
+              {bets.length} total {bets.length === 1 ? 'bet' : 'bets'}
             </p>
           </div>
 
           {isLoading ? (
-            <div className="p-12 text-center text-muted-foreground">
-              <div className="animate-pulse">Loading bets...</div>
+            <div className="p-16 text-center text-muted-foreground">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted/50 mb-4 animate-pulse">
+                <BarChart3 className="h-6 w-6" />
+              </div>
+              <p className="text-sm">Loading bets...</p>
             </div>
           ) : bets.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">No bets yet</p>
-              <p className="text-xs mt-1">Place your first bet to get started!</p>
+            <div className="p-16 text-center text-muted-foreground">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-6">
+                <BarChart3 className="h-8 w-8" />
+              </div>
+              <p className="font-medium mb-1">No bets yet</p>
+              <p className="text-sm">Place your first bet to get started!</p>
             </div>
           ) : (
             <ScrollArea className="h-[600px]">
-              <div className="p-4 space-y-3">
+              <div className="p-5 space-y-3">
                 {bets.map((bet) => (
                   <div
                     key={bet.id}
-                    className="flex items-start gap-4 p-4 rounded-lg border border-border hover-elevate transition-all"
+                    className="flex items-start gap-4 p-5 rounded-lg border border-border/60 hover-elevate transition-all"
                     data-testid={`bet-history-${bet.id}`}
                   >
                     <Avatar className="h-12 w-12 ring-2 ring-border" data-testid={`avatar-${bet.id}`}>
