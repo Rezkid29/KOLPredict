@@ -3,7 +3,9 @@ import {
   type Kol, type InsertKol,
   type Market, type InsertMarket, type MarketWithKol,
   type Bet, type InsertBet, type BetWithMarket,
-  type LeaderboardEntry
+  type Comment, type InsertComment, type CommentWithUser,
+  type LeaderboardEntry,
+  type PriceHistoryPoint
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -32,12 +34,20 @@ export interface IStorage {
   // Bet methods
   getBet(id: string): Promise<Bet | undefined>;
   getUserBets(userId: string): Promise<Bet[]>;
+  getUserBetsWithMarkets(userId: string): Promise<BetWithMarket[]>;
   getRecentBets(limit?: number): Promise<BetWithMarket[]>;
   createBet(bet: InsertBet): Promise<Bet>;
   updateBetStatus(id: string, status: string, profit?: string): Promise<void>;
   
   // Leaderboard
   getLeaderboard(): Promise<LeaderboardEntry[]>;
+  
+  // Price history
+  getMarketPriceHistory(marketId: string, days?: number): Promise<PriceHistoryPoint[]>;
+  
+  // Comments
+  getMarketComments(marketId: string): Promise<CommentWithUser[]>;
+  createComment(comment: InsertComment): Promise<Comment>;
 }
 
 export class MemStorage implements IStorage {
@@ -45,12 +55,14 @@ export class MemStorage implements IStorage {
   private kols: Map<string, Kol>;
   private markets: Map<string, Market>;
   private bets: Map<string, Bet>;
+  private comments: Map<string, Comment>;
 
   constructor() {
     this.users = new Map();
     this.kols = new Map();
     this.markets = new Map();
     this.bets = new Map();
+    this.comments = new Map();
     this.initializeMockData();
   }
 
@@ -296,6 +308,27 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserBetsWithMarkets(userId: string): Promise<BetWithMarket[]> {
+    const bets = Array.from(this.bets.values())
+      .filter((bet) => bet.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return bets
+      .map((bet) => {
+        const market = this.markets.get(bet.marketId);
+        if (!market) return null;
+        
+        const kol = this.kols.get(market.kolId);
+        if (!kol) return null;
+        
+        return {
+          ...bet,
+          market: { ...market, kol },
+        };
+      })
+      .filter((b): b is BetWithMarket => b !== null);
+  }
+
   async getRecentBets(limit: number = 20): Promise<BetWithMarket[]> {
     const bets = Array.from(this.bets.values())
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -354,6 +387,64 @@ export class MemStorage implements IStorage {
       winRate: user.totalBets > 0 ? (user.totalWins / user.totalBets) * 100 : 0,
       rank: index + 1,
     }));
+  }
+
+  // Price history - Generate mock historical data
+  async getMarketPriceHistory(marketId: string, days: number = 7): Promise<PriceHistoryPoint[]> {
+    const market = this.markets.get(marketId);
+    if (!market) return [];
+
+    const currentPrice = parseFloat(market.price);
+    const history: PriceHistoryPoint[] = [];
+    const now = new Date();
+
+    // Generate historical data points (one per day)
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      
+      // Create a trend that leads to current price
+      // Add some randomness but make it somewhat realistic
+      const progress = (days - i) / days;
+      const basePrice = currentPrice * (0.7 + progress * 0.3);
+      const randomVariation = (Math.random() - 0.5) * 0.02 * currentPrice;
+      const price = Math.max(0.01, basePrice + randomVariation);
+
+      history.push({
+        time: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        price: parseFloat(price.toFixed(4)),
+      });
+    }
+
+    return history;
+  }
+
+  // Comments
+  async getMarketComments(marketId: string): Promise<CommentWithUser[]> {
+    const comments = Array.from(this.comments.values())
+      .filter((comment) => comment.marketId === marketId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return comments.map((comment) => {
+      const user = this.users.get(comment.userId);
+      return {
+        ...comment,
+        user: {
+          username: user?.username || "Unknown",
+        },
+      };
+    });
+  }
+
+  async createComment(insertComment: InsertComment): Promise<Comment> {
+    const id = randomUUID();
+    const comment: Comment = {
+      ...insertComment,
+      id,
+      createdAt: new Date(),
+    };
+    this.comments.set(id, comment);
+    return comment;
   }
 }
 

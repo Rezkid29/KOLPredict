@@ -52,6 +52,14 @@ export const bets = pgTable("bets", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const comments = pgTable("comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  marketId: varchar("market_id").notNull().references(() => markets.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   balance: true,
@@ -75,6 +83,11 @@ export const insertBetSchema = createInsertSchema(bets).omit({
   profit: true,
 });
 
+export const insertCommentSchema = createInsertSchema(comments).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -87,8 +100,12 @@ export type Market = typeof markets.$inferSelect;
 export type InsertBet = z.infer<typeof insertBetSchema>;
 export type Bet = typeof bets.$inferSelect;
 
+export type InsertComment = z.infer<typeof insertCommentSchema>;
+export type Comment = typeof comments.$inferSelect;
+
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };
+export type CommentWithUser = Comment & { user: { username: string } };
 
 export type LeaderboardEntry = {
   userId: string;
@@ -98,4 +115,9 @@ export type LeaderboardEntry = {
   totalWins: number;
   winRate: number;
   rank: number;
+};
+
+export type PriceHistoryPoint = {
+  time: string;
+  price: number;
 };

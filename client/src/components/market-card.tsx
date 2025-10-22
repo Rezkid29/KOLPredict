@@ -1,9 +1,13 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { MarketWithKol } from "@shared/schema";
+import { PerformanceChart } from "./performance-chart";
+import { MarketDetailsModal } from "./market-details-modal";
+import type { MarketWithKol, PriceHistoryPoint } from "@shared/schema";
 
 interface MarketCardProps {
   market: MarketWithKol;
@@ -12,8 +16,18 @@ interface MarketCardProps {
 }
 
 export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
+  const [showDetails, setShowDetails] = useState(false);
   const price = parseFloat(market.price);
   const engagement = parseFloat(market.engagement);
+
+  const { data: priceHistory = [] } = useQuery<PriceHistoryPoint[]>({
+    queryKey: ["/api/markets", market.id, "history"],
+    queryFn: async () => {
+      const response = await fetch(`/api/markets/${market.id}/history?days=7`);
+      if (!response.ok) throw new Error("Failed to fetch price history");
+      return response.json();
+    },
+  });
 
   return (
     <Card 
@@ -84,6 +98,20 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
           </div>
         </div>
 
+        {/* Performance chart */}
+        <div className="border border-border rounded-lg p-3 bg-muted/20">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-muted-foreground font-medium">7-Day Price Trend</p>
+            {priceHistory.length > 0 && (
+              <Badge variant="outline" className="text-xs gap-1">
+                <TrendingUp className="h-3 w-3" />
+                {((priceHistory[priceHistory.length - 1].price - priceHistory[0].price) / priceHistory[0].price * 100).toFixed(1)}%
+              </Badge>
+            )}
+          </div>
+          <PerformanceChart data={priceHistory} color="hsl(var(--primary))" />
+        </div>
+
         {/* KOL metrics */}
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-4">
@@ -106,10 +134,10 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-2 pt-2">
+        <div className="grid grid-cols-3 gap-2 pt-2">
           <Button 
             onClick={() => onBuy(market)}
-            className="flex-1 bg-success hover:bg-success border-success-border font-semibold"
+            className="bg-success hover:bg-success border-success-border font-semibold"
             data-testid={`button-buy-${market.id}`}
           >
             Buy
@@ -117,13 +145,28 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
           <Button 
             onClick={() => onSell(market)}
             variant="destructive"
-            className="flex-1 font-semibold"
+            className="font-semibold"
             data-testid={`button-sell-${market.id}`}
           >
             Sell
           </Button>
+          <Button 
+            onClick={() => setShowDetails(true)}
+            variant="outline"
+            className="gap-1.5"
+            data-testid={`button-details-${market.id}`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Details</span>
+          </Button>
         </div>
       </div>
+
+      <MarketDetailsModal
+        open={showDetails}
+        onClose={() => setShowDetails(false)}
+        market={market}
+      />
     </Card>
   );
 }

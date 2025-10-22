@@ -33,11 +33,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return 0.01 + (supply / 10000);
   };
 
-  // Get current user (for MVP, return first user)
+  // Authentication endpoints
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { username } = req.body;
+      
+      if (!username || username.length < 3) {
+        return res.status(400).json({ message: "Username must be at least 3 characters" });
+      }
+
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      // Create new user
+      const user = await storage.createUser({ username });
+      res.json({ userId: user.id, username: user.username });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username } = req.body;
+      
+      if (!username) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({ userId: user.id, username: user.username });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
+  // Get current user (by userId from request body/header)
   app.get("/api/user", async (req, res) => {
     try {
-      const users = Array.from((storage as any).users.values());
-      const user = users[0];
+      const userId = req.query.userId as string;
+      
+      if (!userId) {
+        // Return first user as fallback for compatibility
+        const users = Array.from((storage as any).users.values());
+        const user = users[0];
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        return res.json(user);
+      }
+
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -91,18 +144,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user's bets with market details
+  app.get("/api/bets/user", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      
+      if (!userId) {
+        // Fallback to first user for compatibility
+        const users = Array.from((storage as any).users.values());
+        const user = users[0];
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        const bets = await storage.getUserBetsWithMarkets(user.id);
+        return res.json(bets);
+      }
+
+      const bets = await storage.getUserBetsWithMarkets(userId);
+      res.json(bets);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch user bets" });
+    }
+  });
+
   // Create a new bet
   app.post("/api/bets", async (req, res) => {
     try {
-      const { marketId, type, amount, shares } = req.body;
+      const { marketId, type, amount, shares, userId } = req.body;
 
       if (!marketId || !type || !amount || !shares) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
       // Get current user
-      const users = Array.from((storage as any).users.values());
-      const user = users[0];
+      let user;
+      if (userId) {
+        user = await storage.getUser(userId);
+      } else {
+        // Fallback to first user for compatibility
+        const users = Array.from((storage as any).users.values());
+        user = users[0];
+      }
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -171,6 +254,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(leaderboard);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  // Get market price history
+  app.get("/api/markets/:id/history", async (req, res) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string) : 7;
+      const history = await storage.getMarketPriceHistory(req.params.id, days);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch price history" });
+    }
+  });
+
+  // Get market comments
+  app.get("/api/markets/:id/comments", async (req, res) => {
+    try {
+      const comments = await storage.getMarketComments(req.params.id);
+      res.json(comments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // Post a comment
+  app.post("/api/comments", async (req, res) => {
+    try {
+      const { marketId, content, userId } = req.body;
+
+      if (!marketId || !content || !userId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const comment = await storage.createComment({
+        userId,
+        marketId,
+        content,
+      });
+
+      const user = await storage.getUser(userId);
+      res.json({
+        ...comment,
+        user: {
+          username: user?.username || "Unknown",
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create comment" });
     }
   });
 

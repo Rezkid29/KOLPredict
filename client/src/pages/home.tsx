@@ -7,7 +7,8 @@ import { LiveFeed } from "@/components/live-feed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, TrendingUp, Sparkles } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
 import type { MarketWithKol, BetWithMarket } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +19,7 @@ export default function Home() {
   const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(null);
   const [betType, setBetType] = useState<"buy" | "sell">("buy");
   const [searchQuery, setSearchQuery] = useState("");
+  const [liveFeedOpen, setLiveFeedOpen] = useState(false);
   const { toast } = useToast();
   
   // Connect to WebSocket for real-time updates
@@ -172,14 +174,38 @@ export default function Home() {
             )}
           </div>
 
-          {/* Live Feed Column */}
-          <div className="lg:col-span-1">
+          {/* Live Feed Column - Desktop */}
+          <div className="hidden lg:block lg:col-span-1">
             <div className="sticky top-20">
               <LiveFeed bets={bets} />
             </div>
           </div>
         </div>
       </section>
+
+      {/* Mobile Live Feed Button */}
+      <Sheet open={liveFeedOpen} onOpenChange={setLiveFeedOpen}>
+        <SheetTrigger asChild>
+          <Button
+            size="lg"
+            className="lg:hidden fixed bottom-6 right-6 z-40 rounded-full w-14 h-14 shadow-lg"
+            data-testid="button-mobile-live-feed"
+          >
+            <Activity className="h-6 w-6" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="bottom" className="h-[80vh]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Live Feed
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <LiveFeed bets={bets} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Bet Modal */}
       <BetModal
