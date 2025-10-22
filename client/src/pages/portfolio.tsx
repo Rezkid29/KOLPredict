@@ -14,10 +14,10 @@ import {
   CheckCircle2,
   XCircle
 } from "lucide-react";
-import type { BetWithMarket } from "@shared/schema";
+import type { BetWithMarket, User } from "@shared/schema";
 
 export default function Portfolio() {
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
   });
 
