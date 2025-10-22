@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import type { InsertBet } from "@shared/schema";
+import type { InsertBet, User } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -151,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!userId) {
         // Fallback to first user for compatibility
-        const users = Array.from((storage as any).users.values());
+        const users = Array.from((storage as any).users.values()) as User[];
         const user = users[0];
         if (!user) {
           return res.status(404).json({ message: "User not found" });
@@ -177,12 +177,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get current user
-      let user;
+      let user: User | undefined;
       if (userId) {
         user = await storage.getUser(userId);
       } else {
         // Fallback to first user for compatibility
-        const users = Array.from((storage as any).users.values());
+        const users = Array.from((storage as any).users.values()) as User[];
         user = users[0];
       }
       

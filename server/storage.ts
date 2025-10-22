@@ -146,6 +146,8 @@ export class MemStorage implements IStorage {
       const kol: Kol = {
         id: randomUUID(),
         ...kolData,
+        trending: kolData.trending ?? false,
+        trendingPercent: kolData.trendingPercent ?? null,
       };
       this.kols.set(kol.id, kol);
     });
@@ -234,7 +236,12 @@ export class MemStorage implements IStorage {
 
   async createKol(insertKol: InsertKol): Promise<Kol> {
     const id = randomUUID();
-    const kol: Kol = { ...insertKol, id };
+    const kol: Kol = { 
+      ...insertKol, 
+      id,
+      trending: insertKol.trending ?? false,
+      trendingPercent: insertKol.trendingPercent ?? null,
+    };
     this.kols.set(id, kol);
     return kol;
   }
@@ -275,6 +282,10 @@ export class MemStorage implements IStorage {
       ...insertMarket,
       id,
       createdAt: new Date(),
+      supply: insertMarket.supply ?? 0,
+      totalVolume: insertMarket.totalVolume ?? "0.00",
+      isLive: insertMarket.isLive ?? true,
+      engagement: insertMarket.engagement ?? "0.00",
     };
     this.markets.set(id, market);
     return market;
@@ -356,6 +367,8 @@ export class MemStorage implements IStorage {
       ...insertBet,
       id,
       createdAt: new Date(),
+      status: insertBet.status ?? "pending",
+      profit: null,
     };
     this.bets.set(id, bet);
     return bet;
