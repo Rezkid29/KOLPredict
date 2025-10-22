@@ -78,6 +78,10 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void> {
+    await db.update(kols).set(updates).where(eq(kols.id, id));
+  }
+
   // Market methods
   async getMarket(id: string): Promise<Market | undefined> {
     const result = await db.select().from(markets).where(eq(markets.id, id)).limit(1);
@@ -125,6 +129,10 @@ export class DbStorage implements IStorage {
 
   async updateMarketPrice(id: string, price: string, supply: number): Promise<void> {
     await db.update(markets).set({ price, supply }).where(eq(markets.id, id));
+  }
+
+  async updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void> {
+    await db.update(markets).set(updates).where(eq(markets.id, id));
   }
 
   async updateMarketVolume(id: string, volume: string): Promise<void> {
@@ -184,6 +192,10 @@ export class DbStorage implements IStorage {
   async createBet(insertBet: InsertBet): Promise<Bet> {
     const result = await db.insert(bets).values(insertBet).returning();
     return result[0];
+  }
+
+  async getMarketBets(marketId: string): Promise<Bet[]> {
+    return await db.select().from(bets).where(eq(bets.marketId, marketId));
   }
 
   async updateBetStatus(id: string, status: string, profit?: string): Promise<void> {

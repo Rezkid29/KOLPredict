@@ -23,6 +23,7 @@ export interface IStorage {
   getKol(id: string): Promise<Kol | undefined>;
   getAllKols(): Promise<Kol[]>;
   createKol(kol: InsertKol): Promise<Kol>;
+  updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void>;
   
   // Market methods
   getMarket(id: string): Promise<Market | undefined>;
@@ -30,6 +31,7 @@ export interface IStorage {
   getMarketWithKol(id: string): Promise<MarketWithKol | undefined>;
   getAllMarketsWithKols(): Promise<MarketWithKol[]>;
   createMarket(market: InsertMarket): Promise<Market>;
+  updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void>;
   updateMarketPrice(id: string, price: string, supply: number): Promise<void>;
   updateMarketVolume(id: string, volume: string): Promise<void>;
   
@@ -38,6 +40,7 @@ export interface IStorage {
   getUserBets(userId: string): Promise<Bet[]>;
   getUserBetsWithMarkets(userId: string): Promise<BetWithMarket[]>;
   getRecentBets(limit?: number): Promise<BetWithMarket[]>;
+  getMarketBets(marketId: string): Promise<Bet[]>;
   createBet(bet: InsertBet): Promise<Bet>;
   updateBetStatus(id: string, status: string, profit?: string): Promise<void>;
   
@@ -256,6 +259,14 @@ export class MemStorage implements IStorage {
     return kol;
   }
 
+  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void> {
+    const kol = this.kols.get(id);
+    if (kol) {
+      const updatedKol = { ...kol, ...updates };
+      this.kols.set(id, updatedKol);
+    }
+  }
+
   // Market methods
   async getMarket(id: string): Promise<Market | undefined> {
     return this.markets.get(id);
@@ -299,6 +310,14 @@ export class MemStorage implements IStorage {
     };
     this.markets.set(id, market);
     return market;
+  }
+
+  async updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void> {
+    const market = this.markets.get(id);
+    if (market) {
+      const updatedMarket = { ...market, ...updates };
+      this.markets.set(id, updatedMarket);
+    }
   }
 
   async updateMarketPrice(id: string, price: string, supply: number): Promise<void> {
@@ -382,6 +401,12 @@ export class MemStorage implements IStorage {
     };
     this.bets.set(id, bet);
     return bet;
+  }
+
+  async getMarketBets(marketId: string): Promise<Bet[]> {
+    return Array.from(this.bets.values()).filter(
+      (bet) => bet.marketId === marketId,
+    );
   }
 
   async updateBetStatus(id: string, status: string, profit?: string): Promise<void> {

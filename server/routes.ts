@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { dbStorage as storage } from "./db-storage";
 import { seed } from "./seed";
+import { metricsUpdater } from "./metrics-updater";
+import { marketResolver } from "./market-resolver";
+import { socialMediaClient } from "./social-api-client";
 import type { InsertBet, User } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -424,6 +427,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual trigger for KOL metrics update
+  app.post("/api/admin/update-metrics", async (req, res) => {
+    try {
+      await metricsUpdater.updateAllKolMetrics();
+      res.json({ message: "Metrics update completed" });
+    } catch (error) {
+      console.error("Error updating metrics:", error);
+      res.status(500).json({ message: "Failed to update metrics" });
+    }
+  });
+
+  // Manual trigger for market resolution
+  app.post("/api/admin/resolve-markets", async (req, res) => {
+    try {
+      const resolutions = await marketResolver.resolveExpiredMarkets();
+      
+      for (const resolution of resolutions) {
+        const market = await storage.getMarketWithKol(resolution.marketId);
+        if (market) {
+          broadcast({
+            type: 'MARKET_RESOLVED',
+            market,
+            resolution,
+          });
+        }
+      }
+
+      res.json({ 
+        message: "Market resolution completed", 
+        resolved: resolutions.length,
+        resolutions,
+      });
+    } catch (error) {
+      console.error("Error resolving markets:", error);
+      res.status(500).json({ message: "Failed to resolve markets" });
+    }
+  });
+
+  // Get API integration status
+  app.get("/api/admin/api-status", async (req, res) => {
+    try {
+      const isConfigured = socialMediaClient.isConfigured();
+      res.json({
+        configured: isConfigured,
+        message: isConfigured 
+          ? "Social media APIs are configured and will fetch real data"
+          : "No social media APIs configured - using enhanced mock data",
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check API status" });
+    }
+  });
+
   // Simulate market price updates (for demo purposes)
   setInterval(() => {
     storage.getAllMarkets().then((markets) => {
@@ -447,6 +503,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     });
   }, 5000); // Update every 5 seconds
+
+  // Start automatic KOL metrics updates every 30 minutes
+  console.log("Starting automatic KOL metrics updates...");
+  metricsUpdater.startAutoUpdate(30);
+
+  // Start automatic market resolution every 5 minutes
+  console.log("Starting automatic market resolution...");
+  marketResolver.startAutoResolution(5);
+
+  // Set up callback for market resolutions to broadcast via WebSocket
+  const originalResolveExpiredMarkets = marketResolver.resolveExpiredMarkets.bind(marketResolver);
+  marketResolver.resolveExpiredMarkets = async function() {
+    const resolutions = await originalResolveExpiredMarkets();
+    
+    for (const resolution of resolutions) {
+      const market = await storage.getMarketWithKol(resolution.marketId);
+      if (market) {
+        broadcast({
+          type: 'MARKET_RESOLVED',
+          market,
+          resolution,
+        });
+      }
+    }
+    
+    return resolutions;
+  };
 
   return httpServer;
 }

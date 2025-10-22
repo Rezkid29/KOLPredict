@@ -1,10 +1,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { queryClient } from '@/lib/queryClient';
+import { toast } from '@/hooks/use-toast';
+import { getUserId } from '@/hooks/use-auth';
 
 type WebSocketMessage = {
-  type: 'BET_PLACED' | 'PRICE_UPDATE';
+  type: 'BET_PLACED' | 'PRICE_UPDATE' | 'MARKET_RESOLVED';
   bet?: any;
   market?: any;
+  resolution?: any;
 };
 
 export function useWebSocket() {
@@ -32,6 +35,7 @@ export function useWebSocket() {
       ws.onmessage = (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
+          const currentUserId = getUserId();
           
           switch (message.type) {
             case 'BET_PLACED':
@@ -39,6 +43,17 @@ export function useWebSocket() {
               queryClient.invalidateQueries({ queryKey: ['/api/bets/recent'] });
               queryClient.invalidateQueries({ queryKey: ['/api/markets'] });
               queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+              
+              // Show toast notification if it's not the current user's bet
+              if (message.bet && message.bet.userId !== currentUserId && message.market) {
+                const betType = message.bet.type === 'buy' ? 'bought' : 'sold';
+                const kolName = message.market.kol?.name || 'Unknown KOL';
+                toast({
+                  title: "New Market Activity",
+                  description: `Someone ${betType} ${message.bet.shares} shares of ${kolName}`,
+                  duration: 3000,
+                });
+              }
               break;
               
             case 'PRICE_UPDATE':
@@ -49,6 +64,24 @@ export function useWebSocket() {
                   return old.map((m: any) => 
                     m.id === message.market.id ? message.market : m
                   );
+                });
+              }
+              break;
+              
+            case 'MARKET_RESOLVED':
+              // Invalidate queries when market is resolved
+              queryClient.invalidateQueries({ queryKey: ['/api/markets'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/bets/recent'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/bets/user'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+              
+              // Show toast notification for market resolution
+              if (message.market) {
+                const kolName = message.market.kol?.name || 'Market';
+                toast({
+                  title: "Market Resolved",
+                  description: `${kolName} market has been settled`,
+                  duration: 5000,
                 });
               }
               break;
