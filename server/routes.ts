@@ -183,10 +183,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new bet
   app.post("/api/bets", async (req, res) => {
     try {
-      const { marketId, type, amount, shares, userId } = req.body;
+      const { marketId, type, shares, userId } = req.body;
 
-      if (!marketId || !type || !amount || !shares) {
+      if (!marketId || !type || !shares) {
         return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Validate type is exactly "buy" or "sell"
+      if (type !== "buy" && type !== "sell") {
+        return res.status(400).json({ message: "Invalid bet type. Must be 'buy' or 'sell'" });
+      }
+
+      // Validate shares is a positive integer
+      const numShares = parseInt(shares);
+      if (!Number.isInteger(numShares) || numShares <= 0) {
+        return res.status(400).json({ message: "Shares must be a positive integer" });
       }
 
       // Get current user
@@ -207,16 +218,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Market not found" });
       }
 
-      const betAmount = parseFloat(amount);
+      // Calculate amount server-side based on current market price
+      const currentPrice = parseFloat(market.price);
+      const betAmount = currentPrice * numShares;
       const userBalance = parseFloat(user.balance);
 
-      // Check if user has enough balance
-      if (betAmount > userBalance) {
+      // Check if user has enough balance (only for buy orders)
+      if (type === "buy" && betAmount > userBalance) {
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
+      // For sell orders, verify user owns enough shares
+      if (type === "sell") {
+        const userBets = await storage.getMarketBets(marketId);
+        const userMarketBets = userBets.filter(bet => bet.userId === user.id);
+        
+        // Calculate user's current position (shares bought - shares sold)
+        let totalBought = 0;
+        let totalSold = 0;
+        for (const bet of userMarketBets) {
+          if (bet.type === "buy") {
+            totalBought += bet.shares;
+          } else if (bet.type === "sell") {
+            totalSold += bet.shares;
+          }
+        }
+        const currentPosition = totalBought - totalSold;
+        
+        if (numShares > currentPosition) {
+          return res.status(400).json({ 
+            message: `Insufficient shares. You own ${currentPosition} shares but trying to sell ${numShares}.` 
+          });
+        }
+      }
+
       // Calculate new market price using bonding curve
-      const newSupply = type === "buy" ? market.supply + shares : market.supply - shares;
+      const newSupply = type === "buy" ? market.supply + numShares : Math.max(0, market.supply - numShares);
       const newPrice = calculatePrice(newSupply).toFixed(4);
 
       // Create bet
@@ -224,16 +261,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: user.id,
         marketId,
         type,
-        amount: amount.toString(),
+        amount: betAmount.toFixed(2),
         price: market.price,
-        shares,
+        shares: numShares,
         status: "pending",
       };
 
       const bet = await storage.createBet(insertBet);
 
-      // Update user balance
-      const newBalance = (userBalance - betAmount).toFixed(2);
+      // Update user balance based on bet type
+      // Buy: user pays (balance decreases)
+      // Sell: user receives money (balance increases)
+      const newBalance = type === "buy" 
+        ? (userBalance - betAmount).toFixed(2)
+        : (userBalance + betAmount).toFixed(2);
       await storage.updateUserBalance(user.id, newBalance);
 
       // Update user stats

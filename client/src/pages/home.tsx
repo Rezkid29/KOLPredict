@@ -54,7 +54,6 @@ export default function Home() {
       await apiRequest("POST", "/api/bets", {
         marketId,
         type,
-        amount: amount.toString(),
         shares,
       });
 
@@ -66,10 +65,11 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bets/recent"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.message || "Failed to place bet. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to place bet. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

@@ -129,7 +129,7 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
             </div>
             <div className="h-px bg-border" />
             <div className="flex justify-between">
-              <span className="font-medium">Total Cost</span>
+              <span className="font-medium">{type === "buy" ? "Total Cost" : "Total Proceeds"}</span>
               <span className="text-lg font-bold tabular-nums" data-testid="text-total-cost">
                 {totalCost.toFixed(2)} PTS
               </span>
@@ -142,8 +142,8 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
             </div>
           </div>
 
-          {/* Balance check */}
-          {totalCost > userBalance && (
+          {/* Balance check - only for buy orders */}
+          {type === "buy" && totalCost > userBalance && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <p>Insufficient balance. You need {(totalCost - userBalance).toFixed(2)} more PTS.</p>
@@ -164,7 +164,7 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
               variant={type === "buy" ? "default" : "destructive"}
               className="flex-1 font-semibold"
               onClick={handleConfirm}
-              disabled={numShares <= 0 || totalCost > userBalance}
+              disabled={numShares <= 0 || (type === "buy" && totalCost > userBalance)}
               data-testid="button-confirm-bet"
             >
               Confirm {type === "buy" ? "Buy" : "Sell"}
