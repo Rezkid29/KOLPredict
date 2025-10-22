@@ -9,6 +9,14 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 **Last Updated**: October 22, 2025
 
 ## Recent Changes
+- **October 22, 2025**: Enhanced platform with real data integration and automation
+  - **Real-time Notifications**: Added toast notifications for bet placements and market resolutions via WebSocket
+  - **Social Media API Integration**: Created comprehensive API client supporting Instagram, Twitter, and YouTube with intelligent fallback to enhanced mock data
+  - **Automatic KOL Metrics Updates**: Implemented scheduled updater that runs every 30 minutes, fetches real data when configured, and stores metrics history
+  - **Automated Bet Settlement**: Built complete market resolution system that runs every 5 minutes, resolves expired markets, calculates outcomes, settles bets, and updates user balances
+  - **Extended Storage Layer**: Added `updateKol`, `updateMarket`, and `getMarketBets` methods to both in-memory and database storage implementations
+  - **Admin Endpoints**: Added manual trigger endpoints for metrics updates and market resolution
+
 - **October 22, 2025**: Initial MVP implementation
   - Created complete schema for Users, KOLs, Markets, and Bets
   - Implemented dark-themed UI with purple/green/red color scheme
@@ -31,16 +39,25 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 
 ### Backend (Express + TypeScript)
 - **Framework**: Express.js with TypeScript
-- **Storage**: In-memory storage (MemStorage)
-- **Real-time**: WebSocket server for broadcasting market updates
+- **Storage**: PostgreSQL via Drizzle ORM (with MemStorage fallback)
+- **Real-time**: WebSocket server for broadcasting market updates, bet notifications, and market resolutions
+- **Background Tasks**: 
+  - Metrics updater (30-minute intervals)
+  - Market resolver (5-minute intervals)
+- **Social API Integration**: Instagram, Twitter, YouTube clients with mock data fallback
 - **API Endpoints**:
   - `GET /api/user` - Get current user data
   - `GET /api/markets` - Get all markets with KOL data
   - `GET /api/markets/:id` - Get specific market
+  - `GET /api/markets/:id/history` - Get market price history
   - `GET /api/kols` - Get all KOLs
+  - `GET /api/kols/:id/metrics` - Get KOL metrics history
   - `GET /api/bets/recent` - Get recent bets for live feed
   - `POST /api/bets` - Place a new bet
   - `GET /api/leaderboard` - Get trader rankings
+  - `POST /api/admin/update-metrics` - Manually trigger KOL metrics update
+  - `POST /api/admin/resolve-markets` - Manually trigger market resolution
+  - `GET /api/admin/api-status` - Check social API integration status
 
 ### Data Models
 - **User**: ID, username, balance, betting stats
@@ -80,11 +97,31 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 - Formula: `price = 0.01 + (supply / 10000)`
 - Automatic price adjustments on trades
 
-### 6. Real-time Updates
+### 6. Real-time Updates & Notifications
 - WebSocket connection for live market data
 - Automatic reconnection with exponential backoff
 - Price updates every 5 seconds
 - Instant bet notification broadcasting
+- Toast notifications for:
+  - Successful bet placements
+  - Market resolutions (YES/NO outcomes)
+  - Bet settlements (won/lost)
+- Smart notification filtering (suppress self-bet notifications)
+
+### 7. Social Media Data Integration
+- Multi-platform API client (Instagram, Twitter, YouTube)
+- Environment variable configuration for API credentials
+- Intelligent fallback to enhanced mock data when APIs not configured
+- Periodic metrics updates (every 30 minutes)
+- Historical metrics tracking
+
+### 8. Automated Market Resolution
+- Scheduled market resolution every 5 minutes
+- Evaluates market outcomes based on current KOL metrics
+- Automatic bet settlement (win/loss calculation)
+- User balance and statistics updates
+- WebSocket broadcast of resolution events
+- Manual resolution trigger via admin endpoint
 
 ## Design System
 
@@ -142,14 +179,19 @@ This starts both the Express backend and Vite frontend on the same port.
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
 │   │   ├── pages/          # Page components
-│   │   ├── hooks/          # Custom React hooks
+│   │   ├── hooks/          # Custom React hooks (including WebSocket)
 │   │   └── lib/            # Utilities (queryClient, etc.)
 ├── server/
 │   ├── routes.ts           # API routes and WebSocket
-│   ├── storage.ts          # Data storage layer
+│   ├── storage.ts          # In-memory storage implementation
+│   ├── db-storage.ts       # PostgreSQL storage implementation
+│   ├── social-api-client.ts # Social media API integration
+│   ├── metrics-updater.ts  # Automated KOL metrics updater
+│   ├── market-resolver.ts  # Automated market resolution system
+│   ├── seed.ts             # Database seeding with mock data
 │   └── vite.ts             # Vite server integration
 ├── shared/
-│   └── schema.ts           # Shared TypeScript types
+│   └── schema.ts           # Shared TypeScript types and Drizzle schemas
 └── design_guidelines.md    # UI/UX design specifications
 ```
 
@@ -160,24 +202,26 @@ This starts both the Express backend and Vite frontend on the same port.
 - **Interactions**: Smooth hover effects, minimal animations
 
 ## Future Enhancements (Phase 2)
-- Real KolScan API integration
+- ✅ ~~Real social media API integration~~ (COMPLETED - Instagram, Twitter, YouTube support)
+- ✅ ~~Automated bet settlement based on real KOL metrics~~ (COMPLETED)
+- ✅ ~~Database persistence (PostgreSQL)~~ (COMPLETED - via Drizzle ORM)
+- Authentication and authorization for admin endpoints
 - Crypto wallet integration (MetaMask, WalletConnect)
 - Advanced odds calculation using historical data
-- Bet history and portfolio tracking
+- Enhanced bet history and portfolio tracking
 - Social features (comments, sharing, following)
 - Market creation by users
-- Automated bet settlement based on real KOL metrics
+- Baseline snapshot storage for follower-gain markets (improved accuracy)
+- Extended toast notifications with outcome context
 - Mobile-optimized UI
-- Database persistence (PostgreSQL)
 
-## Known Limitations (MVP)
+## Known Limitations
 - Single default user (no authentication)
-- Mock KolScan data (not real API)
-- Manual bet settlement (no automation)
-- In-memory storage (data resets on restart)
+- Social APIs require manual configuration via environment variables
+- No authentication on admin endpoints (should be added before production)
 - Simple bonding curve (linear formula)
-- No transaction history
 - No withdrawal functionality
+- Resolution heuristics may need baseline snapshots for follower-gain markets
 
 ## Testing
 - Manual testing of all user flows
