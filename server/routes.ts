@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { dbStorage as storage } from "./db-storage";
+import { dbStorage as storage, ValidationError, NotFoundError } from "./db-storage";
 import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
@@ -280,27 +280,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new bet (buy or sell YES/NO positions)
+  // NOW USES ROBUST TRANSACTION WITH ROW-LEVEL LOCKING
   app.post("/api/bets", async (req, res) => {
-    let transactionState: {
-      betCreated: boolean;
-      positionUpdated: boolean;
-      balanceUpdated: boolean;
-      statsUpdated: boolean;
-      poolsUpdated: boolean;
-      volumeUpdated: boolean;
-    } = {
-      betCreated: false,
-      positionUpdated: false,
-      balanceUpdated: false,
-      statsUpdated: false,
-      poolsUpdated: false,
-      volumeUpdated: false,
-    };
-
     try {
       const { marketId, position, amount, action = "buy", userId } = req.body;
 
-      // Comprehensive input validation
+      // Input validation
       if (!marketId || typeof marketId !== 'string') {
         return res.status(400).json({ message: "Valid marketId is required" });
       }
@@ -327,289 +312,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: amountValidation.error });
       }
 
-      // Get current user
-      let user: User | undefined;
-      try {
-        if (userId) {
-          user = await storage.getUser(userId);
-        } else {
-          user = await storage.getUserByUsername("trader1");
-        }
-      } catch (error) {
-        console.error("Error fetching user:", error);
-        return res.status(500).json({ message: "Failed to fetch user data" });
-      }
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Get market
-      let market: any;
-      try {
-        market = await storage.getMarket(marketId);
-      } catch (error) {
-        console.error("Error fetching market:", error);
-        return res.status(500).json({ message: "Failed to fetch market data" });
-      }
-
-      if (!market) {
-        return res.status(404).json({ message: "Market not found" });
-      }
-
-      if (!market.isLive) {
-        return res.status(400).json({ message: "Market is not live" });
-      }
-
-      if (market.resolved) {
-        return res.status(400).json({ message: "Market is already resolved" });
-      }
-
-      // Parse and validate pool values
-      const yesPool = parseFloat(market.yesPool);
-      const noPool = parseFloat(market.noPool);
-      const userBalance = parseFloat(user.balance);
-
-      if (isNaN(yesPool) || isNaN(noPool) || !isFinite(yesPool) || !isFinite(noPool)) {
-        console.error("Invalid pool values:", { yesPool: market.yesPool, noPool: market.noPool });
-        return res.status(500).json({ message: "Market has invalid pool values" });
-      }
-
-      if (yesPool <= 0 || noPool <= 0) {
-        return res.status(400).json({ message: "Market pools are depleted" });
-      }
-
-      let betAmount: number;
-      let sharesAmount: number;
-      let newYesPool: number;
-      let newNoPool: number;
-
-      if (action === "buy") {
-        // Validate buy amount against balance
-        if (amount > userBalance) {
-          return res.status(400).json({ 
-            message: `Insufficient balance. You have ${userBalance.toFixed(2)} but trying to spend ${amount.toFixed(2)}` 
-          });
-        }
-
-        betAmount = amount;
-        
-        try {
-          sharesAmount = calculateSharesForBuy(amount, position, yesPool, noPool);
-        } catch (error) {
-          console.error("AMM calculation error:", error);
-          return res.status(500).json({ message: "Failed to calculate share amount" });
-        }
-
-        // Validate AMM calculation results
-        const sharesValidation = validateAMMCalculation(sharesAmount, "Shares calculation");
-        if (!sharesValidation.valid) {
-          return res.status(400).json({ message: sharesValidation.error });
-        }
-
-        // Calculate new pools
-        if (position === "YES") {
-          newYesPool = yesPool + amount;
-          newNoPool = noPool - sharesAmount;
-        } else {
-          newNoPool = noPool + amount;
-          newYesPool = yesPool - sharesAmount;
-        }
-
-        // Validate new pool values
-        if (newYesPool <= 0 || newNoPool <= 0) {
-          return res.status(400).json({ 
-            message: "Trade amount too large - would deplete market pools. Try a smaller amount." 
-          });
-        }
-
+      // Get user ID
+      let actualUserId: string;
+      if (userId) {
+        actualUserId = userId;
       } else {
-        // Selling shares - validate user has enough shares
-        let userPosition;
-        try {
-          userPosition = await storage.getUserPosition(user.id, marketId, position);
-        } catch (error) {
-          console.error("Error fetching user position:", error);
-          return res.status(500).json({ message: "Failed to fetch position data" });
+        const defaultUser = await storage.getUserByUsername("trader1");
+        if (!defaultUser) {
+          return res.status(404).json({ message: "Default user not found" });
         }
-
-        const currentShares = userPosition ? parseFloat(userPosition.shares) : 0;
-
-        if (amount > currentShares) {
-          return res.status(400).json({ 
-            message: `Insufficient ${position} shares. You own ${currentShares.toFixed(2)} but trying to sell ${amount.toFixed(2)}` 
-          });
-        }
-
-        if (amount > (position === "YES" ? yesPool : noPool)) {
-          return res.status(400).json({ 
-            message: "Cannot sell more shares than available in pool. Try a smaller amount." 
-          });
-        }
-
-        sharesAmount = amount;
-        
-        try {
-          betAmount = calculatePayoutForSell(amount, position, yesPool, noPool);
-        } catch (error) {
-          console.error("AMM calculation error:", error);
-          return res.status(500).json({ message: "Failed to calculate payout" });
-        }
-
-        // Validate payout calculation
-        const payoutValidation = validateAMMCalculation(betAmount, "Payout calculation");
-        if (!payoutValidation.valid) {
-          return res.status(400).json({ message: payoutValidation.error });
-        }
-
-        // Calculate new pools
-        if (position === "YES") {
-          newYesPool = yesPool - amount;
-          newNoPool = noPool + betAmount;
-        } else {
-          newNoPool = noPool - amount;
-          newYesPool = yesPool + betAmount;
-        }
-
-        // Sanity check on new pools
-        if (newYesPool < 0 || newNoPool < 0) {
-          return res.status(400).json({ message: "Invalid trade - would result in negative pool values" });
-        }
+        actualUserId = defaultUser.id;
       }
 
-      // Calculate new prices
-      let yesPrice: number;
-      let noPrice: number;
-      
-      try {
-        const prices = calculateAMMPrices(newYesPool, newNoPool);
-        yesPrice = prices.yesPrice;
-        noPrice = prices.noPrice;
-      } catch (error) {
-        console.error("Price calculation error:", error);
-        return res.status(500).json({ message: "Failed to calculate new prices" });
-      }
+      // Execute the bet transaction with row-level locking
+      // All validation, calculations, and updates happen atomically inside the transaction
+      const result = await storage.placeBetWithLocking({
+        userId: actualUserId,
+        marketId,
+        position: position as "YES" | "NO",
+        amount: parseFloat(amount),
+        action: action as "buy" | "sell",
+      });
 
-      // Validate prices
-      if (isNaN(yesPrice) || isNaN(noPrice) || !isFinite(yesPrice) || !isFinite(noPrice)) {
-        return res.status(500).json({ message: "Invalid price calculation result" });
-      }
-
-      if (yesPrice < 0 || yesPrice > 1 || noPrice < 0 || noPrice > 1) {
-        return res.status(500).json({ message: "Calculated prices out of valid range [0, 1]" });
-      }
-
-      const currentPrice = position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
-
-      // Begin transaction-like operations (note: not a true DB transaction)
-      // Create bet record
-      let bet: any;
-      try {
-        const insertBet: InsertBet = {
-          userId: user.id,
-          marketId,
-          position,
-          amount: betAmount.toFixed(2),
-          price: currentPrice.toFixed(4),
-          shares: sharesAmount.toFixed(2),
-        };
-
-        bet = await storage.createBet(insertBet);
-        transactionState.betCreated = true;
-      } catch (error) {
-        console.error("Error creating bet:", error);
-        throw new Error("Failed to create bet record");
-      }
-
-      // Update or create user position
-      try {
-        await storage.updateUserPosition(user.id, marketId, position, sharesAmount, action);
-        transactionState.positionUpdated = true;
-      } catch (error) {
-        console.error("Error updating position:", error);
-        throw new Error("Failed to update user position");
-      }
-
-      // Update user balance
-      try {
-        const newBalance = action === "buy" 
-          ? (userBalance - betAmount).toFixed(2)
-          : (userBalance + betAmount).toFixed(2);
-        
-        // Additional safety check
-        if (parseFloat(newBalance) < 0) {
-          throw new Error("Balance calculation resulted in negative value");
-        }
-        
-        await storage.updateUserBalance(user.id, newBalance);
-        transactionState.balanceUpdated = true;
-      } catch (error) {
-        console.error("Error updating balance:", error);
-        throw new Error("Failed to update user balance");
-      }
-
-      // Update user stats
-      try {
-        await storage.updateUserStats(user.id, user.totalBets + 1, user.totalWins, user.totalProfit);
-        transactionState.statsUpdated = true;
-      } catch (error) {
-        console.error("Error updating stats:", error);
-        throw new Error("Failed to update user stats");
-      }
-
-      // Update market pools and prices
-      try {
-        await storage.updateMarketPools(
-          marketId, 
-          newYesPool.toFixed(2), 
-          newNoPool.toFixed(2), 
-          yesPrice.toFixed(4), 
-          noPrice.toFixed(4)
-        );
-        transactionState.poolsUpdated = true;
-      } catch (error) {
-        console.error("Error updating market pools:", error);
-        throw new Error("Failed to update market pools");
-      }
-
-      // Update market volume
-      try {
-        const newVolume = (parseFloat(market.totalVolume) + betAmount).toFixed(2);
-        await storage.updateMarketVolume(marketId, newVolume);
-        transactionState.volumeUpdated = true;
-      } catch (error) {
-        console.error("Error updating volume:", error);
-        throw new Error("Failed to update market volume");
-      }
-
-      // Broadcast update via WebSocket (with error handling)
+      // Broadcast update via WebSocket
       try {
         const marketWithKol = await storage.getMarketWithKol(marketId);
         broadcast({
           type: 'BET_PLACED',
-          bet,
+          bet: result.bet,
           market: marketWithKol,
         });
       } catch (error) {
         console.error("Error broadcasting bet update:", error);
-        // Don't fail the request if broadcast fails
       }
 
-      res.json(bet);
+      res.json(result.bet);
     } catch (error) {
       console.error("Error creating bet:", error);
-      console.error("Transaction state:", transactionState);
       
-      // Log which operations succeeded before failure
-      const failedAt = !transactionState.betCreated ? "bet creation" :
-                       !transactionState.positionUpdated ? "position update" :
-                       !transactionState.balanceUpdated ? "balance update" :
-                       !transactionState.statsUpdated ? "stats update" :
-                       !transactionState.poolsUpdated ? "pools update" :
-                       !transactionState.volumeUpdated ? "volume update" : "unknown";
+      // Return appropriate HTTP status codes based on error type
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ 
+          message: error.message,
+        });
+      }
       
-      console.error(`Transaction failed at: ${failedAt}`);
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ 
+          message: error.message,
+        });
+      }
       
+      // Server errors return 500
       res.status(500).json({ 
         message: error instanceof Error ? error.message : "Failed to create bet",
       });

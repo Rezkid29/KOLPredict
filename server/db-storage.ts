@@ -3,6 +3,21 @@ import { Pool, neonConfig } from "@neondatabase/serverless";
 import { eq, desc, sql } from "drizzle-orm";
 import ws from "ws";
 
+// Custom error types for proper HTTP status code handling
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
 // Configure WebSocket for Neon
 neonConfig.webSocketConstructor = ws;
 import {
@@ -214,7 +229,7 @@ export class DbStorage implements IStorage {
     }
   }
 
-  // Transactional bet placement - all operations succeed or all fail
+  // Legacy transactional bet placement - DEPRECATED - use placeBetWithLocking instead
   async placeBetTransaction(params: {
     bet: InsertBet;
     userId: string;
@@ -311,6 +326,303 @@ export class DbStorage implements IStorage {
         .where(eq(markets.id, params.marketId));
 
       return createdBet;
+    });
+  }
+
+  // NEW: Robust transactional bet placement with row-level locking and internal calculations
+  // This eliminates race conditions by performing all reads, calculations, and writes atomically
+  async placeBetWithLocking(params: {
+    userId: string;
+    marketId: string;
+    position: "YES" | "NO";
+    amount: number;
+    action: "buy" | "sell";
+  }): Promise<{
+    bet: Bet;
+    error?: string;
+  }> {
+    return await db.transaction(async (tx) => {
+      // STEP 1: Lock and read market data (prevents concurrent modifications)
+      const [market] = await tx
+        .select()
+        .from(markets)
+        .where(eq(markets.id, params.marketId))
+        .for('update')
+        .limit(1);
+
+      if (!market) {
+        throw new NotFoundError("Market not found");
+      }
+
+      // Re-validate market state inside transaction
+      if (!market.isLive) {
+        throw new ValidationError("Market is not live");
+      }
+
+      if (market.outcome !== "pending") {
+        throw new ValidationError("Market is already resolved");
+      }
+
+      // STEP 2: Lock and read user data (prevents concurrent balance modifications)
+      const [user] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, params.userId))
+        .for('update')
+        .limit(1);
+
+      if (!user) {
+        throw new NotFoundError("User not found");
+      }
+
+      // Parse pool values inside transaction (fresh data)
+      const yesPool = parseFloat(market.yesPool);
+      const noPool = parseFloat(market.noPool);
+      const userBalance = parseFloat(user.balance);
+
+      // Validate pool values
+      if (isNaN(yesPool) || isNaN(noPool) || !isFinite(yesPool) || !isFinite(noPool)) {
+        throw new ValidationError("Market has invalid pool values");
+      }
+
+      if (yesPool <= 0 || noPool <= 0) {
+        throw new ValidationError("Market pools are depleted");
+      }
+
+      // STEP 3: Perform AMM calculations inside transaction
+      const calculateAMMPrices = (yesP: number, noP: number) => {
+        const totalPool = yesP + noP;
+        return {
+          yesPrice: yesP / totalPool,
+          noPrice: noP / totalPool,
+        };
+      };
+
+      const calculateSharesForBuy = (
+        amt: number,
+        pos: "YES" | "NO",
+        yesP: number,
+        noP: number
+      ): number => {
+        const k = yesP * noP;
+        if (pos === "YES") {
+          const newNoPool = k / (yesP + amt);
+          return noP - newNoPool;
+        } else {
+          const newYesPool = k / (noP + amt);
+          return yesP - newYesPool;
+        }
+      };
+
+      const calculatePayoutForSell = (
+        shares: number,
+        pos: "YES" | "NO",
+        yesP: number,
+        noP: number
+      ): number => {
+        const k = yesP * noP;
+        if (pos === "YES") {
+          const newNoPool = k / (yesP - shares);
+          return newNoPool - noP;
+        } else {
+          const newYesPool = k / (noP - shares);
+          return newYesPool - yesP;
+        }
+      };
+
+      let betAmount: number;
+      let sharesAmount: number;
+      let newYesPool: number;
+      let newNoPool: number;
+
+      if (params.action === "buy") {
+        // Re-validate balance inside transaction
+        if (params.amount > userBalance) {
+          throw new ValidationError(
+            `Insufficient balance. You have ${userBalance.toFixed(2)} but trying to spend ${params.amount.toFixed(2)}`
+          );
+        }
+
+        betAmount = params.amount;
+        sharesAmount = calculateSharesForBuy(params.amount, params.position, yesPool, noPool);
+
+        // Validate calculation
+        if (isNaN(sharesAmount) || !isFinite(sharesAmount) || sharesAmount < 0) {
+          throw new ValidationError("Invalid share calculation - trade too large for pool liquidity");
+        }
+
+        // Calculate new pools
+        if (params.position === "YES") {
+          newYesPool = yesPool + params.amount;
+          newNoPool = noPool - sharesAmount;
+        } else {
+          newNoPool = noPool + params.amount;
+          newYesPool = yesPool - sharesAmount;
+        }
+
+        // Validate new pools
+        if (newYesPool <= 0 || newNoPool <= 0) {
+          throw new ValidationError("Trade amount too large - would deplete market pools");
+        }
+      } else {
+        // Selling - lock and read user position
+        const [userPosition] = await tx
+          .select()
+          .from(positions)
+          .where(
+            sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
+          )
+          .for('update')
+          .limit(1);
+
+        const currentShares = userPosition ? parseFloat(userPosition.shares) : 0;
+
+        // Re-validate shares inside transaction
+        if (params.amount > currentShares) {
+          throw new ValidationError(
+            `Insufficient ${params.position} shares. You own ${currentShares.toFixed(2)} but trying to sell ${params.amount.toFixed(2)}`
+          );
+        }
+
+        if (params.amount > (params.position === "YES" ? yesPool : noPool)) {
+          throw new ValidationError("Cannot sell more shares than available in pool");
+        }
+
+        sharesAmount = params.amount;
+        betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);
+
+        // Validate calculation
+        if (isNaN(betAmount) || !isFinite(betAmount) || betAmount < 0) {
+          throw new ValidationError("Invalid payout calculation");
+        }
+
+        // Calculate new pools
+        if (params.position === "YES") {
+          newYesPool = yesPool - params.amount;
+          newNoPool = noPool + betAmount;
+        } else {
+          newNoPool = noPool - params.amount;
+          newYesPool = yesPool + betAmount;
+        }
+
+        // Sanity check
+        if (newYesPool < 0 || newNoPool < 0) {
+          throw new ValidationError("Invalid trade - would result in negative pool values");
+        }
+      }
+
+      // Calculate new prices
+      const prices = calculateAMMPrices(newYesPool, newNoPool);
+      const yesPrice = prices.yesPrice;
+      const noPrice = prices.noPrice;
+
+      // Validate prices
+      if (isNaN(yesPrice) || isNaN(noPrice) || !isFinite(yesPrice) || !isFinite(noPrice)) {
+        throw new ValidationError("Invalid price calculation result");
+      }
+
+      if (yesPrice < 0 || yesPrice > 1 || noPrice < 0 || noPrice > 1) {
+        throw new ValidationError("Calculated prices out of valid range [0, 1]");
+      }
+
+      const currentPrice = params.position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
+
+      // STEP 4: Create bet record
+      const [createdBet] = await tx
+        .insert(bets)
+        .values({
+          userId: params.userId,
+          marketId: params.marketId,
+          position: params.position,
+          amount: betAmount.toFixed(2),
+          price: currentPrice.toFixed(4),
+          shares: sharesAmount.toFixed(2),
+        })
+        .returning();
+
+      // STEP 5: Update user position
+      const existingPosition = await tx
+        .select()
+        .from(positions)
+        .where(
+          sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
+        )
+        .limit(1);
+
+      if (existingPosition.length > 0) {
+        const pos = existingPosition[0];
+        const currentShares = parseFloat(pos.shares);
+        const currentAvgPrice = parseFloat(pos.averagePrice);
+
+        if (params.action === "buy") {
+          const newShares = currentShares + sharesAmount;
+          const newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * currentPrice)) / newShares;
+
+          await tx
+            .update(positions)
+            .set({
+              shares: newShares.toFixed(2),
+              averagePrice: newAvgPrice.toFixed(4),
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, pos.id));
+        } else {
+          await tx
+            .update(positions)
+            .set({
+              shares: Math.max(0, currentShares - sharesAmount).toFixed(2),
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, pos.id));
+        }
+      } else if (params.action === "buy") {
+        await tx.insert(positions).values({
+          userId: params.userId,
+          marketId: params.marketId,
+          position: params.position,
+          shares: sharesAmount.toFixed(2),
+          averagePrice: currentPrice.toFixed(4),
+        });
+      }
+
+      // STEP 6: Update user balance
+      const newBalance = params.action === "buy"
+        ? (userBalance - betAmount).toFixed(2)
+        : (userBalance + betAmount).toFixed(2);
+
+      // Final safety check
+      if (parseFloat(newBalance) < 0) {
+        throw new ValidationError("Balance calculation resulted in negative value");
+      }
+
+      await tx
+        .update(users)
+        .set({ balance: newBalance })
+        .where(eq(users.id, params.userId));
+
+      // STEP 7: Update user stats
+      await tx
+        .update(users)
+        .set({
+          totalBets: user.totalBets + 1,
+          totalWins: user.totalWins,
+          totalProfit: user.totalProfit,
+        })
+        .where(eq(users.id, params.userId));
+
+      // STEP 8: Update market pools and prices
+      await tx
+        .update(markets)
+        .set({
+          yesPool: newYesPool.toFixed(2),
+          noPool: newNoPool.toFixed(2),
+          yesPrice: yesPrice.toFixed(4),
+          noPrice: noPrice.toFixed(4),
+          totalVolume: (parseFloat(market.totalVolume) + betAmount).toFixed(2),
+        })
+        .where(eq(markets.id, params.marketId));
+
+      return { bet: createdBet };
     });
   }
 

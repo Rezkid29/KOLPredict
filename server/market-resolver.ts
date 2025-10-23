@@ -92,7 +92,7 @@ export class MarketResolver {
 
       if (this.consecutiveFailures >= this.MAX_CONSECUTIVE_FAILURES) {
         console.error(`ALERT: Market resolver has failed ${this.consecutiveFailures} times consecutively. Stopping automatic resolution.`);
-        this.stopAutoResolve();
+        this.stopAutoResolution();
       }
 
       return resolutions;
@@ -238,7 +238,10 @@ export class MarketResolver {
     const pendingBets = allBets.filter(bet => bet.status === "pending");
 
     for (const bet of pendingBets) {
-      const won = (bet.type === "buy" && outcome === "yes") || (bet.type === "sell" && outcome === "no");
+      // A bet wins if the shares were purchased (amount > 0) and match the outcome
+      // If shares is negative or the position doesn't match outcome, it's a loss
+      const shares = parseFloat(bet.shares);
+      const won = shares > 0 && bet.position.toLowerCase() === outcome;
       const betAmount = parseFloat(bet.amount);
       
       let profit: number;
