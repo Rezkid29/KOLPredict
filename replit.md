@@ -4,11 +4,21 @@
 A modern prediction market betting platform focused on Key Opinion Leader (KOL) performance metrics. Users can trade on outcomes related to KOL follower growth, engagement rates, and influence metrics with real-time pricing powered by bonding curves.
 
 ## Current State
-**Status**: MVP Complete
-**Version**: 1.0.0
-**Last Updated**: October 22, 2025
+**Status**: MVP Complete with Kolscan Integration
+**Version**: 1.1.0
+**Last Updated**: October 23, 2025
 
 ## Recent Changes
+- **October 23, 2025**: Kolscan.io scraping integration
+  - **Web Scraping**: Integrated Puppeteer-based scraper for kolscan.io leaderboard data
+  - **Chromium Configuration**: Configured system Chromium for Replit environment with fallback to environment variable
+  - **Browser Management**: Implemented browser instance reuse and proper lifecycle management
+  - **Daily Automation**: Added scheduled scraping (2 AM daily) and market generation (3 AM daily)
+  - **Admin Endpoints**: Added `/api/admin/scrape-kols` for manual scraping trigger
+  - **Data Import**: Automated KOL creation/update from scraped leaderboard data (rank, Twitter handle, wins/losses, SOL gains)
+  - **Market Generation**: Auto-generate prediction markets for newly discovered KOLs
+  - **API Simplification**: Removed Instagram and YouTube API support, keeping Twitter-only integration
+
 - **October 22, 2025**: Enhanced platform with real data integration and automation
   - **Real-time Notifications**: Added toast notifications for bet placements and market resolutions via WebSocket
   - **Social Media API Integration**: Created API client supporting Twitter with intelligent fallback to enhanced mock data
@@ -44,7 +54,10 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 - **Background Tasks**: 
   - Metrics updater (30-minute intervals)
   - Market resolver (5-minute intervals)
+  - Kolscan scraper (daily at 2 AM)
+  - Market generator (daily at 3 AM)
 - **Social API Integration**: Twitter client with mock data fallback
+- **Web Scraping**: Puppeteer-based kolscan.io scraper with Chromium
 - **API Endpoints**:
   - `GET /api/user` - Get current user data
   - `GET /api/markets` - Get all markets with KOL data
@@ -57,13 +70,15 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
   - `GET /api/leaderboard` - Get trader rankings
   - `POST /api/admin/update-metrics` - Manually trigger KOL metrics update
   - `POST /api/admin/resolve-markets` - Manually trigger market resolution
+  - `POST /api/admin/scrape-kols` - Manually trigger kolscan scraping and market generation
   - `GET /api/admin/api-status` - Check social API integration status
 
 ### Data Models
 - **User**: ID, username, balance, betting stats
-- **KOL**: ID, name, handle, avatar, followers, engagement rate, tier
+- **KOL**: ID, name, handle, avatar, followers, engagement rate, tier, kolscan metadata (rank, wins, losses, SOL gain, USD gain)
 - **Market**: ID, KOL reference, title, price, supply, volume, status
 - **Bet**: ID, user reference, market reference, type, amount, shares, status
+- **ScrapedKOL**: Temporary storage for kolscan data import
 
 ## Key Features
 
@@ -122,6 +137,16 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 - User balance and statistics updates
 - WebSocket broadcast of resolution events
 - Manual resolution trigger via admin endpoint
+
+### 9. Kolscan.io Integration
+- Automated daily scraping of kolscan.io leaderboard
+- Extracts KOL performance data (rank, Twitter handle, wins/losses, SOL/USD gains)
+- Creates or updates KOL records in database
+- Auto-generates prediction markets for new KOLs
+- Browser instance reuse for efficient scraping
+- Configurable Chromium path via `CHROMIUM_EXECUTABLE_PATH` environment variable
+- Manual scraping trigger via admin endpoint
+- Scheduled runs: Scraping at 2 AM, market generation at 3 AM
 
 ## Design System
 
@@ -182,14 +207,17 @@ This starts both the Express backend and Vite frontend on the same port.
 │   │   ├── hooks/          # Custom React hooks (including WebSocket)
 │   │   └── lib/            # Utilities (queryClient, etc.)
 ├── server/
-│   ├── routes.ts           # API routes and WebSocket
-│   ├── storage.ts          # In-memory storage implementation
-│   ├── db-storage.ts       # PostgreSQL storage implementation
-│   ├── social-api-client.ts # Social media API integration
-│   ├── metrics-updater.ts  # Automated KOL metrics updater
-│   ├── market-resolver.ts  # Automated market resolution system
-│   ├── seed.ts             # Database seeding with mock data
-│   └── vite.ts             # Vite server integration
+│   ├── routes.ts                    # API routes and WebSocket
+│   ├── storage.ts                   # In-memory storage implementation
+│   ├── db-storage.ts                # PostgreSQL storage implementation
+│   ├── social-api-client.ts         # Social media API integration (Twitter only)
+│   ├── metrics-updater.ts           # Automated KOL metrics updater
+│   ├── market-resolver.ts           # Automated market resolution system
+│   ├── kol-scraper.ts               # Puppeteer-based kolscan.io scraper
+│   ├── kolscan-scraper-service.ts   # Kolscan import and market generation service
+│   ├── scheduler.ts                 # Cron-based task scheduler
+│   ├── seed.ts                      # Database seeding with mock data
+│   └── vite.ts                      # Vite server integration
 ├── shared/
 │   └── schema.ts           # Shared TypeScript types and Drizzle schemas
 └── design_guidelines.md    # UI/UX design specifications
@@ -205,6 +233,7 @@ This starts both the Express backend and Vite frontend on the same port.
 - ✅ ~~Real social media API integration~~ (COMPLETED - Twitter support)
 - ✅ ~~Automated bet settlement based on real KOL metrics~~ (COMPLETED)
 - ✅ ~~Database persistence (PostgreSQL)~~ (COMPLETED - via Drizzle ORM)
+- ✅ ~~Kolscan.io data scraping~~ (COMPLETED - Daily automated scraping)
 - Authentication and authorization for admin endpoints
 - Crypto wallet integration (MetaMask, WalletConnect)
 - Advanced odds calculation using historical data
@@ -214,14 +243,17 @@ This starts both the Express backend and Vite frontend on the same port.
 - Baseline snapshot storage for follower-gain markets (improved accuracy)
 - Extended toast notifications with outcome context
 - Mobile-optimized UI
+- Multi-platform KOL scraping (expand beyond kolscan.io)
 
 ## Known Limitations
 - Single default user (no authentication)
-- Social APIs require manual configuration via environment variables
+- Social APIs require manual configuration via environment variables (Twitter only, Instagram/YouTube removed)
 - No authentication on admin endpoints (should be added before production)
 - Simple bonding curve (linear formula)
 - No withdrawal functionality
 - Resolution heuristics may need baseline snapshots for follower-gain markets
+- Chromium path hard-coded for Replit (can be overridden via `CHROMIUM_EXECUTABLE_PATH` env var)
+- Scraper limited to kolscan.io leaderboard (top 20 KOLs by default)
 
 ## Testing
 - Manual testing of all user flows

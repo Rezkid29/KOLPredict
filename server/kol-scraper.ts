@@ -16,8 +16,14 @@ export class KOLScraper {
   private page?: Page;
 
   async init(): Promise<void> {
+    if (this.browser) {
+      console.log('✅ Browser already initialized, reusing instance');
+      return;
+    }
+
     console.log('🚀 Initializing Puppeteer browser...');
-    this.browser = await puppeteer.launch({
+    
+    const launchOptions: any = {
       headless: true,
       args: [
         '--no-sandbox',
@@ -30,7 +36,14 @@ export class KOLScraper {
         '--disable-gpu',
         '--window-size=1920,1080'
       ]
-    });
+    };
+
+    // Use environment variable if set, otherwise use system chromium for Replit
+    const chromiumPath = process.env.CHROMIUM_EXECUTABLE_PATH || '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium';
+    console.log(`Using Chromium from: ${chromiumPath}`);
+    launchOptions.executablePath = chromiumPath;
+
+    this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
 
@@ -222,6 +235,8 @@ export class KOLScraper {
     if (this.browser) {
       console.log('🔒 Closing browser...');
       await this.browser.close();
+      this.browser = undefined;
+      this.page = undefined;
       console.log('✅ Browser closed');
     }
   }

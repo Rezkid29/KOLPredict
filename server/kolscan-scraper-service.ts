@@ -206,6 +206,7 @@ export class KolscanScraperService {
     console.log('='.repeat(70));
 
     try {
+      await kolScraper.init();
       const scrapedKols = await kolScraper.scrapeLeaderboard();
       console.log(`📊 Scraped ${scrapedKols.length} KOLs from kolscan`);
 
