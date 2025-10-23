@@ -109,13 +109,16 @@ async function seed() {
 
     for (let i = 0; i < createdKols.length; i++) {
       const kol = createdKols[i];
+      const yesPrice = 0.40 + Math.random() * 0.20; // Random between 0.40 and 0.60
       const market: InsertMarket = {
         kolId: kol.id,
         title: marketTitles[i],
         description: `Prediction market for ${kol.name}'s performance metrics`,
         outcome: "pending",
-        price: (0.10 + Math.random() * 0.15).toFixed(4),
-        supply: Math.floor(Math.random() * 1000),
+        yesPool: "100.00",
+        noPool: "100.00",
+        yesPrice: yesPrice.toFixed(4),
+        noPrice: (1.0 - yesPrice).toFixed(4),
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
