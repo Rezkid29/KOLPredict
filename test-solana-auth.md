@@ -1,0 +1,168 @@
+# Solana Wallet Authentication Test Guide
+
+## Overview
+This document describes how to test the Solana wallet authentication feature in the KOL Market platform.
+
+## Authentication Flow
+
+### 1. **Frontend Flow (User Experience)**
+
+When a user clicks "Connect Solana Wallet":
+
+1. **Check for Wallet Extension**
+   - The app checks if `window.solana` exists (Phantom or compatible wallet)
+   - If not found, shows error: "Please install Phantom or another Solana wallet extension"
+
+2. **Request Nonce**
+   - Frontend calls `POST /api/auth/solana/nonce`
+   - Backend generates a unique nonce with timestamp
+   - Nonce format: `{timestamp}-{randomString}`
+   - Example: `1761234608162-l5yg8rqh5`
+
+3. **Connect Wallet**
+   - Calls `window.solana.connect()`
+   - User approves connection in wallet popup
+   - Returns public key (wallet address)
+
+4. **Sign Message**
+   - Creates message: `Sign this message to authenticate with KOL Predict.\n\nWallet: {publicKey}\nNonce: {nonce}`
+   - Requests signature from wallet
+   - User approves signature in wallet popup
+
+5. **Verify Signature**
+   - Encodes signature using bs58
+   - Sends to backend: `POST /api/auth/solana/verify`
+   - Payload: `{ publicKey, signature, message, nonce }`
+
+6. **Backend Verification**
+   - Validates nonce exists and hasn't expired (5 min timeout)
+   - Checks message contains the nonce
+   - Verifies Solana signature using ed25519
+   - Deletes nonce (single-use only)
+   - Creates or retrieves user account
+   - Returns user data
+
+7. **Success**
+   - User is authenticated
+   - UI updates with username (e.g., "Wallet_AbC123De")
+   - Ready to start trading
+
+## Security Features
+
+### Nonce System
+- **Purpose**: Prevent replay attacks
+- **Expiration**: 5 minutes
+- **Single-use**: Nonce is deleted after verification
+- **Validation**: Message must contain the exact nonce
+
+### Signature Verification
+- **Algorithm**: Ed25519 (Solana standard)
+- **Encoding**: bs58 (blockchain standard)
+- **Message binding**: Signature proves ownership of wallet
+
+### No Session Vulnerabilities
+- Each authentication requires fresh signature
+- Old signatures cannot be reused
+- Timestamp prevents long-term replay
+
+## Testing Instructions
+
+### Manual Testing with Phantom Wallet
+
+1. **Install Phantom Wallet**
+   - Chrome Extension: https://phantom.app/
+   - Create or import a Solana wallet
+
+2. **Open the Application**
+   - Navigate to the KOL Market platform
+   - Click "Sign In" button
+
+3. **Select Solana Wallet Tab**
+   - Click on "Solana Wallet" tab in auth modal
+
+4. **Connect Wallet**
+   - Click "Connect Solana Wallet" button
+   - Phantom popup will appear
+   - Approve the connection
+
+5. **Sign Message**
+   - Phantom will show the message to sign
+   - Verify the message contains your wallet address and nonce
+   - Click "Sign" to approve
+
+6. **Verify Authentication**
+   - Should see success toast: "Wallet connected!"
+   - Username displayed in header: "Wallet_{first8chars}"
+   - Balance: 1000 PTS (for new wallets)
+
+### API Endpoint Testing
+
+#### Test Nonce Generation
+```bash
+curl -X POST http://localhost:5000/api/auth/solana/nonce \
+  -H "Content-Type: application/json"
+```
+
+Expected Response:
+```json
+{
+  "nonce": "1761234608162-l5yg8rqh5"
+}
+```
+
+#### Test Signature Verification (requires real wallet signature)
+```bash
+curl -X POST http://localhost:5000/api/auth/solana/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "publicKey": "YourSolanaPublicKeyHere",
+    "signature": "Base58EncodedSignature",
+    "message": "Sign this message to authenticate with KOL Predict.\n\nWallet: YourSolanaPublicKeyHere\nNonce: 1761234608162-l5yg8rqh5",
+    "nonce": "1761234608162-l5yg8rqh5"
+  }'
+```
+
+Expected Success Response:
+```json
+{
+  "userId": "uuid-here",
+  "username": "Wallet_AbC123De",
+  "walletAddress": "YourSolanaPublicKeyHere"
+}
+```
+
+## Known Limitations in Replit Environment
+
+- Cannot actually test with Phantom wallet in Replit's webview
+- Real testing requires:
+  - Browser with Phantom extension installed
+  - Published deployment with proper domain
+  - Or local development environment
+
+## Alternative: Guest Authentication
+
+For immediate testing without a Solana wallet:
+
+1. Click "Sign In"
+2. Select "Guest" tab
+3. Click "Sign in as Guest"
+4. Receive 1000 PTS instantly
+5. Start trading immediately
+
+## Code References
+
+- **Frontend**: `client/src/components/auth-modal.tsx` (lines 155-213)
+- **Backend**: `server/routes.ts` (lines 217-294)
+- **Signature Verification**: `server/solana-auth.ts`
+- **Database Schema**: `shared/schema.ts` (users table)
+
+## Success Criteria
+
+✅ Nonce generation works  
+✅ Nonce expires after 5 minutes  
+✅ Signature verification prevents replay attacks  
+✅ bs58 encoding matches blockchain standard  
+✅ User accounts created automatically  
+✅ Existing users can sign in again  
+✅ Error handling for invalid signatures  
+✅ Error handling for expired nonces
