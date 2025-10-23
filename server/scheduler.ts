@@ -1,6 +1,6 @@
-import cron from 'node-cron';
-import { kolScraper } from './kol-scraper';
-import { marketGeneratorService } from './market-generator-service';
+import cron, { type ScheduledTask } from 'node-cron';
+import { KolscanScraperService } from './kolscan-scraper-service';
+import { dbStorage as storage } from './db-storage';
 import { metricsUpdater } from './metrics-updater';
 import { marketResolver } from './market-resolver';
 
@@ -13,8 +13,9 @@ interface SchedulerConfig {
 }
 
 export class Scheduler {
-  private scrapingTask: cron.ScheduledTask | null = null;
-  private marketGenerationTask: cron.ScheduledTask | null = null;
+  private kolscanService: KolscanScraperService;
+  private scrapingTask: ScheduledTask | null = null;
+  private marketGenerationTask: ScheduledTask | null = null;
   
   private config: SchedulerConfig = {
     scrapingEnabled: true,
@@ -24,21 +25,25 @@ export class Scheduler {
     marketGenerationCount: 5,
   };
 
+  constructor() {
+    this.kolscanService = new KolscanScraperService(storage);
+  }
+
   async performScraping(): Promise<{ success: boolean; scraped: number; saved: number; error?: string }> {
     console.log('\n' + '='.repeat(70));
-    console.log('SCHEDULED SCRAPING TASK STARTED');
+    console.log('SCHEDULED SCRAPING & IMPORT TASK STARTED');
     console.log('='.repeat(70));
     
     try {
-      const result = await kolScraper.scrapeAndSave();
+      const result = await this.kolscanService.runFullImportAndGenerate();
       console.log('='.repeat(70));
-      console.log(`SCRAPING COMPLETED: ${result.saved}/${result.scraped} KOLs saved`);
+      console.log(`SCRAPING COMPLETED: ${result.imported}/${result.scraped} KOLs imported, ${result.marketsCreated} markets created`);
       console.log('='.repeat(70) + '\n');
       
       return {
         success: true,
         scraped: result.scraped,
-        saved: result.saved,
+        saved: result.imported,
       };
     } catch (error) {
       console.error('❌ SCRAPING FAILED:', error);
@@ -59,14 +64,17 @@ export class Scheduler {
     console.log('='.repeat(70));
     
     try {
-      const markets = await marketGeneratorService.generateMarkets(this.config.marketGenerationCount);
+      const kols = await storage.getAllKols();
+      const scrapedKols = kols.filter(kol => kol.scrapedFromKolscan);
+      
+      const created = await this.kolscanService.generateMarkets(scrapedKols);
       console.log('='.repeat(70));
-      console.log(`MARKET GENERATION COMPLETED: ${markets.length} markets created`);
+      console.log(`MARKET GENERATION COMPLETED: ${created} markets created`);
       console.log('='.repeat(70) + '\n');
       
       return {
         success: true,
-        created: markets.length,
+        created,
       };
     } catch (error) {
       console.error('❌ MARKET GENERATION FAILED:', error);
