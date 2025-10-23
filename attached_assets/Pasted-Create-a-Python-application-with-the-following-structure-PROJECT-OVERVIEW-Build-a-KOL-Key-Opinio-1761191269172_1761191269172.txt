@@ -1,0 +1,74 @@
+Create a Python application with the following structure:
+
+PROJECT OVERVIEW:
+Build a KOL (Key Opinion Leader) prediction market generator that scrapes crypto trader data and creates randomized prediction markets. Must comply with X API free tier limits (3 user lookups per 15 minutes).
+
+REQUIRED FILES:
+
+1. scrape_kol_leaderboard_structured.py
+   - Scrape https://kolscan.io/leaderboard using Selenium
+   - Extract: Rank, Username, X Handle, Wins/Losses, SOL Gain, USD Gain
+   - Output: Timestamped CSV file (kol_leaderboard_YYYY-MM-DD_HH-MM-SS.csv)
+   - Must handle rank 1 with trophy emoji (🏆 1)
+   - Use stealth browser options to avoid detection
+
+2. kol_market_generator.py
+   - Read latest CSV from scraper
+   - Generate 5 random prediction markets from these types:
+     a) Rank Flippening: "Will KOL A rank higher than KOL B tomorrow?"
+     b) Profit Streak: "Will KOL X have positive USD gain tomorrow?"
+     c) Follower Growth: "Will KOL X gain Y followers in Z days?" (uses X API)
+   - Cache X API follower data for 24 hours in kol_follower_cache.json
+   - Track rate limits: max 3 X API user lookups per 15 minutes
+   - Save market data to market_cache_{id}.json for future resolution
+   - 70% of markets should NOT use X API to preserve rate limits
+
+TECHNICAL REQUIREMENTS:
+
+Dependencies:
+- selenium
+- pandas
+- tweepy (for X API)
+- beautifulsoup4 (optional fallback)
+- chromedriver-autoinstaller (for Replit Chrome setup)
+
+Environment Variables (for X API integration):
+- X_API_KEY
+- X_API_SECRET
+- X_ACCESS_TOKEN
+- X_ACCESS_TOKEN_SECRET
+
+Key Features:
+- Rate limit tracking with RateLimitTracker class
+- 24-hour follower count caching system
+- Graceful degradation (works without X API credentials)
+- Market data persistence for resolution checking
+- Timestamped output files
+
+OUTPUT STRUCTURE:
+
+CSV Format (from scraper):
+Rank,Username,X Handle,Wins/Losses,SOL Gain,USD Gain
+🏆 1,Cupsey,2fg5QD,28/23,+123.01 Sol,"($22,396.6)"
+2,Insyder,G3g1CK,19/61,+56.42 Sol,"($10,271.6)"
+
+Market Output Format:
+ID: rank_flip_20251022_223054
+Question: Will Cupsey rank higher than Insyder on tomorrow's kolscan.io leaderboard?
+End Time: 2025-10-23 23:00:00
+Resolution: Tomorrow's kolscan.io CSV comparison
+X API Required: False
+
+EXECUTION FLOW:
+1. Run scraper to generate CSV
+2. Run market generator to create 5 markets
+3. Markets cache initial state for future resolution
+4. Respect X API free tier limits throughout
+
+CONSTRAINTS:
+- Must comply with X API free tier: 3 user lookups per 15 minutes
+- Must handle missing X handles gracefully
+- Must cache API responses to minimize requests
+- Must work without X API credentials (degraded mode)
+
+Please implement both files with proper error handling, rate limiting, and caching mechanisms.

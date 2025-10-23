@@ -1,0 +1,33 @@
+{
+  "name": "kol-scraper-typescript",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "scrape": "npm run build && npm run start",
+    "markets": "npm run build && node dist/index.js --markets-only",
+    "pipeline": "npm run build && node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "kol",
+    "scraper",
+    "cryptocurrency",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "KOL Leaderboard scraper built with TypeScript and Puppeteer",
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "puppeteer": "^24.26.0",
+    "twitter-api-v2": "^1.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
