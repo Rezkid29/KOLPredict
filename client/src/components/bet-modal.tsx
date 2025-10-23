@@ -20,10 +20,12 @@ interface BetModalProps {
   onClose: () => void;
   market: MarketWithKol | null;
   userBalance: number;
+  userYesShares?: number;
+  userNoShares?: number;
   onConfirm: (marketId: string, position: "YES" | "NO", amount: number, action: "buy" | "sell") => void;
 }
 
-export function BetModal({ open, onClose, market, userBalance, onConfirm }: BetModalProps) {
+export function BetModal({ open, onClose, market, userBalance, userYesShares = 0, userNoShares = 0, onConfirm }: BetModalProps) {
   const [position, setPosition] = useState<"YES" | "NO">("YES");
   const [amount, setAmount] = useState<string>("");
   const [action, setAction] = useState<"buy" | "sell">("buy");
@@ -34,6 +36,7 @@ export function BetModal({ open, onClose, market, userBalance, onConfirm }: BetM
   const noPrice = parseFloat(market.noPrice);
   const currentPrice = position === "YES" ? yesPrice : noPrice;
   const betAmount = parseFloat(amount) || 0;
+  const currentShares = position === "YES" ? userYesShares : userNoShares;
 
   // Calculate shares (simplified for UI - server will use AMM formula)
   const estimatedShares = betAmount > 0 ? betAmount / currentPrice : 0;
@@ -140,7 +143,14 @@ export function BetModal({ open, onClose, market, userBalance, onConfirm }: BetM
 
           {/* Amount input */}
           <div className="space-y-2">
-            <Label htmlFor="amount">{action === "buy" ? "Amount to Spend" : "Shares to Sell"}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="amount">{action === "buy" ? "Amount to Spend" : "Shares to Sell"}</Label>
+              {action === "sell" && (
+                <span className="text-sm text-muted-foreground" data-testid="text-current-shares">
+                  You have: <span className="font-semibold text-foreground">{currentShares.toFixed(2)}</span> shares
+                </span>
+              )}
+            </div>
             <div className="relative">
               {action === "buy" && (
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
-import type { MarketWithKol, BetWithMarket, User } from "@shared/schema";
+import type { MarketWithKol, BetWithMarket, User, PositionWithMarket } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -37,6 +37,11 @@ export default function Home() {
 
   const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
+  });
+
+  const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
+    queryKey: ["/api/positions/user"],
+    enabled: !!user,
   });
 
   const handleBuy = (market: MarketWithKol) => {
@@ -66,6 +71,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bets/recent"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
     } catch (error: any) {
       const errorMessage = error?.message || "Failed to place bet. Please try again.";
       toast({
@@ -273,6 +279,26 @@ export default function Home() {
         onClose={() => setBetModalOpen(false)}
         market={selectedMarket}
         userBalance={user?.balance ? parseFloat(user.balance) : 1000}
+        userYesShares={
+          selectedMarket && user
+            ? (() => {
+                const position = userPositions.find(
+                  (p) => p.marketId === selectedMarket.id && p.position === "YES"
+                );
+                return position ? parseFloat(position.shares) : 0;
+              })()
+            : 0
+        }
+        userNoShares={
+          selectedMarket && user
+            ? (() => {
+                const position = userPositions.find(
+                  (p) => p.marketId === selectedMarket.id && p.position === "NO"
+                );
+                return position ? parseFloat(position.shares) : 0;
+              })()
+            : 0
+        }
         onConfirm={handleConfirmBet}
       />
     </div>
