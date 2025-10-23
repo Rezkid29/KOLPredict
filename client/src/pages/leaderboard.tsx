@@ -29,6 +29,25 @@ export default function Leaderboard() {
     return <Badge variant="secondary">#{rank}</Badge>;
   };
 
+  const getTierBadge = (rank: number) => {
+    if (rank <= 3) {
+      return <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 font-semibold">Legendary</Badge>;
+    }
+    if (rank <= 5) {
+      return <Badge className="bg-purple-500/20 text-purple-500 border-purple-500/30 font-semibold">Elite</Badge>;
+    }
+    if (rank <= 10) {
+      return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30 font-semibold">Rising</Badge>;
+    }
+    if (rank <= 15) {
+      return <Badge className="bg-green-500/20 text-green-500 border-green-500/30 font-semibold">Growing</Badge>;
+    }
+    if (rank <= 20) {
+      return <Badge className="bg-slate-500/20 text-slate-500 border-slate-500/30 font-semibold">Rookie</Badge>;
+    }
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username} />
@@ -147,9 +166,12 @@ export default function Leaderboard() {
                                 {entry.username[0].toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="font-semibold" data-testid={`text-username-${entry.rank}`}>
-                              {entry.username}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-semibold" data-testid={`text-username-${entry.rank}`}>
+                                {entry.username}
+                              </span>
+                              {getTierBadge(entry.rank)}
+                            </div>
                           </div>
                         </td>
                         <td className="p-5 text-right">

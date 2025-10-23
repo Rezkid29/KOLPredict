@@ -35,13 +35,54 @@ export class MarketGeneratorService {
     return array[Math.floor(Math.random() * array.length)]!;
   }
 
+  private async resolveKolId(scrapedKol: ScrapedKol): Promise<string | null> {
+    const handle = scrapedKol.xHandle || scrapedKol.username.toLowerCase().replace(/\s+/g, '');
+    
+    let kol = await dbStorage.getKolByHandle(handle);
+    
+    if (!kol) {
+      console.log(`  → Creating KOL record for ${scrapedKol.username} (@${handle})`);
+      try {
+        const insertKol = {
+          name: scrapedKol.username,
+          handle: handle,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${handle}`,
+          followers: 10000,
+          engagementRate: "3.5",
+          tier: "Rising",
+          trending: false,
+          trendingPercent: null,
+          kolscanRank: scrapedKol.rank,
+          kolscanWins: scrapedKol.winsLosses ? parseInt(scrapedKol.winsLosses.split('/')[0]) : null,
+          kolscanLosses: scrapedKol.winsLosses ? parseInt(scrapedKol.winsLosses.split('/')[1]) : null,
+          kolscanSolGain: scrapedKol.solGain,
+          kolscanUsdGain: scrapedKol.usdGain,
+          lastScrapedAt: new Date(),
+          scrapedFromKolscan: true,
+        };
+        kol = await dbStorage.createKol(insertKol);
+      } catch (error) {
+        console.error(`  ✗ Failed to create KOL ${scrapedKol.username}:`, error);
+        return null;
+      }
+    }
+    
+    return kol.id;
+  }
+
   async generateRankFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
     if (kolData.length < 2) return null;
 
     const [kolA, kolB] = this.sampleKOLs(kolData, 2);
+    const kolIdA = await this.resolveKolId(kolA);
+    
+    if (!kolIdA) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
+      return null;
+    }
 
     const market: InsertMarket = {
-      kolId: null,
+      kolId: kolIdA,
       title: `Will ${kolA.username} rank higher than ${kolB.username} on tomorrow's kolscan.io leaderboard?`,
       description: `Prediction market comparing ranks of ${kolA.username} (currently #${kolA.rank}) vs ${kolB.username} (currently #${kolB.rank})`,
       outcome: 'pending',
@@ -68,8 +109,14 @@ export class MarketGeneratorService {
     const kol = this.sampleKOLs(kolData, 1)[0];
     if (!kol.usdGain) return null;
 
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
     const market: InsertMarket = {
-      kolId: null,
+      kolId,
       title: `Will ${kol.username} have a positive USD Gain on tomorrow's leaderboard?`,
       description: `Prediction market for ${kol.username}'s profitability streak. Currently: ${kol.usdGain}`,
       outcome: 'pending',
@@ -95,6 +142,12 @@ export class MarketGeneratorService {
     const kol = this.sampleKOLs(validKOLs, 1)[0];
     const xHandle = kol.xHandle!;
 
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
     const currentFollowers = await xApiClient.getFollowerCount(xHandle);
     if (currentFollowers === null) {
       console.log(`  → Skipping follower market for @${xHandle} (rate limited or unavailable)`);
@@ -105,7 +158,7 @@ export class MarketGeneratorService {
     const days = 1;
 
     const market: InsertMarket = {
-      kolId: null,
+      kolId,
       title: `Will ${kol.username} (@${xHandle}) gain ${threshold.toLocaleString()}+ X followers by tomorrow?`,
       description: `Follower growth prediction for ${kol.username}. Current: ${currentFollowers.toLocaleString()} followers`,
       outcome: 'pending',
@@ -132,9 +185,15 @@ export class MarketGeneratorService {
     if (validKOLs.length < 2) return null;
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+    const kolIdA = await this.resolveKolId(kolA);
+    
+    if (!kolIdA) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
+      return null;
+    }
 
     const market: InsertMarket = {
-      kolId: null,
+      kolId: kolIdA,
       title: `Will ${kolA.username} have higher SOL gains than ${kolB.username} on tomorrow's leaderboard?`,
       description: `SOL gain comparison: ${kolA.username} (${kolA.solGain}) vs ${kolB.username} (${kolB.solGain})`,
       outcome: 'pending',
@@ -160,9 +219,15 @@ export class MarketGeneratorService {
     if (validKOLs.length < 2) return null;
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+    const kolIdA = await this.resolveKolId(kolA);
+    
+    if (!kolIdA) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
+      return null;
+    }
 
     const market: InsertMarket = {
-      kolId: null,
+      kolId: kolIdA,
       title: `Will ${kolA.username} have higher USD gains than ${kolB.username} on tomorrow's leaderboard?`,
       description: `USD gain comparison: ${kolA.username} (${kolA.usdGain}) vs ${kolB.username} (${kolB.usdGain})`,
       outcome: 'pending',
@@ -188,9 +253,15 @@ export class MarketGeneratorService {
     if (validKOLs.length < 2) return null;
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+    const kolIdA = await this.resolveKolId(kolA);
+    
+    if (!kolIdA) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
+      return null;
+    }
 
     const market: InsertMarket = {
-      kolId: null,
+      kolId: kolIdA,
       title: `Will ${kolA.username} have a better win rate than ${kolB.username} on tomorrow's leaderboard?`,
       description: `Win rate comparison: ${kolA.username} (${kolA.winsLosses}) vs ${kolB.username} (${kolB.winsLosses})`,
       outcome: 'pending',
@@ -222,8 +293,14 @@ export class MarketGeneratorService {
     const kol = this.sampleKOLs(topKOLs, 1)[0];
     const currentRankNum = parseInt(kol.rank);
 
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
     const market: InsertMarket = {
-      kolId: null,
+      kolId,
       title: `Will ${kol.username} stay in the top ${currentRankNum <= 5 ? '5' : '10'} on tomorrow's leaderboard?`,
       description: `${kol.username} is currently ranked #${kol.rank}. Will they maintain their elite position?`,
       outcome: 'pending',
@@ -249,8 +326,14 @@ export class MarketGeneratorService {
 
     const kol = this.sampleKOLs(validKOLs, 1)[0];
 
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
     const market: InsertMarket = {
-      kolId: null,
+      kolId,
       title: `Will ${kol.username} improve their win rate by tomorrow?`,
       description: `${kol.username} currently has a ${kol.winsLosses} record. Will they add more wins tomorrow?`,
       outcome: 'pending',
@@ -281,8 +364,14 @@ export class MarketGeneratorService {
     const currentRankNum = parseInt(kol.rank);
     const targetRank = Math.max(1, currentRankNum - this.randomChoice([1, 2, 3, 5]));
 
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
     const market: InsertMarket = {
-      kolId: null,
+      kolId,
       title: `Will ${kol.username} reach rank #${targetRank} or better by tomorrow?`,
       description: `${kol.username} is currently #${kol.rank}. Can they climb to #${targetRank} or higher?`,
       outcome: 'pending',
@@ -297,6 +386,55 @@ export class MarketGeneratorService {
       kolA: kol.username,
       currentRankA: kol.rank,
       threshold: targetRank,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateWinLossRatioMaintainMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => k.winsLosses);
+    if (validKOLs.length === 0) return null;
+
+    const kol = this.sampleKOLs(validKOLs, 1)[0];
+    
+    const [winsStr, lossesStr] = kol.winsLosses!.split('/');
+    const wins = parseInt(winsStr);
+    const losses = parseInt(lossesStr);
+    
+    if (isNaN(wins) || isNaN(losses) || losses === 0) return null;
+    
+    const currentRatio = wins / losses;
+    if (currentRatio < 1.0) return null;
+    
+    const thresholds = [1.5, 1.75, 2.0, 2.5];
+    const suitableThresholds = thresholds.filter(t => currentRatio >= t - 0.3 && currentRatio <= t + 0.5);
+    
+    if (suitableThresholds.length === 0) return null;
+    
+    const threshold = this.randomChoice(suitableThresholds);
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kol.username}`);
+      return null;
+    }
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} maintain a win/loss ratio above ${threshold.toFixed(2)} on tomorrow's leaderboard?`,
+      description: `${kol.username} currently has a ${currentRatio.toFixed(2)} W/L ratio (${kol.winsLosses}). Can they stay above ${threshold.toFixed(2)}?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'winloss_ratio_maintain',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'winloss_ratio_maintain',
+      kolA: kol.username,
+      currentWinsLossesA: kol.winsLosses || undefined,
+      threshold: threshold,
     };
 
     return { market, metadata };
@@ -326,6 +464,7 @@ export class MarketGeneratorService {
       () => this.generateTopRankMaintainMarket(kolData),
       () => this.generateStreakContinuationMarket(kolData),
       () => this.generateRankImprovementMarket(kolData),
+      () => this.generateWinLossRatioMaintainMarket(kolData),
     ];
     
     const followerGrowthGenerator = () => this.generateFollowerGrowthMarket(kolData);
@@ -346,7 +485,7 @@ export class MarketGeneratorService {
         const currentIndex = (generatorIndex + attempts) % generators.length;
         generator = generators[currentIndex];
         
-        console.log(`  Attempt ${attempts + 1}: Trying ${['rank_flippening', 'profit_streak', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening', 'top_rank_maintain', 'streak_continuation', 'rank_improvement'][currentIndex]} generator...`);
+        console.log(`  Attempt ${attempts + 1}: Trying ${['rank_flippening', 'profit_streak', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening', 'top_rank_maintain', 'streak_continuation', 'rank_improvement', 'winloss_ratio_maintain'][currentIndex]} generator...`);
         
         generatedMarket = await generator();
         
