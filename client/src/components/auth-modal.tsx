@@ -122,7 +122,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCircle className="h-5 w-5 text-primary" />
-            Welcome to KOL Market
+            Welcome to KOL Predict
           </DialogTitle>
           <DialogDescription>
             Login to your account or create a new one to start trading

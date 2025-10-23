@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Wallet, TrendingUp, Trophy, BarChart3, Menu, X, LogOut } from "lucide-react";
+import { Wallet, Trophy, BarChart3, Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/use-auth";
+import logoImage from "@assets/Gemini_Generated_Image_oel790oel790oel7_1761209354461.png";
 
 interface NavbarProps {
   balance?: number;
@@ -22,8 +23,8 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
         <div className="flex items-center gap-8">
           <Link href="/">
             <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md transition-colors cursor-pointer" data-testid="link-home">
-              <TrendingUp className="h-6 w-6 text-primary" />
-              <span className="text-xl font-display font-bold text-foreground">KOL Market</span>
+              <img src={logoImage} alt="KOL Predict Logo" className="h-6 w-6" />
+              <span className="text-xl font-display font-bold text-foreground">KOL Predict</span>
             </div>
           </Link>
           
@@ -35,7 +36,7 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                   size="sm"
                   className="gap-2"
                 >
-                  <TrendingUp className="h-4 w-4" />
+                  <BarChart3 className="h-4 w-4" />
                   Markets
                 </Button>
               </div>
@@ -103,8 +104,8 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
             <SheetContent side="right" className="w-72">
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  KOL Market
+                  <img src={logoImage} alt="KOL Predict Logo" className="h-5 w-5" />
+                  KOL Predict
                 </SheetTitle>
               </SheetHeader>
               <div className="mt-6 space-y-4">
@@ -126,7 +127,7 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                       onClick={() => setMobileMenuOpen(false)}
                       data-testid="mobile-link-markets"
                     >
-                      <TrendingUp className="h-4 w-4" />
+                      <BarChart3 className="h-4 w-4" />
                       Markets
                     </Button>
                   </Link>
