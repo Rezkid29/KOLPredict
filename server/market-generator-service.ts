@@ -467,9 +467,9 @@ export class MarketGeneratorService {
     // Track which KOLs have been used in THIS generation cycle
     const usedKolsThisCycle = new Set<string>();
     
-    // Track special market type counts
+    // Track special market type counts (removed hard limit for full coverage)
     let solGainThresholdCount = 0;
-    const maxSolGainThreshold = 2;
+    const maxSolGainThreshold = Math.ceil(kolData.length * 0.3); // Max 30% of markets can be SOL gain
 
     const rateLimitStatus = xApiClient.getRateLimitStatus();
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
@@ -622,9 +622,10 @@ export class MarketGeneratorService {
 
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🎉 Market generation complete: ${createdMarkets.length}/${count} markets created`);
-    console.log(`   📊 Unique KOLs: ${usedKolsThisCycle.size}/${kolData.length} KOLs featured`);
-    console.log(`   💰 SOL Gain markets: ${solGainThresholdCount}/${maxSolGainThreshold} created`);
-    console.log(`   ✅ Each KOL appears in EXACTLY ONE market per cycle`);
+    console.log(`   📊 ALL KOLs featured: ${usedKolsThisCycle.size}/${kolData.length} unique KOLs`);
+    console.log(`   💰 SOL Gain threshold markets: ${solGainThresholdCount} (max ${maxSolGainThreshold})`);
+    console.log(`   🎲 Randomized market types across all categories`);
+    console.log(`   ✅ Each KOL appears in EXACTLY ONE market`);
     console.log(`${'='.repeat(70)}\n`);
 
     return createdMarkets;

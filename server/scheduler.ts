@@ -90,7 +90,11 @@ export class Scheduler {
         usdGain: kol.kolscanUsdGain || null,
       }));
       
-      const result = await this.marketGenerator.generateMarkets(scrapedKols, this.config.marketGenerationCount);
+      // Generate markets for ALL available KOLs instead of a fixed count
+      const marketCount = scrapedKols.length;
+      console.log(`🎯 Generating markets for ALL ${marketCount} KOLs`);
+      
+      const result = await this.marketGenerator.generateMarkets(scrapedKols, marketCount);
       const created = result.length;
       console.log('='.repeat(70));
       console.log(`MARKET GENERATION COMPLETED: ${created} markets created`);
