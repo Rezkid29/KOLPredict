@@ -1,0 +1,346 @@
+Overview
+Transform your platform from a points-based system to a real cryptocurrency trading platform using Solana (SOL). This involves wallet management, deposit/withdrawal flows, automatic transaction fee collection, and real-time blockchain monitoring.
+
+Architecture Design
+1. Wallet System Architecture
+Platform Hot Wallet (Custodial Model)
+* Single platform-controlled wallet holds all user funds
+* Users have internal balances (like an exchange)
+* Faster trades (no blockchain transactions per bet)
+* Lower costs (bets happen off-chain, settle on withdrawal)
+Key Components:
+┌─────────────────────────────────────────────┐
+│ Platform Hot Wallet │
+│ (Stored in env variables) │
+└─────────────────────────────────────────────┘
+│
+┌───────────┼───────────┐
+│ │ │
+Deposits Withdrawals Fee Pool
+│ │ │
+┌───▼───────────▼───────────▼───┐
+│ User Internal Balances │
+│ (Database - fast trading) │
+└────────────────────────────────┘
+
+2. Fee Structure
+Transaction Fees on Bets:
+* Platform Fee: 2-5% of each bet amount (configurable)
+* Distribution:
+    * Collected into platform fee wallet
+    * Can accumulate for treasury operations
+    * Used to cover Solana network withdrawal fees
+Solana Network Fees:
+* 5,000 lamports per transaction ($0.000005)
+* Platform absorbs deposit confirmation costs
+* Users may pay withdrawal network fees (optional)
+
+Database Schema Changes
+New Tables:
+// Solana Deposits
+solanaDeposits {
+id: varchar (UUID)
+userId: varchar (FK to users)
+signature: varchar (unique) // Transaction signature
+amount: numeric // SOL amount
+lamports: bigint // Precise amount in lamports
+status: enum ['pending', 'confirmed', 'failed']
+confirmations: integer
+depositAddress: varchar // User's deposit address
+createdAt: timestamp
+confirmedAt: timestamp
+}
+
+// Solana Withdrawals
+solanaWithdrawals {
+id: varchar (UUID)
+userId: varchar (FK to users)
+destinationAddress: varchar
+amount: numeric // SOL amount
+lamports: bigint
+signature: varchar (nullable) // Filled after processing
+status: enum ['pending', 'processing', 'confirmed', 'failed']
+fee: numeric // Network + platform fee
+createdAt: timestamp
+processedAt: timestamp
+errorMessage: text (nullable)
+}
+
+// Platform Fee Collection
+platformFees {
+id: varchar (UUID)
+betId: varchar (FK to bets)
+userId: varchar (FK to users)
+feeAmount: numeric // SOL amount collected
+feePercentage: numeric // e.g., 0.02 for 2%
+betAmount: numeric // Original bet amount
+collectedAt: timestamp
+}
+
+Modified Tables:
+// Update users table
+users {
+...existing fields...
+solanaDepositAddress: varchar (nullable) // Derived address for deposits
+totalDeposited: numeric (default: 0)
+totalWithdrawn: numeric (default: 0)
+pendingWithdrawal: numeric (default: 0)
+}
+
+// Update bets table
+bets {
+...existing fields...
+platformFee: numeric // Fee collected on this bet
+netAmount: numeric // Amount after fee deduction
+}
+
+
+Backend Implementation
+Core Services to Build:
+1. Wallet Service (server/solana-wallet-service.ts)
+Features:
+- Initialize platform hot wallet from env variables
+- Generate deterministic deposit addresses per user (using PDAs)
+- Check balance of hot wallet
+- Transfer SOL (withdrawals)
+- Calculate transaction fees
+- Security: Keypair storage in environment variables
+
+2. Deposit Monitor Service (server/solana-deposit-monitor.ts)
+Features:
+- WebSocket connection to Solana RPC
+- Monitor platform wallet for incoming transactions
+- Match deposits to users by memo or sub-address
+- Update user balances upon confirmation
+- Require 1-32 confirmations (configurable)
+- Deduplication (signature-based)
+
+3. Withdrawal Service (server/solana-withdrawal-service.ts)
+Features:
+- Queue-based withdrawal processing
+- Balance validation before processing
+- Automatic network fee calculation
+- Signature tracking and status updates
+- Retry logic for failed transactions
+- Daily withdrawal limits (security)
+
+4. Fee Collection Service (server/solana-fee-service.ts)
+Features:
+- Calculate platform fee on each bet (2-5%)
+- Deduct fee from bet amount
+- Track accumulated fees
+- Integration with bet placement flow
+
+
+API Endpoints
+Deposit Flow:
+GET /api/wallet/solana/deposit-address
+→ Returns unique SOL address for user deposits
+
+GET /api/wallet/solana/deposits
+→ Get user's deposit history with status
+
+Withdrawal Flow:
+POST /api/wallet/solana/withdraw
+Body: { destinationAddress, amount }
+→ Validates address, creates withdrawal request
+
+GET /api/wallet/solana/withdrawals
+→ Get user's withdrawal history
+
+GET /api/wallet/solana/withdrawal-limits
+→ Returns daily limits and available amount
+
+Fee & Balance:
+GET /api/wallet/solana/balance
+→ Returns user's SOL balance (platform internal)
+
+GET /api/wallet/solana/fees
+→ Returns platform fee structure
+
+
+Frontend Implementation
+New UI Components:
+1. Wallet Dashboard Page (client/src/pages/wallet.tsx)
+* Display SOL balance prominently
+* Deposit section with QR code + address
+* Withdrawal form with address validation
+* Transaction history (deposits & withdrawals)
+* Current fee structure display
+2. Deposit Flow:
+┌─────────────────────────────────────┐
+│ Your Deposit Address │
+│ [Copy] [QR Code] │
+│ 7xK8...9mPq │
+│ │
+│ Pending Deposits: │
+│ 0.5 SOL - 12/32 confirmations │
+└─────────────────────────────────────┘
+
+3. Withdrawal Flow:
+┌─────────────────────────────────────┐
+│ Withdraw SOL │
+│ Available: 10.5 SOL │
+│ │
+│ Destination Address: │
+│ [___________________________] │
+│ │
+│ Amount (SOL): │
+│ [___________________________] │
+│ │
+│ Network Fee: ~0.000005 SOL │
+│ Platform Fee: 0.0025 SOL (0.5%) │
+│ You'll receive: X.XXX SOL │
+│ │
+│ [Withdraw] │
+└─────────────────────────────────────┘
+
+4. Bet Modal Enhancement:
+* Show SOL amount instead of points
+* Display platform fee clearly
+* Real-time balance check
+* Fee breakdown (bet fee + potential payout)
+
+Security Considerations
+Critical Security Measures:
+1. Hot Wallet Protection:
+# Environment variables (never commit!)
+SOLANA_PLATFORM_WALLET_PRIVATE_KEY=base58_encoded_key
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+SOLANA_WSS_URL=wss://api.mainnet-beta.solana.com
+
+2. Withdrawal Safeguards:
+* Daily withdrawal limits per user (e.g., 10 SOL/day)
+* Email/2FA confirmation for large withdrawals (>5 SOL)
+* Address whitelist option
+* Rate limiting (max 3 withdrawals/hour)
+* Manual admin approval for amounts >threshold
+3. Deposit Validation:
+* Minimum deposit amount (e.g., 0.01 SOL)
+* Confirmation requirements (mainnet: 32, devnet: 1)
+* Signature deduplication to prevent double-crediting
+4. Network Selection:
+* Start with devnet for testing
+* Switch to mainnet-beta for production
+* Never mix networks
+
+Fee Collection Mechanism
+Implementation in Bet Flow:
+Before (current):
+User bets 100 points → Market receives 100 points
+
+After (with Solana fees):
+User bets 1.0 SOL
+→ Platform fee: 0.02 SOL (2%)
+→ Net bet amount: 0.98 SOL
+→ Market pool receives: 0.98 SOL
+→ Fee pool receives: 0.02 SOL
+
+User wins: 1.96 SOL payout (based on 0.98 SOL bet)
+
+Database Transaction:
+// Atomic bet placement with fee deduction
+await db.transaction(async (tx) => {
+// 1. Calculate fee
+const feeAmount = betAmount * FEE_PERCENTAGE;
+const netAmount = betAmount - feeAmount;
+
+// 2. Deduct from user balance
+await tx.update(users)
+.set({ balance: sql`balance - ${betAmount}` })
+.where(eq(users.id, userId));
+
+// 3. Create bet with net amount
+await tx.insert(bets).values({
+...betData,
+amount: netAmount,
+platformFee: feeAmount,
+});
+
+// 4. Record fee collection
+await tx.insert(platformFees).values({
+betId,
+userId,
+feeAmount,
+feePercentage: FEE_PERCENTAGE,
+betAmount,
+});
+});
+
+
+RPC Provider Strategy
+Options (by priority):
+1. Helius (Recommended)
+    * Free tier: 100k credits/day
+    * Excellent reliability
+    * Priority fee API
+    * Webhook support for deposits
+2. QuickNode
+    * Free tier: 20M requests/month
+    * Global edge network
+    * Analytics dashboard
+3. Alchemy
+    * Free tier available
+    * Good documentation
+    * Webhooks for events
+4. Public RPC (Development only)
+    * https://api.devnet.solana.com
+    * Rate limited, unreliable for production
+Environment Setup:
+# Production
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+SOLANA_WSS_URL=wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+
+# Development
+SOLANA_RPC_URL=https://api.devnet.solana.com
+SOLANA_WSS_URL=wss://api.devnet.solana.com
+
+
+Testing Strategy
+Phase 1: Devnet Testing
+1. Generate test wallet on devnet
+2. Airdrop SOL to test wallet
+3. Test deposit monitoring
+4. Test withdrawal processing
+5. Simulate bet placement with fees
+6. Verify fee collection accuracy
+Phase 2: Staging with Small Amounts
+1. Use real mainnet with limits
+2. Max 0.1 SOL deposits
+3. Max 0.05 SOL withdrawals
+4. Limited user access (beta testers)
+Phase 3: Production Launch
+1. Gradual limit increases
+2. Monitor hot wallet balance
+3. Set up alerts for low balance
+4. Daily reconciliation checks
+
+Implementation Roadmap
+I'll now create a detailed task list for implementing this plan:
+
+3 minutes of work
+
+
+Scroll to latest
+
+Working
+
+Proposed tasks
+Set up wallet for transfers
+
+Update data storage for Solana
+
+Create unique deposit addresses
+
+Track incoming funds automatically
+
+Process user withdrawals safely
+
+Collect platform fees on bets
+
+Build features for connecting service
+
+Update betting screen for SOL
+
+
+Review the Solana blockchain integration backend implementation for correctness, security, and completeness. I have completed the backend infrastructure for Solana cryptocurrency deposits and withdrawals: **What was implemented:** 1. Database schema extensions (users table + 3 new tables: solanaDeposits, solanaWithdrawals, platformFees) 2. Hot wallet management service (solana-wallet.ts) 3. Deposit monitoring with WebSocket (solana-deposit-monitor.ts) - runs every 10 seconds 4. Withdrawal processing with queue system (solana-withdrawal-processor.ts) - runs every 5 seconds 5. 13 new storage methods in DbStorage for Solana operations 6. 6 REST API endpoints for wallet operations 7. Services initialized and started in routes.ts **Please review:** - Security: Are there any vulnerabilities in the wallet management or transaction processing? - Architecture: Do the services integrate cleanly with the existing system? - Error handling: Are edge cases properly handled? - Database schema: Are the tables and relationships correct? - API design: Are the endpoints well-designed and secure? Note: Frontend integration (tasks 5, 7, 8) are pending - this review is specifically for the backend Solana infrastructure.
