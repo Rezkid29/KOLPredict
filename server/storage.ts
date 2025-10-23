@@ -117,6 +117,8 @@ export class MemStorage implements IStorage {
   private bets: Map<string, Bet>;
   private positions: Map<string, Position>;
   private comments: Map<string, Comment>;
+  private scrapedKols: ScrapedKol[];
+  private followerCache: Map<string, FollowerCacheEntry>;
 
   constructor() {
     this.users = new Map();
@@ -125,6 +127,8 @@ export class MemStorage implements IStorage {
     this.bets = new Map();
     this.positions = new Map();
     this.comments = new Map();
+    this.scrapedKols = [];
+    this.followerCache = new Map();
     this.initializeMockData();
   }
 
@@ -252,6 +256,7 @@ export class MemStorage implements IStorage {
         createdAt: new Date(),
         engagement: (Math.random() * 3).toFixed(2),
         marketType: "standard",
+        marketCategory: "social",
         requiresXApi: false,
       };
       this.markets.set(market.id, market);
@@ -393,6 +398,7 @@ export class MemStorage implements IStorage {
       resolvedValue: null,
       engagement: insertMarket.engagement ?? "0.00",
       marketType: insertMarket.marketType ?? "standard",
+      marketCategory: insertMarket.marketCategory ?? null,
       requiresXApi: insertMarket.requiresXApi ?? false,
       kolId: insertMarket.kolId ?? null,
     };
@@ -732,42 +738,67 @@ export class MemStorage implements IStorage {
     return [];
   }
 
-  // Scraped KOLs methods (stub - not persisted in memory)
+  // Scraped KOLs methods
   async createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]> {
-    return kols.map(kol => ({
+    const defaultScrapedAt = new Date();
+    const newScrapedKols = kols.map(kol => ({
       ...kol,
       id: randomUUID(),
-      scrapedAt: new Date(),
+      scrapedAt: kol.scrapedAt ?? defaultScrapedAt,
       xHandle: kol.xHandle ?? null,
       winsLosses: kol.winsLosses ?? null,
       solGain: kol.solGain ?? null,
       usdGain: kol.usdGain ?? null,
     }));
+    this.scrapedKols.push(...newScrapedKols);
+    return newScrapedKols;
   }
 
   async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
-    return [];
+    if (this.scrapedKols.length === 0) return [];
+    
+    const sorted = [...this.scrapedKols].sort((a, b) => 
+      b.scrapedAt.getTime() - a.scrapedAt.getTime()
+    );
+    
+    const latestScrapedAt = sorted[0].scrapedAt;
+    const latest = sorted.filter(k => 
+      k.scrapedAt.getTime() === latestScrapedAt.getTime()
+    );
+    
+    return latest.slice(0, limit);
   }
 
   async getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]> {
-    return [];
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return this.scrapedKols.filter(k => 
+      k.scrapedAt >= startOfDay && k.scrapedAt <= endOfDay
+    );
   }
 
-  // Follower cache methods (stub - not persisted in memory)
+  // Follower cache methods
   async getFollowerCache(xHandle: string): Promise<FollowerCacheEntry | undefined> {
-    return undefined;
+    return this.followerCache.get(xHandle);
   }
 
   async upsertFollowerCache(cache: InsertFollowerCache): Promise<FollowerCacheEntry> {
-    return {
-      ...cache,
-      id: randomUUID(),
+    const existing = this.followerCache.get(cache.xHandle);
+    const entry: FollowerCacheEntry = {
+      id: existing?.id || randomUUID(),
+      xHandle: cache.xHandle,
+      followers: cache.followers,
       cachedAt: new Date(),
     };
+    this.followerCache.set(cache.xHandle, entry);
+    return entry;
   }
 
   async getAllFollowerCache(): Promise<FollowerCacheEntry[]> {
-    return [];
+    return Array.from(this.followerCache.values());
   }
 
   // Market metadata methods (stub - not persisted in memory)
@@ -783,6 +814,12 @@ export class MemStorage implements IStorage {
       currentRankA: metadata.currentRankA ?? null,
       currentRankB: metadata.currentRankB ?? null,
       currentUsd: metadata.currentUsd ?? null,
+      currentSolA: metadata.currentSolA ?? null,
+      currentSolB: metadata.currentSolB ?? null,
+      currentUsdA: metadata.currentUsdA ?? null,
+      currentUsdB: metadata.currentUsdB ?? null,
+      currentWinsLossesA: metadata.currentWinsLossesA ?? null,
+      currentWinsLossesB: metadata.currentWinsLossesB ?? null,
       threshold: metadata.threshold ?? null,
       timeframeDays: metadata.timeframeDays ?? null,
     };

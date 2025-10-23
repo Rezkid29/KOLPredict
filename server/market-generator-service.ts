@@ -35,8 +35,17 @@ interface GeneratedMarket {
 }
 
 export class MarketGeneratorService {
+  private fisherYatesShuffle<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
   private sampleKOLs<T>(array: T[], count: number): T[] {
-    const shuffled = [...array].sort(() => 0.5 - Math.random());
+    const shuffled = this.fisherYatesShuffle(array);
     return shuffled.slice(0, count);
   }
 
@@ -518,9 +527,11 @@ export class MarketGeneratorService {
     // Track which KOLs have been used in THIS generation cycle
     const usedKolsThisCycle = new Set<string>();
     
-    // Track special market type counts (removed hard limit for full coverage)
+    // Track market type distribution for variety
+    const marketTypeCount = new Map<string, number>();
     let solGainThresholdCount = 0;
     const maxSolGainThreshold = Math.ceil(kolData.length * 0.3); // Max 30% of markets can be SOL gain
+    const maxPerType = Math.max(2, Math.ceil(count / 3)); // Max 33% of any single type
 
     const rateLimitStatus = xApiClient.getRateLimitStatus();
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
@@ -572,7 +583,7 @@ export class MarketGeneratorService {
       let generatedMarket: GeneratedMarket | null = null;
 
       // Shuffle head-to-head generators for variety
-      const shuffledH2HGenerators = [...headToHeadGenerators].sort(() => 0.5 - Math.random());
+      const shuffledH2HGenerators = this.fisherYatesShuffle(headToHeadGenerators);
       
       for (const generator of shuffledH2HGenerators) {
         console.log(`  Trying ${generator.type}...`);
@@ -606,7 +617,7 @@ export class MarketGeneratorService {
             currentUsdB: generatedMarket.metadata.currentUsdB || null,
             currentWinsLossesA: generatedMarket.metadata.currentWinsLossesA || null,
             currentWinsLossesB: generatedMarket.metadata.currentWinsLossesB || null,
-            threshold: generatedMarket.metadata.threshold || null,
+            threshold: generatedMarket.metadata.threshold != null ? String(generatedMarket.metadata.threshold) : null,
             timeframeDays: generatedMarket.metadata.timeframeDays || null,
           });
 
@@ -615,6 +626,10 @@ export class MarketGeneratorService {
             title: createdMarket.title,
             type: generatedMarket.metadata.marketType,
           });
+
+          // Track market type
+          const typeCount = marketTypeCount.get(generatedMarket.metadata.marketType) || 0;
+          marketTypeCount.set(generatedMarket.metadata.marketType, typeCount + 1);
 
           console.log('\n✅ CREATED HEAD-TO-HEAD MARKET');
           console.log(`  ID: ${createdMarket.id}`);
@@ -671,19 +686,34 @@ export class MarketGeneratorService {
       // Try to create a solo market for an unused KOL
       if (availableKols.length > 0) {
         // Shuffle to ensure variety
-        const shuffledKols = [...availableKols].sort(() => 0.5 - Math.random());
+        const shuffledKols = this.fisherYatesShuffle(availableKols);
         
         for (const kol of shuffledKols) {
-          // Filter generators based on limits
+          // Filter generators based on limits and variety
           const availableGenerators = soloGenerators.filter(g => {
             if (g.type === 'sol_gain_threshold' && solGainThresholdCount >= maxSolGainThreshold) {
+              return false;
+            }
+            const typeCount = marketTypeCount.get(g.type) || 0;
+            if (typeCount >= maxPerType) {
               return false;
             }
             return true;
           });
 
-          // Shuffle generators to ensure variety
-          const shuffledGenerators = [...availableGenerators].sort(() => 0.5 - Math.random());
+          // Sort generators to prioritize less-used types, then shuffle within priority groups
+          const sortedByUsage = [...availableGenerators].sort((a, b) => {
+            const countA = marketTypeCount.get(a.type) || 0;
+            const countB = marketTypeCount.get(b.type) || 0;
+            return countA - countB;
+          });
+          
+          // Take top 3 least-used types and shuffle them for variety
+          const leastUsedCount = marketTypeCount.get(sortedByUsage[0]?.type) || 0;
+          const leastUsed = sortedByUsage.filter(g => 
+            (marketTypeCount.get(g.type) || 0) === leastUsedCount
+          );
+          const shuffledGenerators = this.fisherYatesShuffle(leastUsed.length > 0 ? leastUsed : sortedByUsage);
           
           for (const generator of shuffledGenerators) {
             console.log(`  Trying ${generator.type} for ${kol.username}...`);
@@ -692,6 +722,10 @@ export class MarketGeneratorService {
             if (generatedMarket) {
               // Mark this KOL as used
               usedKolsThisCycle.add(kol.username);
+              
+              // Track market type usage for variety
+              const currentCount = marketTypeCount.get(generator.type) || 0;
+              marketTypeCount.set(generator.type, currentCount + 1);
               
               // Track sol_gain_threshold count
               if (generator.type === 'sol_gain_threshold') {
@@ -743,7 +777,7 @@ export class MarketGeneratorService {
             currentUsdB: generatedMarket.metadata.currentUsdB || null,
             currentWinsLossesA: generatedMarket.metadata.currentWinsLossesA || null,
             currentWinsLossesB: generatedMarket.metadata.currentWinsLossesB || null,
-            threshold: generatedMarket.metadata.threshold || null,
+            threshold: generatedMarket.metadata.threshold != null ? String(generatedMarket.metadata.threshold) : null,
             timeframeDays: generatedMarket.metadata.timeframeDays || null,
           });
 
@@ -773,13 +807,21 @@ export class MarketGeneratorService {
       }
     }
 
+    // Generate market type distribution summary
+    const typeDistribution: string[] = [];
+    marketTypeCount.forEach((count, type) => {
+      typeDistribution.push(`     - ${type}: ${count}`);
+    });
+
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🎉 Market generation complete: ${createdMarkets.length}/${count} markets created`);
     console.log(`   📊 ALL KOLs featured: ${usedKolsThisCycle.size}/${kolData.length} unique KOLs`);
     console.log(`   🆚 Head-to-head markets: ${headToHeadCreated} (minimum ${minHeadToHead} required)`);
     console.log(`   💰 SOL Gain threshold markets: ${solGainThresholdCount} (max ${maxSolGainThreshold})`);
-    console.log(`   🎲 Randomized market types across all categories`);
+    console.log(`   🎲 Market Type Distribution:`);
+    typeDistribution.forEach(line => console.log(line));
     console.log(`   ✅ Each KOL appears in EXACTLY ONE market`);
+    console.log(`   🌈 Variety ensured: Max ${maxPerType} per type`);
     console.log(`${'='.repeat(70)}\n`);
 
     return createdMarkets;

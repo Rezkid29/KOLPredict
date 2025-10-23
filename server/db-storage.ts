@@ -852,27 +852,18 @@ export class DbStorage implements IStorage {
 
   async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
     console.error('🔍 DEBUG: Getting latest scraped KOLs...');
-    const latestScrapeTime = await db
-      .select({ scrapedAt: scrapedKols.scrapedAt })
-      .from(scrapedKols)
-      .orderBy(desc(scrapedKols.scrapedAt))
-      .limit(1);
-
-    console.error('🔍 DEBUG: Latest scrape time result:', latestScrapeTime);
-
-    if (latestScrapeTime.length === 0) {
-      console.error('🔍 DEBUG: No scrape time found!');
-      return [];
-    }
-
+    
+    // Use a more robust query with subquery to avoid timestamp precision issues
     const results = await db
       .select()
       .from(scrapedKols)
-      .where(eq(scrapedKols.scrapedAt, latestScrapeTime[0].scrapedAt))
+      .where(
+        sql`${scrapedKols.scrapedAt} = (SELECT MAX(${scrapedKols.scrapedAt}) FROM ${scrapedKols})`
+      )
       .orderBy(scrapedKols.rank)
       .limit(limit);
 
-    console.error(`🔍 DEBUG: Found ${results.length} KOLs`);
+    console.error(`🔍 DEBUG: Found ${results.length} KOLs from latest scrape`);
     return results;
   }
 

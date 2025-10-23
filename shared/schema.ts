@@ -140,7 +140,7 @@ export const marketMetadata = pgTable("market_metadata", {
   currentUsdB: text("current_usd_b"),
   currentWinsLossesA: text("current_wins_losses_a"),
   currentWinsLossesB: text("current_wins_losses_b"),
-  threshold: integer("threshold"),
+  threshold: decimal("threshold", { precision: 5, scale: 2 }),
   timeframeDays: integer("timeframe_days"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -194,7 +194,8 @@ export const insertKolMetricsHistorySchema = createInsertSchema(kolMetricsHistor
 
 export const insertScrapedKolSchema = createInsertSchema(scrapedKols).omit({
   id: true,
-  scrapedAt: true,
+}).extend({
+  scrapedAt: z.date().optional(),
 });
 
 export const insertFollowerCacheSchema = createInsertSchema(followerCache).omit({
