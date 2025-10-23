@@ -23,7 +23,7 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
           <Link href="/">
             <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md transition-colors cursor-pointer" data-testid="link-home">
               <TrendingUp className="h-6 w-6 text-primary" />
-              <span className="text-xl font-display font-bold">KOL Market</span>
+              <span className="text-xl font-display font-bold text-foreground">KOL Market</span>
             </div>
           </Link>
           

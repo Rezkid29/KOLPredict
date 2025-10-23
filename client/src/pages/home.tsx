@@ -77,9 +77,9 @@ export default function Home() {
   };
 
   const categories = [
-    { value: 'performance', label: 'Performance', color: 'text-green-500' },
-    { value: 'ranking', label: 'Ranking', color: 'text-blue-500' },
-    { value: 'social', label: 'Social', color: 'text-purple-500' },
+    { value: 'performance', label: 'Performance', color: 'text-success dark:text-success' },
+    { value: 'ranking', label: 'Ranking', color: 'text-primary dark:text-primary' },
+    { value: 'social', label: 'Social', color: 'text-primary dark:text-primary' },
   ];
 
   const toggleCategory = (category: string) => {

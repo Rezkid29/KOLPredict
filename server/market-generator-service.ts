@@ -441,64 +441,133 @@ export class MarketGeneratorService {
   }
 
   async generateMarkets(count: number = 5): Promise<{ marketId: string; title: string; type: string }[]> {
-    console.log(`🎯 Generating ${count} markets from scraped KOL data...`);
+    console.log(`🎯 Generating ${count} diverse markets from scraped KOL data...`);
 
-    const kolData = await dbStorage.getLatestScrapedKols(20);
+    const kolData = await dbStorage.getLatestScrapedKols(50);
     if (kolData.length < 2) {
       throw new Error('Need at least 2 scraped KOLs to generate markets. Run scraper first!');
     }
 
     console.log(`📊 Loaded ${kolData.length} KOLs from latest scrape`);
 
+    // Get existing active markets to track what's already been created
+    const existingMarkets = await dbStorage.getAllMarkets();
+    const activeMarkets = existingMarkets.filter(m => m.isLive && !m.resolved);
+    
+    // Get existing market metadata to understand market types
+    const existingMetadata = await dbStorage.getAllMarketMetadata();
+    const metadataMap = new Map(existingMetadata.map(m => [m.marketId, m]));
+
+    // Build tracking structures
+    const kolMarketTypes = new Map<string, Set<string>>(); // KOL username -> Set of market types they have
+    const kolsInHeadToHead = new Set<string>(); // KOL usernames that are already in head-to-head markets
+
+    // Head-to-head market types
+    const headToHeadTypes = ['rank_flippening', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening'];
+
+    // Analyze existing markets
+    for (const market of activeMarkets) {
+      const metadata = metadataMap.get(market.id);
+      if (!metadata) continue;
+
+      const marketType = metadata.marketType;
+
+      // Track solo market types
+      if (metadata.kolA && !headToHeadTypes.includes(marketType)) {
+        if (!kolMarketTypes.has(metadata.kolA)) {
+          kolMarketTypes.set(metadata.kolA, new Set());
+        }
+        kolMarketTypes.get(metadata.kolA)!.add(marketType);
+      }
+
+      // Track head-to-head participation
+      if (headToHeadTypes.includes(marketType)) {
+        if (metadata.kolA) kolsInHeadToHead.add(metadata.kolA);
+        if (metadata.kolB) kolsInHeadToHead.add(metadata.kolB);
+      }
+    }
+
+    console.log(`📊 Tracking: ${kolMarketTypes.size} KOLs with existing markets, ${kolsInHeadToHead.size} in head-to-head`);
+
     const rateLimitStatus = xApiClient.getRateLimitStatus();
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
 
     const createdMarkets: { marketId: string; title: string; type: string }[] = [];
     
-    const generators = [
-      () => this.generateRankFlippeningMarket(kolData),
-      () => this.generateProfitStreakMarket(kolData),
-      () => this.generateSolGainFlippeningMarket(kolData),
-      () => this.generateUsdGainFlippeningMarket(kolData),
-      () => this.generateWinRateFlippeningMarket(kolData),
-      () => this.generateTopRankMaintainMarket(kolData),
-      () => this.generateStreakContinuationMarket(kolData),
-      () => this.generateRankImprovementMarket(kolData),
-      () => this.generateWinLossRatioMaintainMarket(kolData),
+    // Define solo and head-to-head generators
+    const soloGenerators = [
+      { type: 'profit_streak', fn: (kol: ScrapedKol) => this.generateProfitStreakMarketForKol(kol) },
+      { type: 'top_rank_maintain', fn: (kol: ScrapedKol) => this.generateTopRankMaintainMarketForKol(kol) },
+      { type: 'streak_continuation', fn: (kol: ScrapedKol) => this.generateStreakContinuationMarketForKol(kol) },
+      { type: 'rank_improvement', fn: (kol: ScrapedKol) => this.generateRankImprovementMarketForKol(kol) },
+      { type: 'winloss_ratio_maintain', fn: (kol: ScrapedKol) => this.generateWinLossRatioMaintainMarketForKol(kol) },
     ];
-    
-    const followerGrowthGenerator = () => this.generateFollowerGrowthMarket(kolData);
-    
-    let generatorIndex = 0;
 
-    for (let i = 0; i < count; i++) {
+    if (rateLimitStatus.isConfigured) {
+      soloGenerators.push({ type: 'follower_growth', fn: (kol: ScrapedKol) => this.generateFollowerGrowthMarketForKol(kol) });
+    }
+
+    const headToHeadGenerators = [
+      { type: 'rank_flippening', fn: () => this.generateRankFlippeningMarket(kolData) },
+      { type: 'sol_gain_flippening', fn: () => this.generateSolGainFlippeningMarket(kolData) },
+      { type: 'usd_gain_flippening', fn: () => this.generateUsdGainFlippeningMarket(kolData) },
+      { type: 'winrate_flippening', fn: () => this.generateWinRateFlippeningMarket(kolData) },
+    ];
+
+    let marketsCreated = 0;
+
+    // Strategy: First create diverse solo markets for each KOL, then create head-to-head markets
+    for (let i = 0; i < count && marketsCreated < count; i++) {
       console.log(`\n${'─'.repeat(70)}`);
-      console.log(`MARKET ${i + 1}/${count}`);
+      console.log(`MARKET ${marketsCreated + 1}/${count}`);
       console.log('─'.repeat(70));
 
       let generatedMarket: GeneratedMarket | null = null;
-      let attempts = 0;
-      const maxAttempts = generators.length + (rateLimitStatus.isConfigured ? 1 : 0);
 
-      while (!generatedMarket && attempts < maxAttempts) {
-        let generator;
-        const currentIndex = (generatorIndex + attempts) % generators.length;
-        generator = generators[currentIndex];
+      // Try to create a solo market for a KOL that needs diversity
+      for (const kol of kolData) {
+        const existingTypes = kolMarketTypes.get(kol.username) || new Set();
         
-        console.log(`  Attempt ${attempts + 1}: Trying ${['rank_flippening', 'profit_streak', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening', 'top_rank_maintain', 'streak_continuation', 'rank_improvement', 'winloss_ratio_maintain'][currentIndex]} generator...`);
+        // Find market types this KOL doesn't have yet
+        const availableGenerators = soloGenerators.filter(g => !existingTypes.has(g.type));
         
-        generatedMarket = await generator();
-        
-        if (!generatedMarket && attempts === maxAttempts - 1 && rateLimitStatus.isConfigured) {
-          console.log(`  Final attempt: Trying follower_growth generator...`);
-          generatedMarket = await followerGrowthGenerator();
+        if (availableGenerators.length > 0) {
+          // Try each available generator for this KOL
+          for (const generator of availableGenerators) {
+            console.log(`  Trying ${generator.type} for ${kol.username}...`);
+            generatedMarket = await generator.fn(kol);
+            
+            if (generatedMarket) {
+              // Track this market type for this KOL
+              if (!kolMarketTypes.has(kol.username)) {
+                kolMarketTypes.set(kol.username, new Set());
+              }
+              kolMarketTypes.get(kol.username)!.add(generator.type);
+              break;
+            }
+          }
+          
+          if (generatedMarket) break;
         }
-        
-        attempts++;
       }
-      
-      if (generatedMarket) {
-        generatorIndex = (generatorIndex + 1) % generators.length;
+
+      // If no solo market created, try head-to-head (only if we have KOLs not in head-to-head yet)
+      if (!generatedMarket) {
+        const availableForHeadToHead = kolData.filter(k => !kolsInHeadToHead.has(k.username));
+        
+        if (availableForHeadToHead.length >= 2) {
+          for (const generator of headToHeadGenerators) {
+            console.log(`  Trying ${generator.type}...`);
+            generatedMarket = await generator.fn();
+            
+            if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
+              // Mark both KOLs as used in head-to-head
+              kolsInHeadToHead.add(generatedMarket.metadata.kolA);
+              kolsInHeadToHead.add(generatedMarket.metadata.kolB);
+              break;
+            }
+          }
+        }
       }
 
       if (generatedMarket) {
@@ -536,24 +605,231 @@ export class MarketGeneratorService {
           console.log(`  Title: ${createdMarket.title}`);
           console.log(`  Resolves: ${format(createdMarket.resolvesAt, 'yyyy-MM-dd HH:mm:ss')}`);
           console.log(`  Type: ${generatedMarket.metadata.marketType}`);
-          console.log(`  Requires X API: ${createdMarket.requiresXApi}`);
+          console.log(`  KOLs: ${generatedMarket.metadata.kolA}${generatedMarket.metadata.kolB ? ` vs ${generatedMarket.metadata.kolB}` : ''}`);
+
+          marketsCreated++;
         } catch (error) {
           console.error('\n❌ FAILED to save market:', error);
         }
       } else {
-        console.log('\n❌ FAILED (likely rate limited or insufficient data)');
+        console.log('\n⚠️ Could not generate market (all KOLs may have full diversity)');
       }
 
       if (i < count - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
 
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🎉 Market generation complete: ${createdMarkets.length}/${count} markets created`);
+    console.log(`   📊 Diversity achieved: Each KOL gets different market types`);
+    console.log(`   🥊 Head-to-head limit: Each KOL in max 1 comparison market`);
     console.log(`${'='.repeat(70)}\n`);
 
     return createdMarkets;
+  }
+
+  // Helper methods to generate markets for specific KOLs
+  private async generateProfitStreakMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    if (!kol.usdGain) return null;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} have a positive USD Gain on tomorrow's leaderboard?`,
+      description: `Prediction market for ${kol.username}'s profitability streak. Currently: ${kol.usdGain}`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'profit_streak',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'profit_streak',
+        kolA: kol.username,
+        currentUsd: kol.usdGain,
+      },
+    };
+  }
+
+  private async generateTopRankMaintainMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    const rank = parseInt(kol.rank);
+    if (isNaN(rank) || rank > 10) return null;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} maintain a top 10 rank on tomorrow's leaderboard?`,
+      description: `${kol.username} is currently #${kol.rank}. Can they stay in the top 10?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'top_rank_maintain',
+      marketCategory: 'ranking',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'top_rank_maintain',
+        kolA: kol.username,
+        currentRankA: kol.rank,
+        threshold: 10,
+      },
+    };
+  }
+
+  private async generateStreakContinuationMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    if (!kol.winsLosses) return null;
+
+    const [winsStr] = kol.winsLosses.split('/');
+    const wins = parseInt(winsStr);
+    if (isNaN(wins) || wins < 2) return null;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} record a win on tomorrow's leaderboard?`,
+      description: `${kol.username} has ${wins} wins. Can they add another?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'streak_continuation',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'streak_continuation',
+        kolA: kol.username,
+        currentWinsLossesA: kol.winsLosses,
+      },
+    };
+  }
+
+  private async generateRankImprovementMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    const currentRank = parseInt(kol.rank);
+    if (isNaN(currentRank) || currentRank <= 5) return null;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const improvements = [3, 5, 10];
+    const suitableImprovements = improvements.filter(imp => currentRank - imp >= 1);
+    if (suitableImprovements.length === 0) return null;
+
+    const improvement = this.randomChoice(suitableImprovements);
+    const targetRank = currentRank - improvement;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} reach rank #${targetRank} or better by tomorrow?`,
+      description: `${kol.username} is currently #${kol.rank}. Can they climb to #${targetRank} or higher?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'rank_improvement',
+      marketCategory: 'ranking',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'rank_improvement',
+        kolA: kol.username,
+        currentRankA: kol.rank,
+        threshold: targetRank,
+      },
+    };
+  }
+
+  private async generateWinLossRatioMaintainMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    if (!kol.winsLosses) return null;
+
+    const [winsStr, lossesStr] = kol.winsLosses.split('/');
+    const wins = parseInt(winsStr);
+    const losses = parseInt(lossesStr);
+    
+    if (isNaN(wins) || isNaN(losses) || losses === 0) return null;
+    
+    const currentRatio = wins / losses;
+    if (currentRatio < 1.0) return null;
+    
+    const thresholds = [1.5, 1.75, 2.0, 2.5];
+    const suitableThresholds = thresholds.filter(t => currentRatio >= t - 0.3 && currentRatio <= t + 0.5);
+    
+    if (suitableThresholds.length === 0) return null;
+    
+    const threshold = this.randomChoice(suitableThresholds);
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} maintain a win/loss ratio above ${threshold.toFixed(2)} on tomorrow's leaderboard?`,
+      description: `${kol.username} currently has a ${currentRatio.toFixed(2)} W/L ratio (${kol.winsLosses}). Can they stay above ${threshold.toFixed(2)}?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'winloss_ratio_maintain',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'winloss_ratio_maintain',
+        kolA: kol.username,
+        currentWinsLossesA: kol.winsLosses,
+        threshold: threshold,
+      },
+    };
+  }
+
+  private async generateFollowerGrowthMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    if (!kol.xHandle || kol.xHandle.trim() === '') return null;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const currentFollowers = await xApiClient.getFollowerCount(kol.xHandle);
+    if (currentFollowers === null) return null;
+
+    const threshold = this.randomChoice([200, 500, 1000]);
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} (@${kol.xHandle}) gain ${threshold.toLocaleString()}+ X followers by tomorrow?`,
+      description: `Follower growth prediction for ${kol.username}. Current: ${currentFollowers.toLocaleString()} followers`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'follower_growth',
+      marketCategory: 'social',
+      requiresXApi: true,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'follower_growth',
+        kolA: kol.username,
+        xHandle: kol.xHandle,
+        currentFollowers: currentFollowers,
+        threshold: threshold,
+        timeframeDays: 1,
+      },
+    };
   }
 }
 
