@@ -5,11 +5,17 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
+  username: text("username").unique(),
+  walletAddress: text("wallet_address").unique(),
+  authProvider: text("auth_provider").notNull().default("username"),
+  isGuest: boolean("is_guest").notNull().default(false),
+  twitterId: text("twitter_id").unique(),
+  twitterHandle: text("twitter_handle"),
   balance: decimal("balance", { precision: 10, scale: 2 }).notNull().default("1000.00"),
   totalBets: integer("total_bets").notNull().default(0),
   totalWins: integer("total_wins").notNull().default(0),
   totalProfit: decimal("total_profit", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const kols = pgTable("kols", {
@@ -151,6 +157,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   totalBets: true,
   totalWins: true,
   totalProfit: true,
+  createdAt: true,
 });
 
 export const insertKolSchema = createInsertSchema(kols).omit({
@@ -243,12 +250,12 @@ export type MarketMetadata = typeof marketMetadata.$inferSelect;
 
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };
-export type CommentWithUser = Comment & { user: { username: string } };
+export type CommentWithUser = Comment & { user: { username: string | null } };
 export type PositionWithMarket = Position & { market: MarketWithKol };
 
 export type LeaderboardEntry = {
   userId: string;
-  username: string;
+  username: string | null;
   totalProfit: string;
   totalBets: number;
   totalWins: number;

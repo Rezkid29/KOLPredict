@@ -6,6 +6,8 @@ import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
 import { socialMediaClient } from "./social-api-client";
+import { verifySolanaSignature } from "./solana-auth";
+import { addDays } from "date-fns";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -185,6 +187,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
       res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
+  // Guest sign-in
+  app.post("/api/auth/guest", async (req, res) => {
+    try {
+      const guestUsername = `Guest_${Date.now()}`;
+      const user = await storage.createUser({
+        username: guestUsername,
+        authProvider: "guest",
+        isGuest: true,
+      });
+      
+      res.json({ 
+        userId: user.id, 
+        username: user.username,
+        isGuest: true 
+      });
+    } catch (error) {
+      console.error("Guest sign-in error:", error);
+      res.status(500).json({ message: "Failed to create guest account" });
+    }
+  });
+
+  // Solana wallet authentication - nonce storage (in-memory with 5-minute expiration)
+  const solananonces = new Map<string, { timestamp: number }>();
+  const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
+
+  // Clean up expired nonces periodically
+  setInterval(() => {
+    const now = Date.now();
+    for (const [nonce, data] of Array.from(solananonces.entries())) {
+      if (now - data.timestamp > NONCE_EXPIRATION_MS) {
+        solananonces.delete(nonce);
+      }
+    }
+  }, 60000); // Clean up every minute
+
+  app.post("/api/auth/solana/nonce", async (req, res) => {
+    try {
+      const nonce = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+      solananonces.set(nonce, { timestamp: Date.now() });
+      res.json({ nonce });
+    } catch (error) {
+      console.error("Nonce generation error:", error);
+      res.status(500).json({ message: "Failed to generate authentication nonce" });
+    }
+  });
+
+  app.post("/api/auth/solana/verify", async (req, res) => {
+    try {
+      const { publicKey, signature, message, nonce } = req.body;
+      
+      if (!publicKey || !signature || !message || !nonce) {
+        return res.status(400).json({ 
+          message: "Missing required fields: publicKey, signature, message, nonce" 
+        });
+      }
+
+      const nonceData = solananonces.get(nonce);
+      if (!nonceData) {
+        return res.status(401).json({ message: "Invalid or expired nonce" });
+      }
+
+      if (Date.now() - nonceData.timestamp > NONCE_EXPIRATION_MS) {
+        solananonces.delete(nonce);
+        return res.status(401).json({ message: "Nonce has expired" });
+      }
+
+      if (!message.includes(nonce)) {
+        return res.status(401).json({ message: "Nonce mismatch in message" });
+      }
+
+      solananonces.delete(nonce);
+
+      const isValid = verifySolanaSignature(publicKey, signature, message);
+      
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+
+      let user = await storage.getUserByWalletAddress(publicKey);
+      
+      if (!user) {
+        user = await storage.createUser({
+          walletAddress: publicKey,
+          authProvider: "solana",
+          isGuest: false,
+          username: `Wallet_${publicKey.substring(0, 8)}`,
+        });
+      }
+      
+      res.json({ 
+        userId: user.id, 
+        username: user.username,
+        walletAddress: user.walletAddress 
+      });
+    } catch (error) {
+      console.error("Solana auth error:", error);
+      res.status(500).json({ message: "Failed to authenticate with Solana wallet" });
+    }
+  });
+
+  // X (Twitter) OAuth endpoints - Prepared for free tier API
+  // Note: These endpoints are prepared but require X API credentials to be functional
+  // For free tier, you'll need to set up OAuth 2.0 in the X Developer Portal
+  app.post("/api/auth/twitter/oauth-url", async (req, res) => {
+    try {
+      const { callbackUrl } = req.body;
+      
+      const twitterClientId = process.env.TWITTER_CLIENT_ID;
+      if (!twitterClientId) {
+        return res.status(503).json({ 
+          message: "X (Twitter) authentication is not configured. Please add TWITTER_CLIENT_ID to environment variables.",
+          configured: false
+        });
+      }
+
+      const state = Buffer.from(JSON.stringify({ timestamp: Date.now() })).toString('base64');
+      const codeChallenge = Buffer.from(Math.random().toString()).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      
+      const authUrl = new URL('https://twitter.com/i/oauth2/authorize');
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('client_id', twitterClientId);
+      authUrl.searchParams.append('redirect_uri', callbackUrl || `${req.protocol}://${req.get('host')}/auth/twitter/callback`);
+      authUrl.searchParams.append('scope', 'tweet.read users.read offline.access');
+      authUrl.searchParams.append('state', state);
+      authUrl.searchParams.append('code_challenge', codeChallenge);
+      authUrl.searchParams.append('code_challenge_method', 'plain');
+      
+      res.json({ 
+        authUrl: authUrl.toString(),
+        state,
+        codeChallenge,
+        configured: true
+      });
+    } catch (error) {
+      console.error("Twitter OAuth URL error:", error);
+      res.status(500).json({ message: "Failed to generate OAuth URL" });
+    }
+  });
+
+  app.post("/api/auth/twitter/callback", async (req, res) => {
+    try {
+      const { code, state } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ message: "Authorization code is required" });
+      }
+
+      const twitterClientId = process.env.TWITTER_CLIENT_ID;
+      const twitterClientSecret = process.env.TWITTER_CLIENT_SECRET;
+      
+      if (!twitterClientId || !twitterClientSecret) {
+        return res.status(503).json({ 
+          message: "X (Twitter) authentication is not fully configured. Please add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET to environment variables."
+        });
+      }
+
+      res.status(501).json({ 
+        message: "X (Twitter) OAuth callback is prepared but not yet implemented. This endpoint will exchange the authorization code for access tokens and create/login the user.",
+        note: "To complete implementation, add OAuth token exchange logic here."
+      });
+    } catch (error) {
+      console.error("Twitter OAuth callback error:", error);
+      res.status(500).json({ message: "Failed to complete OAuth flow" });
     }
   });
 
@@ -707,7 +875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const ratioA = (winsA / lossesA).toFixed(2);
         const ratioB = (winsB / lossesB).toFixed(2);
 
-        const kolARecord = await storage.getKolByUsername(kolA.username);
+        const kolARecord = await storage.getKolByHandle(kolA.username);
         if (!kolARecord) {
           console.error(`❌ Could not find KOL ${kolA.username} in database`);
           continue;

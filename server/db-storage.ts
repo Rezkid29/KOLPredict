@@ -78,6 +78,16 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getUserByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.walletAddress, walletAddress)).limit(1);
+    return result[0];
+  }
+
+  async getUserByTwitterId(twitterId: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.twitterId, twitterId)).limit(1);
+    return result[0];
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const result = await db.insert(users).values(insertUser).returning();
     return result[0];

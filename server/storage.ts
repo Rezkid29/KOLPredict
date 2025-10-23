@@ -19,6 +19,8 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByWalletAddress(walletAddress: string): Promise<User | undefined>;
+  getUserByTwitterId(twitterId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserBalance(id: string, balance: string): Promise<void>;
   updateUserStats(id: string, totalBets: number, totalWins: number, totalProfit: string): Promise<void>;
@@ -137,10 +139,16 @@ export class MemStorage implements IStorage {
     const defaultUser: User = {
       id: randomUUID(),
       username: "trader1",
+      walletAddress: null,
+      authProvider: "username",
+      isGuest: false,
+      twitterId: null,
+      twitterHandle: null,
       balance: "1000.00",
       totalBets: 0,
       totalWins: 0,
       totalProfit: "0.00",
+      createdAt: new Date(),
     };
     this.users.set(defaultUser.id, defaultUser);
 
@@ -274,15 +282,34 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.walletAddress === walletAddress,
+    );
+  }
+
+  async getUserByTwitterId(twitterId: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.twitterId === twitterId,
+    );
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const user: User = { 
+      username: null,
+      walletAddress: null,
+      authProvider: "username",
+      isGuest: false,
+      twitterId: null,
+      twitterHandle: null,
       ...insertUser, 
       id,
       balance: "1000.00",
       totalBets: 0,
       totalWins: 0,
       totalProfit: "0.00",
+      createdAt: new Date(),
     };
     this.users.set(id, user);
     return user;
