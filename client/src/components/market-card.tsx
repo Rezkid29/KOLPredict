@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Activity, MessageSquare } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PerformanceChart } from "./performance-chart";
 import { MarketDetailsModal } from "./market-details-modal";
+import { CountdownTimer } from "./countdown-timer";
 import type { MarketWithKol, PriceHistoryPoint } from "@shared/schema";
 
 interface MarketCardProps {
@@ -67,11 +68,14 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
           )}
         </div>
 
-        {/* Market title */}
-        <div>
+        {/* Market title and timer */}
+        <div className="space-y-2">
           <p className="font-medium text-sm leading-relaxed" data-testid={`text-market-title-${market.id}`}>
             {market.title}
           </p>
+          {market.isLive && market.resolvesAt && (
+            <CountdownTimer resolvesAt={market.resolvesAt} />
+          )}
         </div>
 
         {/* Market prices - YES/NO */}

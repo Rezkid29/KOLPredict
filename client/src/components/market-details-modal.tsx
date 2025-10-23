@@ -10,6 +10,7 @@ import { MessageSquare, Share2, Send, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getUserId } from "@/hooks/use-auth";
+import { CountdownTimer } from "./countdown-timer";
 import type { MarketWithKol, CommentWithUser } from "@shared/schema";
 
 interface MarketDetailsModalProps {
@@ -100,6 +101,11 @@ export function MarketDetailsModal({ open, onClose, market }: MarketDetailsModal
                 <DialogDescription className="line-clamp-2">
                   {market.title}
                 </DialogDescription>
+                {market.isLive && market.resolvesAt && (
+                  <div className="mt-2">
+                    <CountdownTimer resolvesAt={market.resolvesAt} />
+                  </div>
+                )}
               </div>
             </div>
             <Button

@@ -124,7 +124,8 @@ export class MarketResolver {
       let outcome: "yes" | "no";
       let reason: string;
 
-      if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth') {
+      if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' || 
+          marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening') {
         const metadata = await storage.getMarketMetadata(market.id);
         if (!metadata) {
           console.error(`Market ${market.id} metadata not found for special market type`);
@@ -139,8 +140,20 @@ export class MarketResolver {
           const result = await this.resolveProfitStreakMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
-        } else {
+        } else if (marketType === 'follower_growth') {
           const result = await this.resolveFollowerGrowthMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'sol_gain_flippening') {
+          const result = await this.resolveSolGainFlippeningMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'usd_gain_flippening') {
+          const result = await this.resolveUsdGainFlippeningMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else {
+          const result = await this.resolveWinRateFlippeningMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
         }
@@ -469,6 +482,103 @@ export class MarketResolver {
     const growth = currentFollowers - metadata.currentFollowers;
     const outcome = growth >= metadata.threshold ? "yes" : "no";
     const reason = `@${metadata.xHandle} went from ${metadata.currentFollowers.toLocaleString()} to ${currentFollowers.toLocaleString()} followers (${growth > 0 ? '+' : ''}${growth.toLocaleString()}). Target was ${metadata.threshold.toLocaleString()}.`;
+    
+    return { outcome, reason };
+  }
+
+  private parseSolGain(solGainStr: string | null | undefined): number {
+    if (!solGainStr) return 0;
+    const cleaned = solGainStr.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return 0;
+    const numStr = match[0].replace(/,/g, '');
+    return parseFloat(numStr) || 0;
+  }
+
+  private parseUsdGain(usdGainStr: string | null | undefined): number {
+    if (!usdGainStr) return 0;
+    const cleaned = usdGainStr.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return 0;
+    const numStr = match[0].replace(/,/g, '');
+    return parseFloat(numStr) || 0;
+  }
+
+  private parseWinRate(winsLossesStr: string | null | undefined): number {
+    if (!winsLossesStr) return 0;
+    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
+    if (!match) return 0;
+    const wins = parseInt(match[1], 10);
+    const losses = parseInt(match[2], 10);
+    const total = wins + losses;
+    return total > 0 ? wins / total : 0;
+  }
+
+  private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolAData = latestKols.find(k => k.username === metadata.kolA);
+    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    
+    if (!kolAData || !kolBData) {
+      console.warn(`Missing KOL data for SOL gain flippening market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
+      };
+    }
+    
+    const solGainA = this.parseSolGain(kolAData.solGain);
+    const solGainB = this.parseSolGain(kolBData.solGain);
+    
+    const outcome = solGainA > solGainB ? "yes" : "no";
+    const reason = `${metadata.kolA} has ${kolAData.solGain || '0'} SOL gain vs ${metadata.kolB} with ${kolBData.solGain || '0'} SOL gain. Previously: ${metadata.kolA} had ${metadata.currentSolA || '0'}, ${metadata.kolB} had ${metadata.currentSolB || '0'}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveUsdGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolAData = latestKols.find(k => k.username === metadata.kolA);
+    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    
+    if (!kolAData || !kolBData) {
+      console.warn(`Missing KOL data for USD gain flippening market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
+      };
+    }
+    
+    const usdGainA = this.parseUsdGain(kolAData.usdGain);
+    const usdGainB = this.parseUsdGain(kolBData.usdGain);
+    
+    const outcome = usdGainA > usdGainB ? "yes" : "no";
+    const reason = `${metadata.kolA} has ${kolAData.usdGain || '$0'} USD gain vs ${metadata.kolB} with ${kolBData.usdGain || '$0'} USD gain. Previously: ${metadata.kolA} had ${metadata.currentUsdA || '$0'}, ${metadata.kolB} had ${metadata.currentUsdB || '$0'}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveWinRateFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolAData = latestKols.find(k => k.username === metadata.kolA);
+    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    
+    if (!kolAData || !kolBData) {
+      console.warn(`Missing KOL data for win rate flippening market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
+      };
+    }
+    
+    const winRateA = this.parseWinRate(kolAData.winsLosses);
+    const winRateB = this.parseWinRate(kolBData.winsLosses);
+    
+    const outcome = winRateA > winRateB ? "yes" : "no";
+    const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
     
     return { outcome, reason };
   }

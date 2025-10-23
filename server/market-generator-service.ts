@@ -14,6 +14,12 @@ interface GeneratedMarket {
     currentRankA?: string;
     currentRankB?: string;
     currentUsd?: string;
+    currentSolA?: string;
+    currentSolB?: string;
+    currentUsdA?: string;
+    currentUsdB?: string;
+    currentWinsLossesA?: string;
+    currentWinsLossesB?: string;
     threshold?: number;
     timeframeDays?: number;
   };
@@ -93,12 +99,12 @@ export class MarketGeneratorService {
       return null;
     }
 
-    const threshold = this.randomChoice([500, 1000, 2000]);
-    const days = this.randomChoice([3, 7]);
+    const threshold = this.randomChoice([200, 500, 1000]);
+    const days = 1;
 
     const market: InsertMarket = {
       kolId: null,
-      title: `Will ${kol.username} (@${xHandle}) gain ${threshold.toLocaleString()}+ X followers in the next ${days} days?`,
+      title: `Will ${kol.username} (@${xHandle}) gain ${threshold.toLocaleString()}+ X followers by tomorrow?`,
       description: `Follower growth prediction for ${kol.username}. Current: ${currentFollowers.toLocaleString()} followers`,
       outcome: 'pending',
       resolvesAt: addDays(new Date(), days),
@@ -113,6 +119,87 @@ export class MarketGeneratorService {
       currentFollowers: currentFollowers,
       threshold: threshold,
       timeframeDays: days,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateSolGainFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => k.solGain);
+    if (validKOLs.length < 2) return null;
+
+    const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kolA.username} have higher SOL gains than ${kolB.username} on tomorrow's leaderboard?`,
+      description: `SOL gain comparison: ${kolA.username} (${kolA.solGain}) vs ${kolB.username} (${kolB.solGain})`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'sol_gain_flippening',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'sol_gain_flippening',
+      kolA: kolA.username,
+      kolB: kolB.username,
+      currentSolA: kolA.solGain || undefined,
+      currentSolB: kolB.solGain || undefined,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateUsdGainFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => k.usdGain);
+    if (validKOLs.length < 2) return null;
+
+    const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kolA.username} have higher USD gains than ${kolB.username} on tomorrow's leaderboard?`,
+      description: `USD gain comparison: ${kolA.username} (${kolA.usdGain}) vs ${kolB.username} (${kolB.usdGain})`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'usd_gain_flippening',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'usd_gain_flippening',
+      kolA: kolA.username,
+      kolB: kolB.username,
+      currentUsdA: kolA.usdGain || undefined,
+      currentUsdB: kolB.usdGain || undefined,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateWinRateFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => k.winsLosses);
+    if (validKOLs.length < 2) return null;
+
+    const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kolA.username} have a better win rate than ${kolB.username} on tomorrow's leaderboard?`,
+      description: `Win rate comparison: ${kolA.username} (${kolA.winsLosses}) vs ${kolB.username} (${kolB.winsLosses})`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'winrate_flippening',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'winrate_flippening',
+      kolA: kolA.username,
+      kolB: kolB.username,
+      currentWinsLossesA: kolA.winsLosses || undefined,
+      currentWinsLossesB: kolB.winsLosses || undefined,
     };
 
     return { market, metadata };
@@ -136,6 +223,9 @@ export class MarketGeneratorService {
       () => this.generateRankFlippeningMarket(kolData),
       () => this.generateProfitStreakMarket(kolData),
       () => this.generateFollowerGrowthMarket(kolData),
+      () => this.generateSolGainFlippeningMarket(kolData),
+      () => this.generateUsdGainFlippeningMarket(kolData),
+      () => this.generateWinRateFlippeningMarket(kolData),
     ];
 
     for (let i = 0; i < count; i++) {
@@ -147,8 +237,8 @@ export class MarketGeneratorService {
       let attempts = 0;
 
       while (!generatedMarket && attempts < 3) {
-        const useXApi = Math.random() < 0.3 && rateLimitStatus.isConfigured;
-        const availableGenerators = useXApi ? generators : generators.slice(0, 2);
+        const useXApi = Math.random() < 0.2 && rateLimitStatus.isConfigured;
+        const availableGenerators = useXApi ? generators : generators.filter(g => g !== generators[2]);
 
         const generator = this.randomChoice(availableGenerators);
         generatedMarket = await generator();
@@ -169,6 +259,12 @@ export class MarketGeneratorService {
             currentRankA: generatedMarket.metadata.currentRankA || null,
             currentRankB: generatedMarket.metadata.currentRankB || null,
             currentUsd: generatedMarket.metadata.currentUsd || null,
+            currentSolA: generatedMarket.metadata.currentSolA || null,
+            currentSolB: generatedMarket.metadata.currentSolB || null,
+            currentUsdA: generatedMarket.metadata.currentUsdA || null,
+            currentUsdB: generatedMarket.metadata.currentUsdB || null,
+            currentWinsLossesA: generatedMarket.metadata.currentWinsLossesA || null,
+            currentWinsLossesB: generatedMarket.metadata.currentWinsLossesB || null,
             threshold: generatedMarket.metadata.threshold || null,
             timeframeDays: generatedMarket.metadata.timeframeDays || null,
           });
