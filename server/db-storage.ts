@@ -97,6 +97,11 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getKolByHandle(handle: string): Promise<Kol | undefined> {
+    const result = await db.select().from(kols).where(eq(kols.handle, handle)).limit(1);
+    return result[0];
+  }
+
   async getAllKols(): Promise<Kol[]> {
     return await db.select().from(kols);
   }
@@ -106,8 +111,12 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void> {
-    await db.update(kols).set(updates).where(eq(kols.id, id));
+  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<Kol> {
+    const result = await db.update(kols).set(updates).where(eq(kols.id, id)).returning();
+    if (!result[0]) {
+      throw new NotFoundError(`KOL with id ${id} not found`);
+    }
+    return result[0];
   }
 
   // Market methods

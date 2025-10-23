@@ -25,9 +25,10 @@ export interface IStorage {
   
   // KOL methods
   getKol(id: string): Promise<Kol | undefined>;
+  getKolByHandle(handle: string): Promise<Kol | undefined>;
   getAllKols(): Promise<Kol[]>;
   createKol(kol: InsertKol): Promise<Kol>;
-  updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void>;
+  updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<Kol>;
   
   // Market methods
   getMarket(id: string): Promise<Market | undefined>;
@@ -209,6 +210,13 @@ export class MemStorage implements IStorage {
         ...kolData,
         trending: kolData.trending ?? false,
         trendingPercent: kolData.trendingPercent ?? null,
+        kolscanRank: null,
+        kolscanWins: null,
+        kolscanLosses: null,
+        kolscanSolGain: null,
+        kolscanUsdGain: null,
+        lastScrapedAt: null,
+        scrapedFromKolscan: false,
       };
       this.kols.set(kol.id, kol);
     });
@@ -243,6 +251,8 @@ export class MemStorage implements IStorage {
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
         createdAt: new Date(),
         engagement: (Math.random() * 3).toFixed(2),
+        marketType: "standard",
+        requiresXApi: false,
       };
       this.markets.set(market.id, market);
     });
@@ -296,6 +306,12 @@ export class MemStorage implements IStorage {
     return this.kols.get(id);
   }
 
+  async getKolByHandle(handle: string): Promise<Kol | undefined> {
+    return Array.from(this.kols.values()).find(
+      (kol) => kol.handle === handle,
+    );
+  }
+
   async getAllKols(): Promise<Kol[]> {
     return Array.from(this.kols.values());
   }
@@ -307,17 +323,26 @@ export class MemStorage implements IStorage {
       id,
       trending: insertKol.trending ?? false,
       trendingPercent: insertKol.trendingPercent ?? null,
+      kolscanRank: insertKol.kolscanRank ?? null,
+      kolscanWins: insertKol.kolscanWins ?? null,
+      kolscanLosses: insertKol.kolscanLosses ?? null,
+      kolscanSolGain: insertKol.kolscanSolGain ?? null,
+      kolscanUsdGain: insertKol.kolscanUsdGain ?? null,
+      lastScrapedAt: insertKol.lastScrapedAt ?? null,
+      scrapedFromKolscan: insertKol.scrapedFromKolscan ?? false,
     };
     this.kols.set(id, kol);
     return kol;
   }
 
-  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<void> {
+  async updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<Kol> {
     const kol = this.kols.get(id);
-    if (kol) {
-      const updatedKol = { ...kol, ...updates };
-      this.kols.set(id, updatedKol);
+    if (!kol) {
+      throw new Error(`KOL with id ${id} not found`);
     }
+    const updatedKol = { ...kol, ...updates };
+    this.kols.set(id, updatedKol);
+    return updatedKol;
   }
 
   // Market methods
@@ -332,6 +357,7 @@ export class MemStorage implements IStorage {
   async getMarketWithKol(id: string): Promise<MarketWithKol | undefined> {
     const market = this.markets.get(id);
     if (!market) return undefined;
+    if (!market.kolId) return undefined;
     
     const kol = this.kols.get(market.kolId);
     if (!kol) return undefined;
@@ -343,6 +369,7 @@ export class MemStorage implements IStorage {
     const markets = Array.from(this.markets.values());
     return markets
       .map((market) => {
+        if (!market.kolId) return null;
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
         return { ...market, kol };
@@ -365,6 +392,9 @@ export class MemStorage implements IStorage {
       resolved: false,
       resolvedValue: null,
       engagement: insertMarket.engagement ?? "0.00",
+      marketType: insertMarket.marketType ?? "standard",
+      requiresXApi: insertMarket.requiresXApi ?? false,
+      kolId: insertMarket.kolId ?? null,
     };
     this.markets.set(id, market);
     return market;
@@ -427,6 +457,7 @@ export class MemStorage implements IStorage {
       .map((bet) => {
         const market = this.markets.get(bet.marketId);
         if (!market) return null;
+        if (!market.kolId) return null;
         
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
@@ -448,6 +479,7 @@ export class MemStorage implements IStorage {
       .map((bet) => {
         const market = this.markets.get(bet.marketId);
         if (!market) return null;
+        if (!market.kolId) return null;
         
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
@@ -537,6 +569,7 @@ export class MemStorage implements IStorage {
       .map((position) => {
         const market = this.markets.get(position.marketId);
         if (!market) return null;
+        if (!market.kolId) return null;
         
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
@@ -705,6 +738,10 @@ export class MemStorage implements IStorage {
       ...kol,
       id: randomUUID(),
       scrapedAt: new Date(),
+      xHandle: kol.xHandle ?? null,
+      winsLosses: kol.winsLosses ?? null,
+      solGain: kol.solGain ?? null,
+      usdGain: kol.usdGain ?? null,
     }));
   }
 
@@ -739,6 +776,15 @@ export class MemStorage implements IStorage {
       ...metadata,
       id: randomUUID(),
       createdAt: new Date(),
+      xHandle: metadata.xHandle ?? null,
+      kolA: metadata.kolA ?? null,
+      kolB: metadata.kolB ?? null,
+      currentFollowers: metadata.currentFollowers ?? null,
+      currentRankA: metadata.currentRankA ?? null,
+      currentRankB: metadata.currentRankB ?? null,
+      currentUsd: metadata.currentUsd ?? null,
+      threshold: metadata.threshold ?? null,
+      timeframeDays: metadata.timeframeDays ?? null,
     };
   }
 

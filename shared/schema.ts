@@ -22,6 +22,13 @@ export const kols = pgTable("kols", {
   tier: text("tier").notNull(),
   trending: boolean("trending").notNull().default(false),
   trendingPercent: decimal("trending_percent", { precision: 5, scale: 2 }),
+  kolscanRank: text("kolscan_rank"),
+  kolscanWins: integer("kolscan_wins"),
+  kolscanLosses: integer("kolscan_losses"),
+  kolscanSolGain: text("kolscan_sol_gain"),
+  kolscanUsdGain: text("kolscan_usd_gain"),
+  lastScrapedAt: timestamp("last_scraped_at"),
+  scrapedFromKolscan: boolean("scraped_from_kolscan").notNull().default(false),
 });
 
 export const markets = pgTable("markets", {
