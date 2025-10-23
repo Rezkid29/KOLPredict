@@ -10,6 +10,7 @@ import {
   kols,
   markets,
   bets,
+  positions,
   comments,
   transactions,
   kolMetricsHistory,
@@ -23,6 +24,9 @@ import {
   type Bet,
   type InsertBet,
   type BetWithMarket,
+  type Position,
+  type InsertPosition,
+  type PositionWithMarket,
   type Comment,
   type InsertComment,
   type CommentWithUser,
@@ -127,16 +131,20 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async updateMarketPrice(id: string, price: string, supply: number): Promise<void> {
-    await db.update(markets).set({ price, supply }).where(eq(markets.id, id));
-  }
-
   async updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void> {
     await db.update(markets).set(updates).where(eq(markets.id, id));
   }
 
+  async updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void> {
+    await db.update(markets).set({ yesPool, noPool, yesPrice, noPrice }).where(eq(markets.id, id));
+  }
+
   async updateMarketVolume(id: string, volume: string): Promise<void> {
     await db.update(markets).set({ totalVolume: volume }).where(eq(markets.id, id));
+  }
+
+  async resolveMarket(id: string, resolvedValue: string): Promise<void> {
+    await db.update(markets).set({ resolved: true, resolvedValue, isLive: false }).where(eq(markets.id, id));
   }
 
   // Bet methods
@@ -227,12 +235,96 @@ export class DbStorage implements IStorage {
     }));
   }
 
+  // Position methods
+  async getUserPosition(userId: string, marketId: string, position: string): Promise<Position | undefined> {
+    const result = await db
+      .select()
+      .from(positions)
+      .where(sql`${positions.userId} = ${userId} AND ${positions.marketId} = ${marketId} AND ${positions.position} = ${position}`)
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserPositions(userId: string): Promise<Position[]> {
+    return await db
+      .select()
+      .from(positions)
+      .where(sql`${positions.userId} = ${userId} AND CAST(${positions.shares} AS DECIMAL) > 0`);
+  }
+
+  async getUserPositionsWithMarkets(userId: string): Promise<PositionWithMarket[]> {
+    const result = await db
+      .select()
+      .from(positions)
+      .leftJoin(markets, eq(positions.marketId, markets.id))
+      .leftJoin(kols, eq(markets.kolId, kols.id))
+      .where(sql`${positions.userId} = ${userId} AND CAST(${positions.shares} AS DECIMAL) > 0`);
+
+    return result
+      .filter((row) => row.markets !== null && row.kols !== null)
+      .map((row) => ({
+        ...row.positions,
+        market: {
+          ...row.markets!,
+          kol: row.kols!,
+        },
+      }));
+  }
+
+  async getMarketPositions(marketId: string): Promise<Position[]> {
+    return await db
+      .select()
+      .from(positions)
+      .where(sql`${positions.marketId} = ${marketId} AND CAST(${positions.shares} AS DECIMAL) > 0`);
+  }
+
+  async updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void> {
+    const existing = await this.getUserPosition(userId, marketId, position);
+    
+    if (existing) {
+      const currentShares = parseFloat(existing.shares);
+      const currentAvgPrice = parseFloat(existing.averagePrice);
+      
+      let newShares: number;
+      let newAvgPrice: number;
+      
+      if (action === "buy") {
+        newShares = currentShares + shares;
+        const market = await this.getMarket(marketId);
+        const currentPrice = parseFloat(position === "YES" ? market!.yesPrice : market!.noPrice);
+        newAvgPrice = ((currentShares * currentAvgPrice) + (shares * currentPrice)) / newShares;
+      } else {
+        newShares = Math.max(0, currentShares - shares);
+        newAvgPrice = currentAvgPrice;
+      }
+      
+      await db.update(positions)
+        .set({ 
+          shares: newShares.toFixed(2), 
+          averagePrice: newAvgPrice.toFixed(4),
+          updatedAt: new Date()
+        })
+        .where(eq(positions.id, existing.id));
+    } else if (action === "buy") {
+      const market = await this.getMarket(marketId);
+      const price = position === "YES" ? market?.yesPrice : market?.noPrice;
+      await db.insert(positions).values({
+        userId,
+        marketId,
+        position,
+        shares: shares.toFixed(2),
+        averagePrice: price ?? "0.5000",
+      });
+    }
+  }
+
   // Price history
   async getMarketPriceHistory(marketId: string, days: number = 7): Promise<PriceHistoryPoint[]> {
     const market = await this.getMarket(marketId);
     if (!market) return [];
 
-    const currentPrice = parseFloat(market.price);
+    const currentYesPrice = parseFloat(market.yesPrice);
+    const currentNoPrice = parseFloat(market.noPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
 
@@ -241,13 +333,15 @@ export class DbStorage implements IStorage {
       date.setDate(date.getDate() - i);
 
       const progress = (days - i) / days;
-      const basePrice = currentPrice * (0.7 + progress * 0.3);
-      const randomVariation = (Math.random() - 0.5) * 0.02 * currentPrice;
-      const price = Math.max(0.01, basePrice + randomVariation);
+      const baseYesPrice = 0.5 + (currentYesPrice - 0.5) * progress;
+      const randomVariation = (Math.random() - 0.5) * 0.05;
+      const yesPrice = Math.max(0.01, Math.min(0.99, baseYesPrice + randomVariation));
+      const noPrice = 1.0 - yesPrice;
 
       history.push({
         time: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        price: parseFloat(price.toFixed(4)),
+        yesPrice: parseFloat(yesPrice.toFixed(4)),
+        noPrice: parseFloat(noPrice.toFixed(4)),
       });
     }
 

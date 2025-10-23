@@ -39,27 +39,26 @@ export default function Home() {
 
   const handleBuy = (market: MarketWithKol) => {
     setSelectedMarket(market);
-    setBetType("buy");
     setBetModalOpen(true);
   };
 
   const handleSell = (market: MarketWithKol) => {
     setSelectedMarket(market);
-    setBetType("sell");
     setBetModalOpen(true);
   };
 
-  const handleConfirmBet = async (marketId: string, type: "buy" | "sell", amount: number, shares: number) => {
+  const handleConfirmBet = async (marketId: string, position: "YES" | "NO", amount: number, action: "buy" | "sell") => {
     try {
       await apiRequest("POST", "/api/bets", {
         marketId,
-        type,
-        shares,
+        position,
+        amount,
+        action,
       });
 
       toast({
         title: "Bet Placed!",
-        description: `Successfully placed ${type} order for ${shares} shares`,
+        description: `Successfully ${action === "buy" ? "bought" : "sold"} ${position} position for $${amount.toFixed(2)}`,
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
@@ -215,7 +214,6 @@ export default function Home() {
         open={betModalOpen}
         onClose={() => setBetModalOpen(false)}
         market={selectedMarket}
-        type={betType}
         userBalance={user?.balance ? parseFloat(user.balance) : 1000}
         onConfirm={handleConfirmBet}
       />

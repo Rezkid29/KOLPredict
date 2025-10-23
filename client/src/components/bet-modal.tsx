@@ -11,54 +11,60 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MarketWithKol } from "@shared/schema";
-import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import { ThumbsUp, ThumbsDown, AlertCircle, TrendingUp } from "lucide-react";
 
 interface BetModalProps {
   open: boolean;
   onClose: () => void;
   market: MarketWithKol | null;
-  type: "buy" | "sell";
   userBalance: number;
-  onConfirm: (marketId: string, type: "buy" | "sell", amount: number, shares: number) => void;
+  onConfirm: (marketId: string, position: "YES" | "NO", amount: number, action: "buy" | "sell") => void;
 }
 
-export function BetModal({ open, onClose, market, type, userBalance, onConfirm }: BetModalProps) {
+export function BetModal({ open, onClose, market, userBalance, onConfirm }: BetModalProps) {
+  const [position, setPosition] = useState<"YES" | "NO">("YES");
   const [amount, setAmount] = useState<string>("");
-  const [shares, setShares] = useState<string>("1");
+  const [action, setAction] = useState<"buy" | "sell">("buy");
 
   if (!market) return null;
 
-  const price = parseFloat(market.price);
-  const numShares = parseInt(shares) || 0;
-  const totalCost = price * numShares;
-  const potentialPayout = type === "buy" ? totalCost * 1.8 : totalCost * 0.9;
+  const yesPrice = parseFloat(market.yesPrice);
+  const noPrice = parseFloat(market.noPrice);
+  const currentPrice = position === "YES" ? yesPrice : noPrice;
+  const betAmount = parseFloat(amount) || 0;
+
+  // Calculate shares (simplified for UI - server will use AMM formula)
+  const estimatedShares = betAmount > 0 ? betAmount / currentPrice : 0;
+  
+  // Potential payout if position wins (each share pays $1.00)
+  const potentialPayout = action === "buy" ? estimatedShares * 1.0 : betAmount;
+  const potentialProfit = action === "buy" ? potentialPayout - betAmount : 0;
 
   const handleConfirm = () => {
-    onConfirm(market.id, type, totalCost, numShares);
+    onConfirm(market.id, position, betAmount, action);
     setAmount("");
-    setShares("1");
     onClose();
   };
 
   const presetAmounts = [10, 50, 100, 500];
+
+  const yesProbability = (yesPrice * 100).toFixed(1);
+  const noProbability = (noPrice * 100).toFixed(1);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md" data-testid="modal-bet">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-lg ${type === "buy" ? "bg-success/10 ring-1 ring-success/20" : "bg-destructive/10 ring-1 ring-destructive/20"}`}>
-              {type === "buy" ? (
-                <TrendingUp className="h-5 w-5 text-success" />
-              ) : (
-                <TrendingDown className="h-5 w-5 text-destructive" />
-              )}
+            <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
+              <TrendingUp className="h-5 w-5 text-primary" />
             </div>
-            <span className="text-xl">{type === "buy" ? "Buy Shares" : "Sell Shares"}</span>
+            <span className="text-xl">Place Bet</span>
           </DialogTitle>
           <DialogDescription className="text-base">
-            Place your bet on this KOL market
+            {market.title}
           </DialogDescription>
         </DialogHeader>
 
@@ -75,78 +81,149 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
                 <Badge variant="secondary" className="text-xs">{market.kol.tier}</Badge>
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                {market.title}
+                {market.outcome}
               </p>
             </div>
           </div>
 
-          {/* Shares input */}
-          <div className="space-y-2">
-            <Label htmlFor="shares">Number of Shares</Label>
-            <Input
-              id="shares"
-              type="number"
-              min="1"
-              value={shares}
-              onChange={(e) => setShares(e.target.value)}
-              placeholder="Enter shares"
-              className="text-lg font-semibold"
-              data-testid="input-shares"
-            />
+          {/* YES/NO Position Selection */}
+          <div className="space-y-3">
+            <Label>Choose Your Position</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setPosition("YES")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  position === "YES"
+                    ? "border-success bg-success/10 ring-2 ring-success/20"
+                    : "border-border hover-elevate active-elevate-2"
+                }`}
+                data-testid="button-position-yes"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-lg">YES</span>
+                  <ThumbsUp className={`h-5 w-5 ${position === "YES" ? "text-success" : "text-muted-foreground"}`} />
+                </div>
+                <div className="text-left">
+                  <div className="text-2xl font-bold">${yesPrice.toFixed(2)}</div>
+                  <div className="text-xs text-muted-foreground">{yesProbability}% chance</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setPosition("NO")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  position === "NO"
+                    ? "border-destructive bg-destructive/10 ring-2 ring-destructive/20"
+                    : "border-border hover-elevate active-elevate-2"
+                }`}
+                data-testid="button-position-no"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-lg">NO</span>
+                  <ThumbsDown className={`h-5 w-5 ${position === "NO" ? "text-destructive" : "text-muted-foreground"}`} />
+                </div>
+                <div className="text-left">
+                  <div className="text-2xl font-bold">${noPrice.toFixed(2)}</div>
+                  <div className="text-xs text-muted-foreground">{noProbability}% chance</div>
+                </div>
+              </button>
+            </div>
           </div>
 
-          {/* Preset amounts */}
+          {/* Buy/Sell Tabs */}
+          <Tabs value={action} onValueChange={(v) => setAction(v as "buy" | "sell")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="buy" data-testid="tab-buy">Buy</TabsTrigger>
+              <TabsTrigger value="sell" data-testid="tab-sell">Sell</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* Amount input */}
           <div className="space-y-2">
-            <Label>Quick Amount</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {presetAmounts.map((preset) => {
-                const presetShares = Math.floor(preset / price);
-                return (
+            <Label htmlFor="amount">{action === "buy" ? "Amount to Spend" : "Shares to Sell"}</Label>
+            <div className="relative">
+              {action === "buy" && (
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">
+                  $
+                </span>
+              )}
+              <Input
+                id="amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={action === "buy" ? "Enter amount" : "Enter shares"}
+                className={`text-lg font-semibold ${action === "buy" ? "pl-7" : ""}`}
+                data-testid="input-amount"
+              />
+            </div>
+          </div>
+
+          {/* Preset amounts - only for buy */}
+          {action === "buy" && (
+            <div className="space-y-2">
+              <Label>Quick Amount</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {presetAmounts.map((preset) => (
                   <Button
                     key={preset}
                     variant="outline"
                     size="sm"
-                    onClick={() => setShares(presetShares.toString())}
+                    onClick={() => setAmount(preset.toString())}
                     className="font-semibold"
                     data-testid={`button-preset-${preset}`}
                   >
                     ${preset}
                   </Button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Calculation breakdown */}
           <div className="space-y-3 p-4 rounded-lg bg-card border border-card-border">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Price per share</span>
-              <span className="font-semibold tabular-nums">{price.toFixed(4)} PTS</span>
+              <span className="text-muted-foreground">Position</span>
+              <span className="font-semibold">
+                <Badge variant={position === "YES" ? "default" : "destructive"}>
+                  {position}
+                </Badge>
+              </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Shares</span>
-              <span className="font-semibold tabular-nums">{numShares}</span>
+              <span className="text-muted-foreground">Current Price</span>
+              <span className="font-semibold tabular-nums">${currentPrice.toFixed(4)}</span>
             </div>
+            {action === "buy" && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Est. Shares</span>
+                <span className="font-semibold tabular-nums">{estimatedShares.toFixed(2)}</span>
+              </div>
+            )}
             <div className="h-px bg-border" />
             <div className="flex justify-between">
-              <span className="font-medium">{type === "buy" ? "Total Cost" : "Total Proceeds"}</span>
+              <span className="font-medium">{action === "buy" ? "You Pay" : "You Receive"}</span>
               <span className="text-lg font-bold tabular-nums" data-testid="text-total-cost">
-                {totalCost.toFixed(2)} PTS
+                ${betAmount.toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Potential Payout</span>
-              <span className="font-semibold text-success tabular-nums" data-testid="text-potential-payout">
-                {potentialPayout.toFixed(2)} PTS
-              </span>
-            </div>
+            {action === "buy" && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">If {position} wins</span>
+                <span className="font-semibold text-success tabular-nums" data-testid="text-potential-payout">
+                  ${potentialPayout.toFixed(2)} (+${potentialProfit.toFixed(2)})
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Balance check - only for buy orders */}
-          {type === "buy" && totalCost > userBalance && (
+          {/* Balance check */}
+          {action === "buy" && betAmount > userBalance && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <p>Insufficient balance. You need {(totalCost - userBalance).toFixed(2)} more PTS.</p>
+              <p>Insufficient balance. You need ${(betAmount - userBalance).toFixed(2)} more.</p>
             </div>
           )}
 
@@ -161,13 +238,13 @@ export function BetModal({ open, onClose, market, type, userBalance, onConfirm }
               Cancel
             </Button>
             <Button
-              variant={type === "buy" ? "default" : "destructive"}
+              variant={position === "YES" ? "default" : "destructive"}
               className="flex-1 font-semibold"
               onClick={handleConfirm}
-              disabled={numShares <= 0 || (type === "buy" && totalCost > userBalance)}
+              disabled={betAmount <= 0 || (action === "buy" && betAmount > userBalance)}
               data-testid="button-confirm-bet"
             >
-              Confirm {type === "buy" ? "Buy" : "Sell"}
+              {action === "buy" ? "Buy" : "Sell"} {position}
             </Button>
           </div>
 

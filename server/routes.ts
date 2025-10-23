@@ -42,10 +42,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Bonding curve price calculation
-  const calculatePrice = (supply: number): number => {
-    // Simple bonding curve: price = 0.01 + (supply / 10000)
-    return 0.01 + (supply / 10000);
+  // Constant Product AMM (Automated Market Maker) calculations
+  // In this system: yesPrice + noPrice = 1.00
+  // When traders buy YES, yesPool increases, making YES price go up
+  // When traders buy NO, noPool increases, making NO price go up
+  
+  const calculateAMMPrices = (yesPool: number, noPool: number) => {
+    const totalPool = yesPool + noPool;
+    return {
+      yesPrice: yesPool / totalPool,
+      noPrice: noPool / totalPool,
+    };
+  };
+
+  const calculateSharesForBuy = (
+    amount: number,
+    position: "YES" | "NO",
+    yesPool: number,
+    noPool: number
+  ): number => {
+    // Constant product formula: k = yesPool * noPool
+    const k = yesPool * noPool;
+    
+    if (position === "YES") {
+      // Adding to YES pool, removing from NO pool
+      // newNoPool = k / (yesPool + amount)
+      const newNoPool = k / (yesPool + amount);
+      return noPool - newNoPool;
+    } else {
+      // Adding to NO pool, removing from YES pool
+      // newYesPool = k / (noPool + amount)
+      const newYesPool = k / (noPool + amount);
+      return yesPool - newYesPool;
+    }
+  };
+
+  const calculatePayoutForSell = (
+    shares: number,
+    position: "YES" | "NO",
+    yesPool: number,
+    noPool: number
+  ): number => {
+    // Constant product formula: k = yesPool * noPool
+    const k = yesPool * noPool;
+    
+    if (position === "YES") {
+      // Removing from YES pool, adding to NO pool
+      // newNoPool = k / (yesPool - shares)
+      const newNoPool = k / (yesPool - shares);
+      return newNoPool - noPool;
+    } else {
+      // Removing from NO pool, adding to YES pool
+      // newYesPool = k / (noPool - shares)
+      const newYesPool = k / (noPool - shares);
+      return newYesPool - yesPool;
+    }
   };
 
   // Authentication endpoints
@@ -180,24 +231,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a new bet
+  // Create a new bet (buy or sell YES/NO positions)
   app.post("/api/bets", async (req, res) => {
     try {
-      const { marketId, type, shares, userId } = req.body;
+      const { marketId, position, amount, action = "buy", userId } = req.body;
 
-      if (!marketId || !type || !shares) {
+      if (!marketId || !position) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      // Validate type is exactly "buy" or "sell"
-      if (type !== "buy" && type !== "sell") {
-        return res.status(400).json({ message: "Invalid bet type. Must be 'buy' or 'sell'" });
+      // Validate position is exactly "YES" or "NO"
+      if (position !== "YES" && position !== "NO") {
+        return res.status(400).json({ message: "Invalid position. Must be 'YES' or 'NO'" });
       }
 
-      // Validate shares is a positive integer
-      const numShares = parseInt(shares);
-      if (!Number.isInteger(numShares) || numShares <= 0) {
-        return res.status(400).json({ message: "Shares must be a positive integer" });
+      // Validate action
+      if (action !== "buy" && action !== "sell") {
+        return res.status(400).json({ message: "Invalid action. Must be 'buy' or 'sell'" });
       }
 
       // Get current user
@@ -205,7 +255,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (userId) {
         user = await storage.getUser(userId);
       } else {
-        // Fallback to default user for compatibility
         user = await storage.getUserByUsername("trader1");
       }
       
@@ -218,71 +267,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Market not found" });
       }
 
-      // Calculate amount server-side based on current market price
-      const currentPrice = parseFloat(market.price);
-      const betAmount = currentPrice * numShares;
+      if (market.resolved) {
+        return res.status(400).json({ message: "Market is already resolved" });
+      }
+
+      const yesPool = parseFloat(market.yesPool);
+      const noPool = parseFloat(market.noPool);
       const userBalance = parseFloat(user.balance);
 
-      // Check if user has enough balance (only for buy orders)
-      if (type === "buy" && betAmount > userBalance) {
-        return res.status(400).json({ message: "Insufficient balance" });
-      }
+      let betAmount: number;
+      let sharesAmount: number;
+      let newYesPool: number;
+      let newNoPool: number;
 
-      // For sell orders, verify user owns enough shares
-      if (type === "sell") {
-        const userBets = await storage.getMarketBets(marketId);
-        const userMarketBets = userBets.filter(bet => bet.userId === user.id);
-        
-        // Calculate user's current position (shares bought - shares sold)
-        let totalBought = 0;
-        let totalSold = 0;
-        for (const bet of userMarketBets) {
-          if (bet.type === "buy") {
-            totalBought += bet.shares;
-          } else if (bet.type === "sell") {
-            totalSold += bet.shares;
-          }
+      if (action === "buy") {
+        // Buying shares
+        if (!amount || amount <= 0) {
+          return res.status(400).json({ message: "Amount must be positive for buy orders" });
         }
-        const currentPosition = totalBought - totalSold;
-        
-        if (numShares > currentPosition) {
+
+        if (amount > userBalance) {
+          return res.status(400).json({ message: "Insufficient balance" });
+        }
+
+        betAmount = amount;
+        sharesAmount = calculateSharesForBuy(amount, position, yesPool, noPool);
+
+        // Update pools
+        if (position === "YES") {
+          newYesPool = yesPool + amount;
+          newNoPool = noPool - sharesAmount;
+        } else {
+          newNoPool = noPool + amount;
+          newYesPool = yesPool - sharesAmount;
+        }
+      } else {
+        // Selling shares
+        const userPosition = await storage.getUserPosition(user.id, marketId, position);
+        const currentShares = userPosition ? parseFloat(userPosition.shares) : 0;
+
+        if (!amount || amount <= 0) {
+          return res.status(400).json({ message: "Amount (shares) must be positive for sell orders" });
+        }
+
+        if (amount > currentShares) {
           return res.status(400).json({ 
-            message: `Insufficient shares. You own ${currentPosition} shares but trying to sell ${numShares}.` 
+            message: `Insufficient ${position} shares. You own ${currentShares} but trying to sell ${amount}.` 
           });
         }
+
+        sharesAmount = amount;
+        betAmount = calculatePayoutForSell(amount, position, yesPool, noPool);
+
+        // Update pools
+        if (position === "YES") {
+          newYesPool = yesPool - amount;
+          newNoPool = noPool + betAmount;
+        } else {
+          newNoPool = noPool - amount;
+          newYesPool = yesPool + betAmount;
+        }
       }
 
-      // Calculate new market price using bonding curve
-      const newSupply = type === "buy" ? market.supply + numShares : Math.max(0, market.supply - numShares);
-      const newPrice = calculatePrice(newSupply).toFixed(4);
+      // Calculate new prices
+      const { yesPrice, noPrice } = calculateAMMPrices(newYesPool, newNoPool);
+      const currentPrice = position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
 
-      // Create bet
+      // Create bet record
       const insertBet: InsertBet = {
         userId: user.id,
         marketId,
-        type,
+        position,
         amount: betAmount.toFixed(2),
-        price: market.price,
-        shares: numShares,
-        status: "pending",
+        price: currentPrice.toFixed(4),
+        shares: sharesAmount.toFixed(2),
       };
 
       const bet = await storage.createBet(insertBet);
 
-      // Update user balance based on bet type
-      // Buy: user pays (balance decreases)
-      // Sell: user receives money (balance increases)
-      const newBalance = type === "buy" 
+      // Update or create user position
+      await storage.updateUserPosition(user.id, marketId, position, sharesAmount, action);
+
+      // Update user balance
+      const newBalance = action === "buy" 
         ? (userBalance - betAmount).toFixed(2)
         : (userBalance + betAmount).toFixed(2);
       await storage.updateUserBalance(user.id, newBalance);
 
       // Update user stats
-      const newTotalBets = user.totalBets + 1;
-      await storage.updateUserStats(user.id, newTotalBets, user.totalWins, user.totalProfit);
+      await storage.updateUserStats(user.id, user.totalBets + 1, user.totalWins, user.totalProfit);
 
-      // Update market
-      await storage.updateMarketPrice(marketId, newPrice, newSupply);
+      // Update market pools and prices
+      await storage.updateMarketPools(marketId, newYesPool.toFixed(2), newNoPool.toFixed(2), yesPrice.toFixed(4), noPrice.toFixed(4));
       const newVolume = (parseFloat(market.totalVolume) + betAmount).toFixed(2);
       await storage.updateMarketVolume(marketId, newVolume);
 
@@ -297,6 +373,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating bet:", error);
       res.status(500).json({ message: "Failed to create bet" });
+    }
+  });
+
+  // Get user positions
+  app.get("/api/positions/user", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      
+      if (!userId) {
+        const user = await storage.getUserByUsername("trader1");
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        const positions = await storage.getUserPositionsWithMarkets(user.id);
+        return res.json(positions);
+      }
+
+      const positions = await storage.getUserPositionsWithMarkets(userId);
+      res.json(positions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch user positions" });
+    }
+  });
+
+  // Resolve a market
+  app.post("/api/markets/:id/resolve", async (req, res) => {
+    try {
+      const { resolvedValue } = req.body;
+      const marketId = req.params.id;
+
+      if (resolvedValue !== "YES" && resolvedValue !== "NO") {
+        return res.status(400).json({ message: "resolvedValue must be 'YES' or 'NO'" });
+      }
+
+      const market = await storage.getMarket(marketId);
+      if (!market) {
+        return res.status(404).json({ message: "Market not found" });
+      }
+
+      if (market.resolved) {
+        return res.status(400).json({ message: "Market is already resolved" });
+      }
+
+      // Resolve the market
+      await storage.resolveMarket(marketId, resolvedValue);
+
+      // Get all positions for this market
+      const positions = await storage.getMarketPositions(marketId);
+
+      // Pay out winners
+      for (const position of positions) {
+        const shares = parseFloat(position.shares);
+        if (shares > 0 && position.position === resolvedValue) {
+          const payout = shares * 1.00;
+          const user = await storage.getUser(position.userId);
+          if (user) {
+            const newBalance = (parseFloat(user.balance) + payout).toFixed(2);
+            await storage.updateUserBalance(position.userId, newBalance);
+            
+            const profit = payout - (shares * parseFloat(position.averagePrice));
+            await storage.updateUserStats(
+              position.userId,
+              user.totalBets,
+              user.totalWins + 1,
+              (parseFloat(user.totalProfit) + profit).toFixed(2)
+            );
+          }
+        }
+      }
+
+      // Broadcast market resolution
+      broadcast({
+        type: 'MARKET_RESOLVED',
+        market: await storage.getMarketWithKol(marketId),
+        resolvedValue,
+      });
+
+      res.json({ success: true, resolvedValue });
+    } catch (error) {
+      console.error("Error resolving market:", error);
+      res.status(500).json({ message: "Failed to resolve market" });
     }
   });
 
@@ -525,12 +682,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setInterval(() => {
     storage.getAllMarkets().then((markets) => {
       markets.forEach((market) => {
-        // Randomly update price slightly
-        const currentPrice = parseFloat(market.price);
-        const change = (Math.random() - 0.5) * 0.001; // Small random change
-        const newPrice = Math.max(0.01, currentPrice + change).toFixed(4);
+        // Randomly update YES/NO prices slightly (maintaining sum = 1.00)
+        const currentYesPrice = parseFloat(market.yesPrice);
+        const change = (Math.random() - 0.5) * 0.01; // Small random change
+        const newYesPrice = Math.max(0.01, Math.min(0.99, currentYesPrice + change));
+        const newNoPrice = 1.00 - newYesPrice;
         
-        storage.updateMarketPrice(market.id, newPrice, market.supply);
+        storage.updateMarketPools(
+          market.id,
+          market.yesPool,
+          market.noPool,
+          newYesPrice.toFixed(4),
+          newNoPrice.toFixed(4)
+        );
         
         // Broadcast price update
         storage.getMarketWithKol(market.id).then((updatedMarket) => {

@@ -17,7 +17,8 @@ interface MarketCardProps {
 
 export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const price = parseFloat(market.price);
+  const yesPrice = parseFloat(market.yesPrice);
+  const noPrice = parseFloat(market.noPrice);
   const engagement = parseFloat(market.engagement);
 
   const { data: priceHistory = [] } = useQuery<PriceHistoryPoint[]>({
@@ -73,28 +74,21 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
           </p>
         </div>
 
-        {/* Market stats */}
-        <div className="grid grid-cols-3 gap-3 py-3 border-y border-border">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Price</p>
-            <p className="text-lg font-semibold tabular-nums" data-testid={`text-price-${market.id}`}>
-              {price.toFixed(4)} PTS
+        {/* Market prices - YES/NO */}
+        <div className="grid grid-cols-2 gap-3 py-3 border-y border-border">
+          <div className="p-3 rounded-lg bg-success/5 border border-success/20">
+            <p className="text-xs text-muted-foreground mb-1">YES</p>
+            <p className="text-2xl font-bold tabular-nums text-success" data-testid={`text-yes-price-${market.id}`}>
+              ${yesPrice.toFixed(2)}
             </p>
+            <p className="text-xs text-muted-foreground mt-1">{(yesPrice * 100).toFixed(1)}% chance</p>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Supply</p>
-            <p className="text-lg font-semibold tabular-nums" data-testid={`text-supply-${market.id}`}>
-              {market.supply} / 5000
+          <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+            <p className="text-xs text-muted-foreground mb-1">NO</p>
+            <p className="text-2xl font-bold tabular-nums text-destructive" data-testid={`text-no-price-${market.id}`}>
+              ${noPrice.toFixed(2)}
             </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Engagement</p>
-            <div className="flex items-center gap-1">
-              <Activity className="h-4 w-4 text-primary" />
-              <p className="text-lg font-semibold tabular-nums">
-                {engagement.toFixed(1)}%
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground mt-1">{(noPrice * 100).toFixed(1)}% chance</p>
           </div>
         </div>
 
@@ -105,7 +99,7 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
             {priceHistory.length > 0 && (
               <Badge variant="outline" className="text-xs gap-1">
                 <TrendingUp className="h-3 w-3" />
-                {((priceHistory[priceHistory.length - 1].price - priceHistory[0].price) / priceHistory[0].price * 100).toFixed(1)}%
+                {((priceHistory[priceHistory.length - 1].yesPrice - priceHistory[0].yesPrice) / priceHistory[0].yesPrice * 100).toFixed(1)}%
               </Badge>
             )}
           </div>

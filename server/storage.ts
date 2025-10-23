@@ -3,6 +3,7 @@ import {
   type Kol, type InsertKol,
   type Market, type InsertMarket, type MarketWithKol,
   type Bet, type InsertBet, type BetWithMarket,
+  type Position, type InsertPosition, type PositionWithMarket,
   type Comment, type InsertComment, type CommentWithUser,
   type Transaction, type InsertTransaction,
   type KolMetricsHistory, type InsertKolMetricsHistory,
@@ -32,8 +33,9 @@ export interface IStorage {
   getAllMarketsWithKols(): Promise<MarketWithKol[]>;
   createMarket(market: InsertMarket): Promise<Market>;
   updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void>;
-  updateMarketPrice(id: string, price: string, supply: number): Promise<void>;
+  updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void>;
   updateMarketVolume(id: string, volume: string): Promise<void>;
+  resolveMarket(id: string, resolvedValue: string): Promise<void>;
   
   // Bet methods
   getBet(id: string): Promise<Bet | undefined>;
@@ -43,6 +45,13 @@ export interface IStorage {
   getMarketBets(marketId: string): Promise<Bet[]>;
   createBet(bet: InsertBet): Promise<Bet>;
   updateBetStatus(id: string, status: string, profit?: string): Promise<void>;
+
+  // Position methods
+  getUserPosition(userId: string, marketId: string, position: string): Promise<Position | undefined>;
+  getUserPositions(userId: string): Promise<Position[]>;
+  getUserPositionsWithMarkets(userId: string): Promise<PositionWithMarket[]>;
+  getMarketPositions(marketId: string): Promise<Position[]>;
+  updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void>;
   
   // Leaderboard
   getLeaderboard(): Promise<LeaderboardEntry[]>;
@@ -68,6 +77,7 @@ export class MemStorage implements IStorage {
   private kols: Map<string, Kol>;
   private markets: Map<string, Market>;
   private bets: Map<string, Bet>;
+  private positions: Map<string, Position>;
   private comments: Map<string, Comment>;
 
   constructor() {
@@ -75,6 +85,7 @@ export class MemStorage implements IStorage {
     this.kols = new Map();
     this.markets = new Map();
     this.bets = new Map();
+    this.positions = new Map();
     this.comments = new Map();
     this.initializeMockData();
   }
@@ -177,16 +188,21 @@ export class MemStorage implements IStorage {
     ];
 
     kolsArray.forEach((kol, index) => {
+      const yesPrice = 0.40 + Math.random() * 0.20; // Random between 0.40 and 0.60
       const market: Market = {
         id: randomUUID(),
         kolId: kol.id,
         title: marketTitles[index],
         description: `Prediction market for ${kol.name}'s performance metrics`,
         outcome: "pending",
-        price: (0.10 + Math.random() * 0.15).toFixed(4),
-        supply: Math.floor(Math.random() * 1000),
+        yesPool: "100.00",
+        noPool: "100.00",
+        yesPrice: yesPrice.toFixed(4),
+        noPrice: (1.0 - yesPrice).toFixed(4),
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
+        resolved: false,
+        resolvedValue: null,
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
         createdAt: new Date(),
         engagement: (Math.random() * 3).toFixed(2),
@@ -303,9 +319,14 @@ export class MemStorage implements IStorage {
       ...insertMarket,
       id,
       createdAt: new Date(),
-      supply: insertMarket.supply ?? 0,
+      yesPool: insertMarket.yesPool ?? "100.00",
+      noPool: insertMarket.noPool ?? "100.00",
+      yesPrice: insertMarket.yesPrice ?? "0.5000",
+      noPrice: insertMarket.noPrice ?? "0.5000",
       totalVolume: insertMarket.totalVolume ?? "0.00",
       isLive: insertMarket.isLive ?? true,
+      resolved: false,
+      resolvedValue: null,
       engagement: insertMarket.engagement ?? "0.00",
     };
     this.markets.set(id, market);
@@ -320,11 +341,13 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async updateMarketPrice(id: string, price: string, supply: number): Promise<void> {
+  async updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void> {
     const market = this.markets.get(id);
     if (market) {
-      market.price = price;
-      market.supply = supply;
+      market.yesPool = yesPool;
+      market.noPool = noPool;
+      market.yesPrice = yesPrice;
+      market.noPrice = noPrice;
       this.markets.set(id, market);
     }
   }
@@ -333,6 +356,16 @@ export class MemStorage implements IStorage {
     const market = this.markets.get(id);
     if (market) {
       market.totalVolume = volume;
+      this.markets.set(id, market);
+    }
+  }
+
+  async resolveMarket(id: string, resolvedValue: string): Promise<void> {
+    const market = this.markets.get(id);
+    if (market) {
+      market.resolved = true;
+      market.resolvedValue = resolvedValue;
+      market.isLive = false;
       this.markets.set(id, market);
     }
   }
@@ -396,7 +429,7 @@ export class MemStorage implements IStorage {
       ...insertBet,
       id,
       createdAt: new Date(),
-      status: insertBet.status ?? "pending",
+      status: "open",
       profit: null,
     };
     this.bets.set(id, bet);
@@ -417,6 +450,78 @@ export class MemStorage implements IStorage {
         bet.profit = profit;
       }
       this.bets.set(id, bet);
+    }
+  }
+
+  // Position methods
+  async getUserPosition(userId: string, marketId: string, position: string): Promise<Position | undefined> {
+    return Array.from(this.positions.values()).find(
+      (pos) => pos.userId === userId && pos.marketId === marketId && pos.position === position
+    );
+  }
+
+  async getUserPositions(userId: string): Promise<Position[]> {
+    return Array.from(this.positions.values()).filter(
+      (pos) => pos.userId === userId && parseFloat(pos.shares) > 0
+    );
+  }
+
+  async getUserPositionsWithMarkets(userId: string): Promise<PositionWithMarket[]> {
+    const positions = await this.getUserPositions(userId);
+    return positions
+      .map((position) => {
+        const market = this.markets.get(position.marketId);
+        if (!market) return null;
+        
+        const kol = this.kols.get(market.kolId);
+        if (!kol) return null;
+        
+        return {
+          ...position,
+          market: { ...market, kol },
+        };
+      })
+      .filter((p): p is PositionWithMarket => p !== null);
+  }
+
+  async getMarketPositions(marketId: string): Promise<Position[]> {
+    return Array.from(this.positions.values()).filter(
+      (pos) => pos.marketId === marketId && parseFloat(pos.shares) > 0
+    );
+  }
+
+  async updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void> {
+    const existing = await this.getUserPosition(userId, marketId, position);
+    
+    if (existing) {
+      const currentShares = parseFloat(existing.shares);
+      const currentAvgPrice = parseFloat(existing.averagePrice);
+      
+      if (action === "buy") {
+        const newShares = currentShares + shares;
+        const newAvgPrice = ((currentShares * currentAvgPrice) + (shares * parseFloat(existing.averagePrice))) / newShares;
+        existing.shares = newShares.toFixed(2);
+        existing.averagePrice = newAvgPrice.toFixed(4);
+      } else {
+        existing.shares = Math.max(0, currentShares - shares).toFixed(2);
+      }
+      existing.updatedAt = new Date();
+      this.positions.set(existing.id, existing);
+    } else if (action === "buy") {
+      const id = randomUUID();
+      const market = this.markets.get(marketId);
+      const price = position === "YES" ? market?.yesPrice : market?.noPrice;
+      const newPosition: Position = {
+        id,
+        userId,
+        marketId,
+        position,
+        shares: shares.toFixed(2),
+        averagePrice: price ?? "0.5000",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.positions.set(id, newPosition);
     }
   }
 
@@ -442,7 +547,8 @@ export class MemStorage implements IStorage {
     const market = this.markets.get(marketId);
     if (!market) return [];
 
-    const currentPrice = parseFloat(market.price);
+    const currentYesPrice = parseFloat(market.yesPrice);
+    const currentNoPrice = parseFloat(market.noPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
 
@@ -451,16 +557,17 @@ export class MemStorage implements IStorage {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       
-      // Create a trend that leads to current price
-      // Add some randomness but make it somewhat realistic
+      // Create a trend that leads to current prices
       const progress = (days - i) / days;
-      const basePrice = currentPrice * (0.7 + progress * 0.3);
-      const randomVariation = (Math.random() - 0.5) * 0.02 * currentPrice;
-      const price = Math.max(0.01, basePrice + randomVariation);
+      const baseYesPrice = 0.5 + (currentYesPrice - 0.5) * progress;
+      const randomVariation = (Math.random() - 0.5) * 0.05;
+      const yesPrice = Math.max(0.01, Math.min(0.99, baseYesPrice + randomVariation));
+      const noPrice = 1.0 - yesPrice;
 
       history.push({
         time: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        price: parseFloat(price.toFixed(4)),
+        yesPrice: parseFloat(yesPrice.toFixed(4)),
+        noPrice: parseFloat(noPrice.toFixed(4)),
       });
     }
 

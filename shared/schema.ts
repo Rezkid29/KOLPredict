@@ -30,10 +30,14 @@ export const markets = pgTable("markets", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   outcome: text("outcome").notNull(),
-  price: decimal("price", { precision: 10, scale: 4 }).notNull(),
-  supply: integer("supply").notNull().default(0),
+  yesPool: decimal("yes_pool", { precision: 10, scale: 2 }).notNull().default("100.00"),
+  noPool: decimal("no_pool", { precision: 10, scale: 2 }).notNull().default("100.00"),
+  yesPrice: decimal("yes_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
+  noPrice: decimal("no_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
   totalVolume: decimal("total_volume", { precision: 10, scale: 2 }).notNull().default("0.00"),
   isLive: boolean("is_live").notNull().default(true),
+  resolved: boolean("resolved").notNull().default(false),
+  resolvedValue: text("resolved_value"),
   resolvesAt: timestamp("resolves_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   engagement: decimal("engagement", { precision: 5, scale: 2 }).notNull().default("0.00"),
@@ -43,13 +47,24 @@ export const bets = pgTable("bets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   marketId: varchar("market_id").notNull().references(() => markets.id),
-  type: text("type").notNull(),
+  position: text("position").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   price: decimal("price", { precision: 10, scale: 4 }).notNull(),
-  shares: integer("shares").notNull(),
-  status: text("status").notNull().default("pending"),
+  shares: decimal("shares", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").notNull().default("open"),
   profit: decimal("profit", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const positions = pgTable("positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  marketId: varchar("market_id").notNull().references(() => markets.id),
+  position: text("position").notNull(),
+  shares: decimal("shares", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  averagePrice: decimal("average_price", { precision: 5, scale: 4 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const comments = pgTable("comments", {
@@ -95,12 +110,21 @@ export const insertKolSchema = createInsertSchema(kols).omit({
 export const insertMarketSchema = createInsertSchema(markets).omit({
   id: true,
   createdAt: true,
+  resolved: true,
+  resolvedValue: true,
 });
 
 export const insertBetSchema = createInsertSchema(bets).omit({
   id: true,
   createdAt: true,
   profit: true,
+  status: true,
+});
+
+export const insertPositionSchema = createInsertSchema(positions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertCommentSchema = createInsertSchema(comments).omit({
@@ -130,6 +154,9 @@ export type Market = typeof markets.$inferSelect;
 export type InsertBet = z.infer<typeof insertBetSchema>;
 export type Bet = typeof bets.$inferSelect;
 
+export type InsertPosition = z.infer<typeof insertPositionSchema>;
+export type Position = typeof positions.$inferSelect;
+
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 export type Comment = typeof comments.$inferSelect;
 
@@ -142,6 +169,7 @@ export type KolMetricsHistory = typeof kolMetricsHistory.$inferSelect;
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };
 export type CommentWithUser = Comment & { user: { username: string } };
+export type PositionWithMarket = Position & { market: MarketWithKol };
 
 export type LeaderboardEntry = {
   userId: string;
@@ -155,5 +183,6 @@ export type LeaderboardEntry = {
 
 export type PriceHistoryPoint = {
   time: string;
-  price: number;
+  yesPrice: number;
+  noPrice: number;
 };
