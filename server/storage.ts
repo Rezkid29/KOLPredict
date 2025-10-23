@@ -7,6 +7,9 @@ import {
   type Comment, type InsertComment, type CommentWithUser,
   type Transaction, type InsertTransaction,
   type KolMetricsHistory, type InsertKolMetricsHistory,
+  type ScrapedKol, type InsertScrapedKol,
+  type FollowerCacheEntry, type InsertFollowerCache,
+  type MarketMetadata, type InsertMarketMetadata,
   type LeaderboardEntry,
   type PriceHistoryPoint
 } from "@shared/schema";
@@ -89,6 +92,21 @@ export interface IStorage {
   // KOL metrics history
   createKolMetricsHistory(history: InsertKolMetricsHistory): Promise<KolMetricsHistory>;
   getKolMetricsHistory(kolId: string, days?: number): Promise<KolMetricsHistory[]>;
+  
+  // Scraped KOLs
+  createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]>;
+  getLatestScrapedKols(limit?: number): Promise<ScrapedKol[]>;
+  getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]>;
+  
+  // Follower cache
+  getFollowerCache(xHandle: string): Promise<FollowerCacheEntry | undefined>;
+  upsertFollowerCache(cache: InsertFollowerCache): Promise<FollowerCacheEntry>;
+  getAllFollowerCache(): Promise<FollowerCacheEntry[]>;
+  
+  // Market metadata
+  createMarketMetadata(metadata: InsertMarketMetadata): Promise<MarketMetadata>;
+  getMarketMetadata(marketId: string): Promise<MarketMetadata | undefined>;
+  getAllMarketMetadata(): Promise<MarketMetadata[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -678,6 +696,57 @@ export class MemStorage implements IStorage {
   }
 
   async getKolMetricsHistory(kolId: string, days: number = 30): Promise<KolMetricsHistory[]> {
+    return [];
+  }
+
+  // Scraped KOLs methods (stub - not persisted in memory)
+  async createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]> {
+    return kols.map(kol => ({
+      ...kol,
+      id: randomUUID(),
+      scrapedAt: new Date(),
+    }));
+  }
+
+  async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
+    return [];
+  }
+
+  async getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]> {
+    return [];
+  }
+
+  // Follower cache methods (stub - not persisted in memory)
+  async getFollowerCache(xHandle: string): Promise<FollowerCacheEntry | undefined> {
+    return undefined;
+  }
+
+  async upsertFollowerCache(cache: InsertFollowerCache): Promise<FollowerCacheEntry> {
+    return {
+      ...cache,
+      id: randomUUID(),
+      cachedAt: new Date(),
+    };
+  }
+
+  async getAllFollowerCache(): Promise<FollowerCacheEntry[]> {
+    return [];
+  }
+
+  // Market metadata methods (stub - not persisted in memory)
+  async createMarketMetadata(metadata: InsertMarketMetadata): Promise<MarketMetadata> {
+    return {
+      ...metadata,
+      id: randomUUID(),
+      createdAt: new Date(),
+    };
+  }
+
+  async getMarketMetadata(marketId: string): Promise<MarketMetadata | undefined> {
+    return undefined;
+  }
+
+  async getAllMarketMetadata(): Promise<MarketMetadata[]> {
     return [];
   }
 }

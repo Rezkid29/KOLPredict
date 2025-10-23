@@ -1,5 +1,6 @@
 import { dbStorage as storage } from "./db-storage";
 import { socialMediaClient } from "./social-api-client";
+import { xApiClient } from "./x-api-client";
 import type { Market, Bet, Kol } from "@shared/schema";
 
 export interface MarketResolution {
@@ -105,11 +106,10 @@ export class MarketResolver {
     }
   }
 
-  private async resolveMarket(market: Market & { kol: Kol }): Promise<MarketResolution | null> {
+  private async resolveMarket(market: Market & { kol?: Kol }): Promise<MarketResolution | null> {
     try {
-      // Validate market and KOL data
-      if (!market.id || !market.kol || !market.kol.id) {
-        console.error(`Invalid market data for resolution:`, { marketId: market.id, kolId: market.kol?.id });
+      if (!market.id) {
+        console.error(`Invalid market data for resolution: missing market ID`);
         return null;
       }
 
@@ -118,37 +118,69 @@ export class MarketResolver {
         return null;
       }
 
-      let latestMetrics;
-      try {
-        latestMetrics = await socialMediaClient.fetchKolMetrics(market.kol);
-      } catch (error) {
-        console.error(`Failed to fetch metrics for KOL ${market.kol.name} (market ${market.id}):`, error);
-        return null;
-      }
+      const marketType = market.marketType || 'standard';
+      console.log(`Resolving ${marketType} market: ${market.title}`);
 
-      // Validate metrics before using them
-      if (!latestMetrics) {
-        console.error(`No metrics returned for KOL ${market.kol.name}`);
-        return null;
-      }
+      let outcome: "yes" | "no";
+      let reason: string;
 
-      if (typeof latestMetrics.followers !== 'number' || typeof latestMetrics.engagementRate !== 'number') {
-        console.error(`Invalid metrics data for KOL ${market.kol.name}:`, latestMetrics);
-        return null;
-      }
+      if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth') {
+        const metadata = await storage.getMarketMetadata(market.id);
+        if (!metadata) {
+          console.error(`Market ${market.id} metadata not found for special market type`);
+          return null;
+        }
 
-      if (isNaN(latestMetrics.followers) || !isFinite(latestMetrics.followers)) {
-        console.error(`Invalid follower count for KOL ${market.kol.name}: ${latestMetrics.followers}`);
-        return null;
-      }
+        if (marketType === 'rank_flippening') {
+          const result = await this.resolveRankFlippeningMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'profit_streak') {
+          const result = await this.resolveProfitStreakMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else {
+          const result = await this.resolveFollowerGrowthMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        }
+      } else {
+        if (!market.kol || !market.kol.id) {
+          console.error(`Invalid market data for resolution:`, { marketId: market.id });
+          return null;
+        }
 
-      if (isNaN(latestMetrics.engagementRate) || !isFinite(latestMetrics.engagementRate)) {
-        console.error(`Invalid engagement rate for KOL ${market.kol.name}: ${latestMetrics.engagementRate}`);
-        return null;
+        let latestMetrics;
+        try {
+          latestMetrics = await socialMediaClient.fetchKolMetrics(market.kol);
+        } catch (error) {
+          console.error(`Failed to fetch metrics for KOL ${market.kol.name} (market ${market.id}):`, error);
+          return null;
+        }
+
+        if (!latestMetrics) {
+          console.error(`No metrics returned for KOL ${market.kol.name}`);
+          return null;
+        }
+
+        if (typeof latestMetrics.followers !== 'number' || typeof latestMetrics.engagementRate !== 'number') {
+          console.error(`Invalid metrics data for KOL ${market.kol.name}:`, latestMetrics);
+          return null;
+        }
+
+        if (isNaN(latestMetrics.followers) || !isFinite(latestMetrics.followers)) {
+          console.error(`Invalid follower count for KOL ${market.kol.name}: ${latestMetrics.followers}`);
+          return null;
+        }
+
+        if (isNaN(latestMetrics.engagementRate) || !isFinite(latestMetrics.engagementRate)) {
+          console.error(`Invalid engagement rate for KOL ${market.kol.name}: ${latestMetrics.engagementRate}`);
+          return null;
+        }
+        
+        outcome = this.determineOutcome(market, market.kol, latestMetrics);
+        reason = this.generateReason(market, market.kol, latestMetrics, outcome);
       }
-      
-      const outcome = this.determineOutcome(market, market.kol, latestMetrics);
-      const reason = this.generateReason(market, market.kol, latestMetrics, outcome);
 
       try {
         await storage.updateMarket(market.id, {

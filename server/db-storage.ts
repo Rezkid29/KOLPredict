@@ -29,6 +29,9 @@ import {
   comments,
   transactions,
   kolMetricsHistory,
+  scrapedKols,
+  followerCache,
+  marketMetadata,
   type User,
   type InsertUser,
   type Kol,
@@ -49,6 +52,12 @@ import {
   type InsertTransaction,
   type KolMetricsHistory,
   type InsertKolMetricsHistory,
+  type ScrapedKol,
+  type InsertScrapedKol,
+  type FollowerCacheEntry,
+  type InsertFollowerCache,
+  type MarketMetadata,
+  type InsertMarketMetadata,
   type LeaderboardEntry,
   type PriceHistoryPoint,
 } from "@shared/schema";
@@ -823,6 +832,99 @@ export class DbStorage implements IStorage {
       .from(kolMetricsHistory)
       .where(eq(kolMetricsHistory.kolId, kolId))
       .orderBy(desc(kolMetricsHistory.createdAt));
+  }
+
+  // Scraped KOLs methods
+  async createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]> {
+    if (kols.length === 0) return [];
+    const result = await db.insert(scrapedKols).values(kols).returning();
+    return result;
+  }
+
+  async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
+    const latestScrapeTime = await db
+      .select({ scrapedAt: scrapedKols.scrapedAt })
+      .from(scrapedKols)
+      .orderBy(desc(scrapedKols.scrapedAt))
+      .limit(1);
+
+    if (latestScrapeTime.length === 0) return [];
+
+    return await db
+      .select()
+      .from(scrapedKols)
+      .where(eq(scrapedKols.scrapedAt, latestScrapeTime[0].scrapedAt))
+      .orderBy(scrapedKols.rank)
+      .limit(limit);
+  }
+
+  async getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(scrapedKols)
+      .where(sql`${scrapedKols.scrapedAt} >= ${startOfDay} AND ${scrapedKols.scrapedAt} <= ${endOfDay}`)
+      .orderBy(scrapedKols.rank);
+  }
+
+  // Follower cache methods
+  async getFollowerCache(xHandle: string): Promise<FollowerCacheEntry | undefined> {
+    const result = await db
+      .select()
+      .from(followerCache)
+      .where(eq(followerCache.xHandle, xHandle))
+      .limit(1);
+    return result[0];
+  }
+
+  async upsertFollowerCache(cache: InsertFollowerCache): Promise<FollowerCacheEntry> {
+    const existing = await this.getFollowerCache(cache.xHandle);
+
+    if (existing) {
+      await db
+        .update(followerCache)
+        .set({
+          followers: cache.followers,
+          cachedAt: new Date(),
+        })
+        .where(eq(followerCache.xHandle, cache.xHandle));
+
+      return {
+        ...existing,
+        followers: cache.followers,
+        cachedAt: new Date(),
+      };
+    } else {
+      const result = await db.insert(followerCache).values(cache).returning();
+      return result[0];
+    }
+  }
+
+  async getAllFollowerCache(): Promise<FollowerCacheEntry[]> {
+    return await db.select().from(followerCache);
+  }
+
+  // Market metadata methods
+  async createMarketMetadata(metadata: InsertMarketMetadata): Promise<MarketMetadata> {
+    const result = await db.insert(marketMetadata).values(metadata).returning();
+    return result[0];
+  }
+
+  async getMarketMetadata(marketId: string): Promise<MarketMetadata | undefined> {
+    const result = await db
+      .select()
+      .from(marketMetadata)
+      .where(eq(marketMetadata.marketId, marketId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllMarketMetadata(): Promise<MarketMetadata[]> {
+    return await db.select().from(marketMetadata);
   }
 }
 

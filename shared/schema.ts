@@ -26,7 +26,7 @@ export const kols = pgTable("kols", {
 
 export const markets = pgTable("markets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  kolId: varchar("kol_id").notNull().references(() => kols.id),
+  kolId: varchar("kol_id").references(() => kols.id),
   title: text("title").notNull(),
   description: text("description").notNull(),
   outcome: text("outcome").notNull(),
@@ -41,6 +41,8 @@ export const markets = pgTable("markets", {
   resolvesAt: timestamp("resolves_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   engagement: decimal("engagement", { precision: 5, scale: 2 }).notNull().default("0.00"),
+  marketType: text("market_type").default("standard"),
+  requiresXApi: boolean("requires_x_api").notNull().default(false),
 });
 
 export const bets = pgTable("bets", {
@@ -95,6 +97,40 @@ export const kolMetricsHistory = pgTable("kol_metrics_history", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const scrapedKols = pgTable("scraped_kols", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rank: text("rank").notNull(),
+  username: text("username").notNull(),
+  xHandle: text("x_handle"),
+  winsLosses: text("wins_losses"),
+  solGain: text("sol_gain"),
+  usdGain: text("usd_gain"),
+  scrapedAt: timestamp("scraped_at").notNull().defaultNow(),
+});
+
+export const followerCache = pgTable("follower_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  xHandle: text("x_handle").notNull().unique(),
+  followers: integer("followers").notNull(),
+  cachedAt: timestamp("cached_at").notNull().defaultNow(),
+});
+
+export const marketMetadata = pgTable("market_metadata", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketId: varchar("market_id").notNull().references(() => markets.id),
+  marketType: text("market_type").notNull(),
+  kolA: text("kol_a"),
+  kolB: text("kol_b"),
+  xHandle: text("x_handle"),
+  currentFollowers: integer("current_followers"),
+  currentRankA: text("current_rank_a"),
+  currentRankB: text("current_rank_b"),
+  currentUsd: text("current_usd"),
+  threshold: integer("threshold"),
+  timeframeDays: integer("timeframe_days"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   balance: true,
@@ -142,6 +178,21 @@ export const insertKolMetricsHistorySchema = createInsertSchema(kolMetricsHistor
   createdAt: true,
 });
 
+export const insertScrapedKolSchema = createInsertSchema(scrapedKols).omit({
+  id: true,
+  scrapedAt: true,
+});
+
+export const insertFollowerCacheSchema = createInsertSchema(followerCache).omit({
+  id: true,
+  cachedAt: true,
+});
+
+export const insertMarketMetadataSchema = createInsertSchema(marketMetadata).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -165,6 +216,15 @@ export type Transaction = typeof transactions.$inferSelect;
 
 export type InsertKolMetricsHistory = z.infer<typeof insertKolMetricsHistorySchema>;
 export type KolMetricsHistory = typeof kolMetricsHistory.$inferSelect;
+
+export type InsertScrapedKol = z.infer<typeof insertScrapedKolSchema>;
+export type ScrapedKol = typeof scrapedKols.$inferSelect;
+
+export type InsertFollowerCache = z.infer<typeof insertFollowerCacheSchema>;
+export type FollowerCacheEntry = typeof followerCache.$inferSelect;
+
+export type InsertMarketMetadata = z.infer<typeof insertMarketMetadataSchema>;
+export type MarketMetadata = typeof marketMetadata.$inferSelect;
 
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };
