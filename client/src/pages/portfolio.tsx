@@ -212,13 +212,13 @@ export default function Portfolio() {
 
                       <div className="flex items-center gap-4 flex-wrap text-sm">
                         <div className="flex items-center gap-1.5">
-                          {bet.type === "buy" ? (
+                          {bet.position === "YES" ? (
                             <TrendingUp className="h-3.5 w-3.5 text-success" />
                           ) : (
                             <TrendingDown className="h-3.5 w-3.5 text-destructive" />
                           )}
-                          <span className={bet.type === "buy" ? "text-success font-medium" : "text-destructive font-medium"}>
-                            {bet.type.toUpperCase()}
+                          <span className={bet.position === "YES" ? "text-success font-medium" : "text-destructive font-medium"}>
+                            {bet.position}
                           </span>
                         </div>
                         <div className="text-muted-foreground">
