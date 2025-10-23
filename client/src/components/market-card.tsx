@@ -31,6 +31,21 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
     },
   });
 
+  const getCategoryDisplay = (category?: string | null) => {
+    switch (category) {
+      case 'performance':
+        return { label: 'Performance', color: 'bg-green-500/10 text-green-500 border-green-500/20' };
+      case 'ranking':
+        return { label: 'Ranking', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' };
+      case 'social':
+        return { label: 'Social', color: 'bg-purple-500/10 text-purple-500 border-purple-500/20' };
+      default:
+        return { label: 'General', color: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20' };
+    }
+  };
+
+  const categoryDisplay = getCategoryDisplay(market.marketCategory);
+
   return (
     <Card 
       className="overflow-hidden hover-elevate transition-all duration-200 group" 
@@ -70,9 +85,18 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
 
         {/* Market title and timer */}
         <div className="space-y-2">
-          <p className="font-medium text-sm leading-relaxed" data-testid={`text-market-title-${market.id}`}>
-            {market.title}
-          </p>
+          <div className="flex items-start gap-2 justify-between">
+            <p className="font-medium text-sm leading-relaxed flex-1" data-testid={`text-market-title-${market.id}`}>
+              {market.title}
+            </p>
+            <Badge 
+              variant="outline" 
+              className={`text-xs shrink-0 ${categoryDisplay.color}`}
+              data-testid={`badge-category-${market.id}`}
+            >
+              {categoryDisplay.label}
+            </Badge>
+          </div>
           {market.isLive && market.resolvesAt && (
             <CountdownTimer resolvesAt={market.resolvesAt} />
           )}

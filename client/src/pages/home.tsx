@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
 import type { MarketWithKol, BetWithMarket, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -20,6 +21,7 @@ export default function Home() {
   const [betType, setBetType] = useState<"buy" | "sell">("buy");
   const [searchQuery, setSearchQuery] = useState("");
   const [liveFeedOpen, setLiveFeedOpen] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const { toast } = useToast();
   
   // Connect to WebSocket for real-time updates
@@ -74,13 +76,32 @@ export default function Home() {
     }
   };
 
+  const categories = [
+    { value: 'performance', label: 'Performance', color: 'text-green-500' },
+    { value: 'ranking', label: 'Ranking', color: 'text-blue-500' },
+    { value: 'social', label: 'Social', color: 'text-purple-500' },
+  ];
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
   const filteredMarkets = markets.filter((market) => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       market.kol.name.toLowerCase().includes(query) ||
       market.kol.handle.toLowerCase().includes(query) ||
       market.title.toLowerCase().includes(query)
     );
+    
+    const matchesCategory = selectedCategories.length === 0 || 
+      (market.marketCategory && selectedCategories.includes(market.marketCategory));
+    
+    return matchesSearch && matchesCategory;
   });
 
   return (
@@ -139,10 +160,47 @@ export default function Home() {
                   data-testid="input-search"
                 />
               </div>
-              <Button variant="outline" size="default" className="gap-2 shrink-0" data-testid="button-filter">
-                <Filter className="h-4 w-4" />
-                Filter
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="default" className="gap-2 shrink-0" data-testid="button-filter">
+                    <Filter className="h-4 w-4" />
+                    Filter
+                    {selectedCategories.length > 0 && (
+                      <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
+                        {selectedCategories.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Market Categories</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {categories.map((category) => (
+                    <DropdownMenuCheckboxItem
+                      key={category.value}
+                      checked={selectedCategories.includes(category.value)}
+                      onCheckedChange={() => toggleCategory(category.value)}
+                      data-testid={`filter-category-${category.value}`}
+                    >
+                      <span className={category.color}>{category.label}</span>
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                  {selectedCategories.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start"
+                        onClick={() => setSelectedCategories([])}
+                        data-testid="button-clear-filters"
+                      >
+                        Clear filters
+                      </Button>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* Markets Grid */}

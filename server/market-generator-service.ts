@@ -339,18 +339,22 @@ export class MarketGeneratorService {
 
       let generatedMarket: GeneratedMarket | null = null;
       let attempts = 0;
+      const maxAttempts = generators.length + (rateLimitStatus.isConfigured ? 1 : 0);
 
-      while (!generatedMarket && attempts < generators.length + 1) {
+      while (!generatedMarket && attempts < maxAttempts) {
         let generator;
+        const currentIndex = (generatorIndex + attempts) % generators.length;
+        generator = generators[currentIndex];
         
-        if (attempts === 0 && rateLimitStatus.isConfigured && Math.random() < 0.15) {
-          generator = followerGrowthGenerator;
-        } else {
-          const tryIndex = (generatorIndex + attempts) % generators.length;
-          generator = generators[tryIndex];
-        }
+        console.log(`  Attempt ${attempts + 1}: Trying ${['rank_flippening', 'profit_streak', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening', 'top_rank_maintain', 'streak_continuation', 'rank_improvement'][currentIndex]} generator...`);
         
         generatedMarket = await generator();
+        
+        if (!generatedMarket && attempts === maxAttempts - 1 && rateLimitStatus.isConfigured) {
+          console.log(`  Final attempt: Trying follower_growth generator...`);
+          generatedMarket = await followerGrowthGenerator();
+        }
+        
         attempts++;
       }
       
