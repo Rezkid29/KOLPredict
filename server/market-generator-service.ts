@@ -47,6 +47,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'rank_flippening',
+      marketCategory: 'ranking',
       requiresXApi: false,
     };
 
@@ -74,6 +75,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'profit_streak',
+      marketCategory: 'performance',
       requiresXApi: false,
     };
 
@@ -109,6 +111,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), days),
       marketType: 'follower_growth',
+      marketCategory: 'social',
       requiresXApi: true,
     };
 
@@ -137,6 +140,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'sol_gain_flippening',
+      marketCategory: 'performance',
       requiresXApi: false,
     };
 
@@ -164,6 +168,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'usd_gain_flippening',
+      marketCategory: 'performance',
       requiresXApi: false,
     };
 
@@ -191,6 +196,7 @@ export class MarketGeneratorService {
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winrate_flippening',
+      marketCategory: 'performance',
       requiresXApi: false,
     };
 
@@ -219,14 +225,18 @@ export class MarketGeneratorService {
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
 
     const createdMarkets: { marketId: string; title: string; type: string }[] = [];
+    
     const generators = [
       () => this.generateRankFlippeningMarket(kolData),
       () => this.generateProfitStreakMarket(kolData),
-      () => this.generateFollowerGrowthMarket(kolData),
       () => this.generateSolGainFlippeningMarket(kolData),
       () => this.generateUsdGainFlippeningMarket(kolData),
       () => this.generateWinRateFlippeningMarket(kolData),
     ];
+    
+    const followerGrowthGenerator = () => this.generateFollowerGrowthMarket(kolData);
+    
+    let generatorIndex = 0;
 
     for (let i = 0; i < count; i++) {
       console.log(`\n${'─'.repeat(70)}`);
@@ -236,13 +246,22 @@ export class MarketGeneratorService {
       let generatedMarket: GeneratedMarket | null = null;
       let attempts = 0;
 
-      while (!generatedMarket && attempts < 3) {
-        const useXApi = Math.random() < 0.2 && rateLimitStatus.isConfigured;
-        const availableGenerators = useXApi ? generators : generators.filter(g => g !== generators[2]);
-
-        const generator = this.randomChoice(availableGenerators);
+      while (!generatedMarket && attempts < generators.length + 1) {
+        let generator;
+        
+        if (attempts === 0 && rateLimitStatus.isConfigured && Math.random() < 0.15) {
+          generator = followerGrowthGenerator;
+        } else {
+          const tryIndex = (generatorIndex + attempts) % generators.length;
+          generator = generators[tryIndex];
+        }
+        
         generatedMarket = await generator();
         attempts++;
+      }
+      
+      if (generatedMarket) {
+        generatorIndex = (generatorIndex + 1) % generators.length;
       }
 
       if (generatedMarket) {

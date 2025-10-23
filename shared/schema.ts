@@ -49,6 +49,7 @@ export const markets = pgTable("markets", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   engagement: decimal("engagement", { precision: 5, scale: 2 }).notNull().default("0.00"),
   marketType: text("market_type").default("standard"),
+  marketCategory: text("market_category").default("general"),
   requiresXApi: boolean("requires_x_api").notNull().default(false),
 });
 
