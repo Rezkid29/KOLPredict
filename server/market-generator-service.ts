@@ -295,6 +295,57 @@ export class MarketGeneratorService {
     return { market, metadata };
   }
 
+  async generateWinLossRatioFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => {
+      if (!k.winsLosses) return false;
+      const [winsStr, lossesStr] = k.winsLosses.split('/');
+      const wins = parseInt(winsStr);
+      const losses = parseInt(lossesStr);
+      return !isNaN(wins) && !isNaN(losses) && losses > 0;
+    });
+    
+    if (validKOLs.length < 2) return null;
+
+    const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
+    const kolIdA = await this.resolveKolId(kolA);
+    
+    if (!kolIdA) {
+      console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
+      return null;
+    }
+
+    const [winsAStr, lossesAStr] = kolA.winsLosses!.split('/');
+    const [winsBStr, lossesBStr] = kolB.winsLosses!.split('/');
+    const winsA = parseInt(winsAStr);
+    const lossesA = parseInt(lossesAStr);
+    const winsB = parseInt(winsBStr);
+    const lossesB = parseInt(lossesBStr);
+    
+    const ratioA = (winsA / lossesA).toFixed(2);
+    const ratioB = (winsB / lossesB).toFixed(2);
+
+    const market: InsertMarket = {
+      kolId: kolIdA,
+      title: `Will ${kolA.username} have a higher win/loss ratio than ${kolB.username} on tomorrow's leaderboard?`,
+      description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${kolA.winsLosses}) vs ${kolB.username} with ${ratioB} (${kolB.winsLosses})`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'winloss_ratio_flippening',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'winloss_ratio_flippening',
+      kolA: kolA.username,
+      kolB: kolB.username,
+      currentWinsLossesA: kolA.winsLosses || undefined,
+      currentWinsLossesB: kolB.winsLosses || undefined,
+    };
+
+    return { market, metadata };
+  }
+
   async generateTopRankMaintainMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
     const topKOLs = kolData.filter(k => {
       const rankNum = parseInt(k.rank);
@@ -493,6 +544,7 @@ export class MarketGeneratorService {
       { type: 'sol_gain_flippening', fn: (kols: ScrapedKol[]) => this.generateSolGainFlippeningMarket(kols) },
       { type: 'usd_gain_flippening', fn: (kols: ScrapedKol[]) => this.generateUsdGainFlippeningMarket(kols) },
       { type: 'winrate_flippening', fn: (kols: ScrapedKol[]) => this.generateWinRateFlippeningMarket(kols) },
+      { type: 'winloss_ratio_flippening', fn: (kols: ScrapedKol[]) => this.generateWinLossRatioFlippeningMarket(kols) },
     ];
 
     let marketsCreated = 0;

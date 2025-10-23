@@ -656,6 +656,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate Win/Loss Ratio Markets
+  app.post("/api/admin/generate-wl-markets", async (req, res) => {
+    try {
+      console.error('\n' + '='.repeat(70));
+      console.error('🎯 Generating Win/Loss Ratio Head-to-Head Markets');
+      console.error('='.repeat(70));
+
+      const scrapedKolsData = await storage.getLatestScrapedKols(20);
+      console.error(`📊 Found ${scrapedKolsData.length} scraped KOLs`);
+      console.error('First KOL:', scrapedKolsData[0]);
+
+      const validKOLs = scrapedKolsData.filter(k => {
+        if (!k.winsLosses) return false;
+        const [winsStr, lossesStr] = k.winsLosses.split('/');
+        const wins = parseInt(winsStr);
+        const losses = parseInt(lossesStr);
+        return !isNaN(wins) && !isNaN(losses) && losses > 0;
+      });
+
+      console.log(`✅ ${validKOLs.length} KOLs have valid win/loss data`);
+
+      if (validKOLs.length < 8) {
+        return res.status(400).json({ 
+          message: 'Need at least 8 KOLs with valid win/loss data to create 4 unique markets',
+          available: validKOLs.length 
+        });
+      }
+
+      const usedKOLs = new Set<string>();
+      const createdMarkets: any[] = [];
+
+      for (let i = 0; i < 4 && validKOLs.length >= 2; i++) {
+        const availableKOLs = validKOLs.filter(k => !usedKOLs.has(k.username));
+        
+        if (availableKOLs.length < 2) {
+          console.error(`⚠️ Not enough available KOLs for market ${i + 1}`);
+          break;
+        }
+
+        const [kolA, kolB] = availableKOLs.slice(0, 2);
+        
+        const [winsAStr, lossesAStr] = kolA.winsLosses!.split('/');
+        const [winsBStr, lossesBStr] = kolB.winsLosses!.split('/');
+        const winsA = parseInt(winsAStr);
+        const lossesA = parseInt(lossesAStr);
+        const winsB = parseInt(winsBStr);
+        const lossesB = parseInt(lossesBStr);
+        
+        const ratioA = (winsA / lossesA).toFixed(2);
+        const ratioB = (winsB / lossesB).toFixed(2);
+
+        const kolARecord = await storage.getKolByUsername(kolA.username);
+        if (!kolARecord) {
+          console.error(`❌ Could not find KOL ${kolA.username} in database`);
+          continue;
+        }
+
+        const market = {
+          kolId: kolARecord.id,
+          title: `Will ${kolA.username} have a higher win/loss ratio than ${kolB.username} on tomorrow's leaderboard?`,
+          description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${kolA.winsLosses}) vs ${kolB.username} with ${ratioB} (${kolB.winsLosses})`,
+          outcome: 'pending' as const,
+          resolvesAt: addDays(new Date(), 1),
+          marketType: 'winloss_ratio_flippening',
+          marketCategory: 'performance',
+          requiresXApi: false,
+        };
+
+        const createdMarket = await storage.createMarket(market);
+
+        await storage.createMarketMetadata({
+          marketId: createdMarket.id,
+          marketType: 'winloss_ratio_flippening',
+          kolA: kolA.username,
+          kolB: kolB.username,
+          xHandle: null,
+          currentFollowers: null,
+          currentRankA: kolA.rank || null,
+          currentRankB: kolB.rank || null,
+          currentUsd: null,
+          currentSolA: null,
+          currentSolB: null,
+          currentUsdA: null,
+          currentUsdB: null,
+          currentWinsLossesA: kolA.winsLosses || null,
+          currentWinsLossesB: kolB.winsLosses || null,
+          threshold: null,
+          timeframeDays: null,
+        });
+
+        usedKOLs.add(kolA.username);
+        usedKOLs.add(kolB.username);
+
+        console.log(`\n✅ MARKET ${i + 1} CREATED`);
+        console.log(`   Title: ${createdMarket.title}`);
+        console.log(`   ${kolA.username}: ${ratioA} ratio (${kolA.winsLosses})`);
+        console.log(`   ${kolB.username}: ${ratioB} ratio (${kolB.winsLosses})`);
+        console.log(`   Market ID: ${createdMarket.id}`);
+
+        createdMarkets.push({
+          id: createdMarket.id,
+          title: createdMarket.title,
+          kolA: kolA.username,
+          kolB: kolB.username,
+          ratioA,
+          ratioB,
+        });
+      }
+
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`✅ Successfully created ${createdMarkets.length} win/loss ratio markets`);
+      console.log(`${'='.repeat(70)}`);
+
+      res.json({
+        success: true,
+        created: createdMarkets.length,
+        markets: createdMarkets,
+      });
+    } catch (error) {
+      console.error("Error generating win/loss markets:", error);
+      res.status(500).json({ message: "Failed to generate markets" });
+    }
+  });
+
   // Resolve ALL markets and generate new ones
   app.post("/api/admin/reset-markets", async (req, res) => {
     try {

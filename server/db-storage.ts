@@ -851,20 +851,29 @@ export class DbStorage implements IStorage {
   }
 
   async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
+    console.error('🔍 DEBUG: Getting latest scraped KOLs...');
     const latestScrapeTime = await db
       .select({ scrapedAt: scrapedKols.scrapedAt })
       .from(scrapedKols)
       .orderBy(desc(scrapedKols.scrapedAt))
       .limit(1);
 
-    if (latestScrapeTime.length === 0) return [];
+    console.error('🔍 DEBUG: Latest scrape time result:', latestScrapeTime);
 
-    return await db
+    if (latestScrapeTime.length === 0) {
+      console.error('🔍 DEBUG: No scrape time found!');
+      return [];
+    }
+
+    const results = await db
       .select()
       .from(scrapedKols)
       .where(eq(scrapedKols.scrapedAt, latestScrapeTime[0].scrapedAt))
       .orderBy(scrapedKols.rank)
       .limit(limit);
+
+    console.error(`🔍 DEBUG: Found ${results.length} KOLs`);
+    return results;
   }
 
   async getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]> {

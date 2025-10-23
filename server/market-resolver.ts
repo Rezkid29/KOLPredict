@@ -127,7 +127,7 @@ export class MarketResolver {
       if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' || 
           marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening' ||
           marketType === 'top_rank_maintain' || marketType === 'streak_continuation' || marketType === 'rank_improvement' ||
-          marketType === 'sol_gain_threshold' || marketType === 'winloss_ratio_maintain') {
+          marketType === 'sol_gain_threshold' || marketType === 'winloss_ratio_maintain' || marketType === 'winloss_ratio_flippening') {
         const metadata = await storage.getMarketMetadata(market.id);
         if (!metadata) {
           console.error(`Market ${market.id} metadata not found for special market type`);
@@ -172,6 +172,10 @@ export class MarketResolver {
           reason = result.reason;
         } else if (marketType === 'sol_gain_threshold') {
           const result = await this.resolveSolGainThresholdMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'winloss_ratio_flippening') {
+          const result = await this.resolveWinLossRatioFlippeningMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
         } else {
@@ -536,6 +540,15 @@ export class MarketResolver {
     return total > 0 ? wins / total : 0;
   }
 
+  private parseWinLossRatio(winsLossesStr: string | null | undefined): number {
+    if (!winsLossesStr) return 0;
+    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
+    if (!match) return 0;
+    const wins = parseInt(match[1], 10);
+    const losses = parseInt(match[2], 10);
+    return losses > 0 ? wins / losses : 0;
+  }
+
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await storage.getLatestScrapedKols(20);
     
@@ -601,6 +614,29 @@ export class MarketResolver {
     
     const outcome = winRateA > winRateB ? "yes" : "no";
     const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveWinLossRatioFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolAData = latestKols.find(k => k.username === metadata.kolA);
+    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    
+    if (!kolAData || !kolBData) {
+      console.warn(`Missing KOL data for win/loss ratio flippening market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
+      };
+    }
+    
+    const ratioA = this.parseWinLossRatio(kolAData.winsLosses);
+    const ratioB = this.parseWinLossRatio(kolBData.winsLosses);
+    
+    const outcome = ratioA > ratioB ? "yes" : "no";
+    const reason = `${metadata.kolA} has ${ratioA.toFixed(2)} W/L ratio (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${ratioB.toFixed(2)} W/L ratio (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
     
     return { outcome, reason };
   }
@@ -698,7 +734,7 @@ export class MarketResolver {
       };
     }
     
-    const currentRatio = this.parseWinRate(kolData.winsLosses);
+    const currentRatio = this.parseWinLossRatio(kolData.winsLosses);
     const threshold = metadata.threshold || 1.5;
     const outcome = currentRatio >= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${kolData.winsLosses}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
