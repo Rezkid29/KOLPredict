@@ -294,6 +294,9 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
       const response = await retryWithBackoff(verifySignature, 2);
       const data = await response.json();
       
+      // Store the wallet address for disconnect detection
+      localStorage.setItem("solanaWalletAddress", publicKey);
+      
       toast({
         title: "Wallet connected!",
         description: `Welcome ${data.username}. You've been given 1000 PTS to start trading.`,
