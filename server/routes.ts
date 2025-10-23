@@ -6,7 +6,6 @@ import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
 import { socialMediaClient } from "./social-api-client";
-import type { InsertBet, User } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
