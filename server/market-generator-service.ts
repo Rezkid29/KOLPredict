@@ -1,7 +1,16 @@
 import { dbStorage } from "./db-storage";
 import { xApiClient } from "./x-api-client";
-import type { InsertMarket, ScrapedKol } from "@shared/schema";
+import type { InsertMarket } from "@shared/schema";
 import { addDays, format } from 'date-fns';
+
+export interface ScrapedKol {
+  rank: string;
+  username: string;
+  xHandle: string | null;
+  winsLosses: string | null;
+  solGain: string | null;
+  usdGain: string | null;
+}
 
 interface GeneratedMarket {
   market: InsertMarket;
@@ -73,6 +82,7 @@ export class MarketGeneratorService {
   async generateRankFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
     if (kolData.length < 2) return null;
 
+    // Sample from the provided kolData (which may be filtered to available KOLs)
     const [kolA, kolB] = this.sampleKOLs(kolData, 2);
     const kolIdA = await this.resolveKolId(kolA);
     
@@ -181,6 +191,7 @@ export class MarketGeneratorService {
   }
 
   async generateSolGainFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    // Filter from the provided kolData (which may already be filtered to available KOLs)
     const validKOLs = kolData.filter(k => k.solGain);
     if (validKOLs.length < 2) return null;
 
@@ -215,6 +226,7 @@ export class MarketGeneratorService {
   }
 
   async generateUsdGainFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    // Filter from the provided kolData (which may already be filtered to available KOLs)
     const validKOLs = kolData.filter(k => k.usdGain);
     if (validKOLs.length < 2) return null;
 
@@ -249,6 +261,7 @@ export class MarketGeneratorService {
   }
 
   async generateWinRateFlippeningMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    // Filter from the provided kolData (which may already be filtered to available KOLs)
     const validKOLs = kolData.filter(k => k.winsLosses);
     if (validKOLs.length < 2) return null;
 
@@ -449,52 +462,21 @@ export class MarketGeneratorService {
 
     console.log(`📊 Processing ${kolData.length} KOLs for market generation`);
 
-    // Get existing active markets to track what's already been created
-    const existingMarkets = await dbStorage.getAllMarkets();
-    const activeMarkets = existingMarkets.filter(m => m.isLive && !m.resolved);
+    const createdMarkets: { marketId: string; title: string; type: string }[] = [];
     
-    // Get existing market metadata to understand market types
-    const existingMetadata = await dbStorage.getAllMarketMetadata();
-    const metadataMap = new Map(existingMetadata.map(m => [m.marketId, m]));
-
-    // Build tracking structures
-    const kolMarketTypes = new Map<string, Set<string>>(); // KOL username -> Set of market types they have
-    const kolsInHeadToHead = new Set<string>(); // KOL usernames that are already in head-to-head markets
-
-    // Head-to-head market types
-    const headToHeadTypes = ['rank_flippening', 'sol_gain_flippening', 'usd_gain_flippening', 'winrate_flippening'];
-
-    // Analyze existing markets
-    for (const market of activeMarkets) {
-      const metadata = metadataMap.get(market.id);
-      if (!metadata) continue;
-
-      const marketType = metadata.marketType;
-
-      // Track solo market types
-      if (metadata.kolA && !headToHeadTypes.includes(marketType)) {
-        if (!kolMarketTypes.has(metadata.kolA)) {
-          kolMarketTypes.set(metadata.kolA, new Set());
-        }
-        kolMarketTypes.get(metadata.kolA)!.add(marketType);
-      }
-
-      // Track head-to-head participation
-      if (headToHeadTypes.includes(marketType)) {
-        if (metadata.kolA) kolsInHeadToHead.add(metadata.kolA);
-        if (metadata.kolB) kolsInHeadToHead.add(metadata.kolB);
-      }
-    }
-
-    console.log(`📊 Tracking: ${kolMarketTypes.size} KOLs with existing markets, ${kolsInHeadToHead.size} in head-to-head`);
+    // Track which KOLs have been used in THIS generation cycle
+    const usedKolsThisCycle = new Set<string>();
+    
+    // Track special market type counts
+    let solGainThresholdCount = 0;
+    const maxSolGainThreshold = 2;
 
     const rateLimitStatus = xApiClient.getRateLimitStatus();
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
-
-    const createdMarkets: { marketId: string; title: string; type: string }[] = [];
     
     // Define solo and head-to-head generators
     const soloGenerators = [
+      { type: 'sol_gain_threshold', fn: (kol: ScrapedKol) => this.generateSolGainThresholdMarketForKol(kol) },
       { type: 'profit_streak', fn: (kol: ScrapedKol) => this.generateProfitStreakMarketForKol(kol) },
       { type: 'top_rank_maintain', fn: (kol: ScrapedKol) => this.generateTopRankMaintainMarketForKol(kol) },
       { type: 'streak_continuation', fn: (kol: ScrapedKol) => this.generateStreakContinuationMarketForKol(kol) },
@@ -507,15 +489,15 @@ export class MarketGeneratorService {
     }
 
     const headToHeadGenerators = [
-      { type: 'rank_flippening', fn: () => this.generateRankFlippeningMarket(kolData) },
-      { type: 'sol_gain_flippening', fn: () => this.generateSolGainFlippeningMarket(kolData) },
-      { type: 'usd_gain_flippening', fn: () => this.generateUsdGainFlippeningMarket(kolData) },
-      { type: 'winrate_flippening', fn: () => this.generateWinRateFlippeningMarket(kolData) },
+      { type: 'rank_flippening', fn: (kols: ScrapedKol[]) => this.generateRankFlippeningMarket(kols) },
+      { type: 'sol_gain_flippening', fn: (kols: ScrapedKol[]) => this.generateSolGainFlippeningMarket(kols) },
+      { type: 'usd_gain_flippening', fn: (kols: ScrapedKol[]) => this.generateUsdGainFlippeningMarket(kols) },
+      { type: 'winrate_flippening', fn: (kols: ScrapedKol[]) => this.generateWinRateFlippeningMarket(kols) },
     ];
 
     let marketsCreated = 0;
 
-    // Strategy: First create diverse solo markets for each KOL, then create head-to-head markets
+    // Strategy: Each KOL appears in EXACTLY ONE market per generation cycle
     for (let i = 0; i < count && marketsCreated < count; i++) {
       console.log(`\n${'─'.repeat(70)}`);
       console.log(`MARKET ${marketsCreated + 1}/${count}`);
@@ -523,25 +505,46 @@ export class MarketGeneratorService {
 
       let generatedMarket: GeneratedMarket | null = null;
 
-      // Try to create a solo market for a KOL that needs diversity
-      for (const kol of kolData) {
-        const existingTypes = kolMarketTypes.get(kol.username) || new Set();
+      // Get KOLs that haven't been used yet in this cycle
+      const availableKols = kolData.filter(k => !usedKolsThisCycle.has(k.username));
+      
+      console.log(`  Available KOLs: ${availableKols.length}/${kolData.length}`);
+
+      if (availableKols.length === 0) {
+        console.log('  ⚠️ All KOLs have been used in this generation cycle');
+        break;
+      }
+
+      // Try to create a solo market for an unused KOL
+      if (availableKols.length > 0) {
+        // Shuffle to ensure variety
+        const shuffledKols = [...availableKols].sort(() => 0.5 - Math.random());
         
-        // Find market types this KOL doesn't have yet
-        const availableGenerators = soloGenerators.filter(g => !existingTypes.has(g.type));
-        
-        if (availableGenerators.length > 0) {
-          // Try each available generator for this KOL
-          for (const generator of availableGenerators) {
+        for (const kol of shuffledKols) {
+          // Filter generators based on limits
+          const availableGenerators = soloGenerators.filter(g => {
+            if (g.type === 'sol_gain_threshold' && solGainThresholdCount >= maxSolGainThreshold) {
+              return false;
+            }
+            return true;
+          });
+
+          // Shuffle generators to ensure variety
+          const shuffledGenerators = [...availableGenerators].sort(() => 0.5 - Math.random());
+          
+          for (const generator of shuffledGenerators) {
             console.log(`  Trying ${generator.type} for ${kol.username}...`);
             generatedMarket = await generator.fn(kol);
             
             if (generatedMarket) {
-              // Track this market type for this KOL
-              if (!kolMarketTypes.has(kol.username)) {
-                kolMarketTypes.set(kol.username, new Set());
+              // Mark this KOL as used
+              usedKolsThisCycle.add(kol.username);
+              
+              // Track sol_gain_threshold count
+              if (generator.type === 'sol_gain_threshold') {
+                solGainThresholdCount++;
               }
-              kolMarketTypes.get(kol.username)!.add(generator.type);
+              
               break;
             }
           }
@@ -550,21 +553,19 @@ export class MarketGeneratorService {
         }
       }
 
-      // If no solo market created, try head-to-head (only if we have KOLs not in head-to-head yet)
-      if (!generatedMarket) {
-        const availableForHeadToHead = kolData.filter(k => !kolsInHeadToHead.has(k.username));
+      // If no solo market created and we have at least 2 unused KOLs, try head-to-head
+      if (!generatedMarket && availableKols.length >= 2) {
+        console.log('  Trying head-to-head markets...');
         
-        if (availableForHeadToHead.length >= 2) {
-          for (const generator of headToHeadGenerators) {
-            console.log(`  Trying ${generator.type}...`);
-            generatedMarket = await generator.fn();
-            
-            if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
-              // Mark both KOLs as used in head-to-head
-              kolsInHeadToHead.add(generatedMarket.metadata.kolA);
-              kolsInHeadToHead.add(generatedMarket.metadata.kolB);
-              break;
-            }
+        for (const generator of headToHeadGenerators) {
+          console.log(`  Trying ${generator.type}...`);
+          generatedMarket = await generator.fn(availableKols);
+          
+          if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
+            // Mark both KOLs as used
+            usedKolsThisCycle.add(generatedMarket.metadata.kolA);
+            usedKolsThisCycle.add(generatedMarket.metadata.kolB);
+            break;
           }
         }
       }
@@ -621,8 +622,9 @@ export class MarketGeneratorService {
 
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🎉 Market generation complete: ${createdMarkets.length}/${count} markets created`);
-    console.log(`   📊 Diversity achieved: Each KOL gets different market types`);
-    console.log(`   🥊 Head-to-head limit: Each KOL in max 1 comparison market`);
+    console.log(`   📊 Unique KOLs: ${usedKolsThisCycle.size}/${kolData.length} KOLs featured`);
+    console.log(`   💰 SOL Gain markets: ${solGainThresholdCount}/${maxSolGainThreshold} created`);
+    console.log(`   ✅ Each KOL appears in EXACTLY ONE market per cycle`);
     console.log(`${'='.repeat(70)}\n`);
 
     return createdMarkets;
@@ -827,6 +829,48 @@ export class MarketGeneratorService {
         currentFollowers: currentFollowers,
         threshold: threshold,
         timeframeDays: 1,
+      },
+    };
+  }
+
+  private parseSolGain(solGain: string): number {
+    const cleaned = solGain.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return 0;
+    
+    const numStr = match[0].replace(/,/g, '');
+    return parseFloat(numStr) || 0;
+  }
+
+  private async generateSolGainThresholdMarketForKol(kol: ScrapedKol): Promise<GeneratedMarket | null> {
+    if (!kol.solGain) return null;
+
+    const currentSolGain = this.parseSolGain(kol.solGain);
+    
+    const solGainThresholds = [50, 100, 250, 500];
+    const threshold = solGainThresholds.find(t => t > currentSolGain) || 1000;
+
+    const kolId = await this.resolveKolId(kol);
+    if (!kolId) return null;
+
+    const market: InsertMarket = {
+      kolId,
+      title: `Will ${kol.username} gain +${threshold} SOL or more by tomorrow?`,
+      description: `${kol.username} currently has ${kol.solGain} SOL gain. Can they reach +${threshold} SOL or higher?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'sol_gain_threshold',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    return {
+      market,
+      metadata: {
+        marketType: 'sol_gain_threshold',
+        kolA: kol.username,
+        currentSolA: kol.solGain,
+        threshold: threshold,
       },
     };
   }

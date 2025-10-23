@@ -126,7 +126,8 @@ export class MarketResolver {
 
       if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' || 
           marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening' ||
-          marketType === 'top_rank_maintain' || marketType === 'streak_continuation' || marketType === 'rank_improvement') {
+          marketType === 'top_rank_maintain' || marketType === 'streak_continuation' || marketType === 'rank_improvement' ||
+          marketType === 'sol_gain_threshold' || marketType === 'winloss_ratio_maintain') {
         const metadata = await storage.getMarketMetadata(market.id);
         if (!metadata) {
           console.error(`Market ${market.id} metadata not found for special market type`);
@@ -165,8 +166,16 @@ export class MarketResolver {
           const result = await this.resolveStreakContinuationMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
-        } else {
+        } else if (marketType === 'rank_improvement') {
           const result = await this.resolveRankImprovementMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'sol_gain_threshold') {
+          const result = await this.resolveSolGainThresholdMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else {
+          const result = await this.resolveWinLossRatioMaintainMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
         }
@@ -653,6 +662,46 @@ export class MarketResolver {
     const targetRank = metadata.threshold || 1;
     const outcome = currentRank <= targetRank ? "yes" : "no";
     const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Reached target of #${targetRank} or better` : `Did not reach #${targetRank}`}. Previously ranked #${metadata.currentRankA}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveSolGainThresholdMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData || !kolData.solGain) {
+      console.warn(`Missing KOL data for SOL gain threshold market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest SOL gain data for ${metadata.kolA}`
+      };
+    }
+    
+    const currentSolGain = this.parseSolGain(kolData.solGain);
+    const threshold = metadata.threshold || 50;
+    const outcome = currentSolGain >= threshold ? "yes" : "no";
+    const reason = `${metadata.kolA} current SOL gain: ${kolData.solGain} (${currentSolGain.toFixed(2)} SOL). ${outcome === 'yes' ? `Reached threshold of +${threshold} SOL` : `Did not reach +${threshold} SOL`}. Previously: ${metadata.currentSolA}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveWinLossRatioMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData || !kolData.winsLosses) {
+      console.warn(`Missing KOL data for win/loss ratio maintain market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest W/L data for ${metadata.kolA}`
+      };
+    }
+    
+    const currentRatio = this.parseWinRate(kolData.winsLosses);
+    const threshold = metadata.threshold || 1.5;
+    const outcome = currentRatio >= threshold ? "yes" : "no";
+    const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${kolData.winsLosses}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
     
     return { outcome, reason };
   }
