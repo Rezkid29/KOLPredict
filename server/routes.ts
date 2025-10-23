@@ -672,8 +672,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Import scheduler
+  // Import scheduler and demo data
   const { scheduler } = await import("./scheduler");
+  const { seedRealisticKolscanData } = await import("./demo-kolscan-data");
 
   // Manual trigger for scraping
   app.post("/api/admin/scrape-kols", async (req, res) => {
@@ -685,6 +686,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         success: false,
         message: "Failed to scrape KOLs",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Seed realistic kolscan demo data
+  app.post("/api/admin/seed-demo-kols", async (req, res) => {
+    try {
+      const result = await seedRealisticKolscanData();
+      res.json(result);
+    } catch (error) {
+      console.error("Error seeding demo KOLs:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to seed demo KOLs",
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
