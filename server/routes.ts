@@ -413,6 +413,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get historical metrics for a specific KOL
+  app.get("/api/kols/:id/history", async (req, res) => {
+    try {
+      const kolId = req.params.id;
+      const days = req.query.days ? parseInt(req.query.days as string) : 30;
+      
+      // Validate days parameter
+      if (Number.isNaN(days)) {
+        return res.status(400).json({ message: "Invalid days parameter - must be a number" });
+      }
+      
+      if (days < 1 || days > 365) {
+        return res.status(400).json({ message: "Days must be between 1 and 365" });
+      }
+
+      const kol = await storage.getKol(kolId);
+      if (!kol) {
+        return res.status(404).json({ message: "KOL not found" });
+      }
+
+      const history = await storage.getKolMetricsHistory(kolId, days);
+      
+      res.json({
+        kol: {
+          id: kol.id,
+          name: kol.name,
+          handle: kol.handle,
+          avatar: kol.avatar,
+        },
+        history,
+        days,
+      });
+    } catch (error) {
+      console.error("Error fetching KOL history:", error);
+      res.status(500).json({ message: "Failed to fetch KOL metrics history" });
+    }
+  });
+
   // Get recent bets for live feed
   app.get("/api/bets/recent", async (req, res) => {
     try {
@@ -447,10 +485,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new bet (buy or sell YES/NO positions)
-  // NOW USES ROBUST TRANSACTION WITH ROW-LEVEL LOCKING
+  // NOW USES ROBUST TRANSACTION WITH ROW-LEVEL LOCKING AND SLIPPAGE PROTECTION
   app.post("/api/bets", async (req, res) => {
     try {
-      const { marketId, position, amount, action = "buy", userId } = req.body;
+      const { marketId, position, amount, action = "buy", userId, slippageTolerance } = req.body;
 
       // Input validation
       if (!marketId || typeof marketId !== 'string') {
@@ -479,6 +517,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: amountValidation.error });
       }
 
+      // Validate slippage tolerance if provided (optional parameter)
+      let validatedSlippage: number | undefined;
+      if (slippageTolerance !== undefined) {
+        const slippageValidation = validateNumericAmount(slippageTolerance, "Slippage tolerance", 0, 1);
+        if (!slippageValidation.valid) {
+          return res.status(400).json({ message: slippageValidation.error });
+        }
+        validatedSlippage = parseFloat(slippageTolerance);
+      }
+
       // Get user ID
       let actualUserId: string;
       if (userId) {
@@ -491,7 +539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actualUserId = defaultUser.id;
       }
 
-      // Execute the bet transaction with row-level locking
+      // Execute the bet transaction with row-level locking and slippage protection
       // All validation, calculations, and updates happen atomically inside the transaction
       const result = await storage.placeBetWithLocking({
         userId: actualUserId,
@@ -499,6 +547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         position: position as "YES" | "NO",
         amount: parseFloat(amount),
         action: action as "buy" | "sell",
+        slippageTolerance: validatedSlippage,
       });
 
       // Broadcast update via WebSocket
@@ -508,12 +557,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'BET_PLACED',
           bet: result.bet,
           market: marketWithKol,
+          priceImpact: result.priceImpact,
         });
       } catch (error) {
         console.error("Error broadcasting bet update:", error);
       }
 
-      res.json(result.bet);
+      res.json({
+        bet: result.bet,
+        priceImpact: result.priceImpact,
+        priceImpactPercent: (result.priceImpact * 100).toFixed(2) + '%'
+      });
     } catch (error) {
       console.error("Error creating bet:", error);
       

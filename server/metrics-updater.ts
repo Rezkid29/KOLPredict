@@ -113,9 +113,19 @@ export class MetricsUpdater {
       parseFloat(kol.engagementRate) !== metrics.engagementRate ||
       kol.trending !== metrics.trending;
 
-    if (hasChanged) {
-      try {
-        // Update KOL record
+    try {
+      // Always record metrics history for time-series analysis
+      // This allows us to track trends even when values don't change
+      await storage.createKolMetricsHistory({
+        kolId: kol.id,
+        followers: metrics.followers,
+        engagementRate: metrics.engagementRate.toString(),
+        trending: metrics.trending,
+        trendingPercent: metrics.trendingPercent?.toString() || null,
+      });
+
+      // Only update KOL record if metrics have changed
+      if (hasChanged) {
         await storage.updateKol(kol.id, {
           followers: metrics.followers,
           engagementRate: metrics.engagementRate.toString(),
@@ -123,22 +133,13 @@ export class MetricsUpdater {
           trendingPercent: metrics.trendingPercent?.toString() || null,
         });
 
-        // Record metrics history
-        await storage.createKolMetricsHistory({
-          kolId: kol.id,
-          followers: metrics.followers,
-          engagementRate: metrics.engagementRate.toString(),
-          trending: metrics.trending,
-          trendingPercent: metrics.trendingPercent?.toString() || null,
-        });
-
         console.log(`Updated ${kol.name}: ${kol.followers} -> ${metrics.followers} followers, ${kol.engagementRate}% -> ${metrics.engagementRate}% engagement`);
-      } catch (error) {
-        console.error(`Failed to save metrics for ${kol.name}:`, error);
-        throw new Error(`Failed to save metrics to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } else {
+        console.log(`Snapshot saved for ${kol.name} (no changes)`);
       }
-    } else {
-      console.log(`No changes for ${kol.name}`);
+    } catch (error) {
+      console.error(`Failed to save metrics for ${kol.name}:`, error);
+      throw new Error(`Failed to save metrics to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

@@ -365,8 +365,10 @@ export class DbStorage implements IStorage {
     position: "YES" | "NO";
     amount: number;
     action: "buy" | "sell";
+    slippageTolerance?: number; // Optional: max acceptable price impact (0-1), defaults to 0.05 (5%)
   }): Promise<{
     bet: Bet;
+    priceImpact: number;
     error?: string;
   }> {
     return await db.transaction(async (tx) => {
@@ -415,6 +417,20 @@ export class DbStorage implements IStorage {
 
       if (yesPool <= 0 || noPool <= 0) {
         throw new ValidationError("Market pools are depleted");
+      }
+
+      // AMM Safety Constants
+      const MIN_PRICE = 0.01;  // Minimum price to prevent prices from going to 0
+      const MAX_PRICE = 0.99;  // Maximum price to prevent prices from going to 1
+      const MAX_TRADE_PERCENTAGE = 0.40; // Maximum 40% of pool size per trade
+      const DEFAULT_SLIPPAGE_TOLERANCE = 0.05; // Default 5% slippage tolerance
+      
+      // Use provided slippage tolerance or default
+      const slippageTolerance = params.slippageTolerance ?? DEFAULT_SLIPPAGE_TOLERANCE;
+      
+      // Validate slippage tolerance
+      if (slippageTolerance < 0 || slippageTolerance > 1) {
+        throw new ValidationError("Slippage tolerance must be between 0 and 1");
       }
 
       // STEP 3: Perform AMM calculations inside transaction
@@ -468,6 +484,15 @@ export class DbStorage implements IStorage {
         if (params.amount > userBalance) {
           throw new ValidationError(
             `Insufficient balance. You have ${userBalance.toFixed(2)} but trying to spend ${params.amount.toFixed(2)}`
+          );
+        }
+
+        // Validate trade size relative to pool (max 40% of available liquidity)
+        const totalLiquidity = yesPool + noPool;
+        const maxTradeSize = totalLiquidity * MAX_TRADE_PERCENTAGE;
+        if (params.amount > maxTradeSize) {
+          throw new ValidationError(
+            `Trade size too large. Maximum allowed is ${maxTradeSize.toFixed(2)} (40% of pool). Your trade: ${params.amount.toFixed(2)}`
           );
         }
 
@@ -553,7 +578,30 @@ export class DbStorage implements IStorage {
         throw new ValidationError("Calculated prices out of valid range [0, 1]");
       }
 
+      // Enforce price bounds to prevent extreme prices (prevents math instability)
+      if (yesPrice < MIN_PRICE || yesPrice > MAX_PRICE) {
+        throw new ValidationError(
+          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting price: ${yesPrice.toFixed(4)}. Reduce trade size.`
+        );
+      }
+
+      if (noPrice < MIN_PRICE || noPrice > MAX_PRICE) {
+        throw new ValidationError(
+          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting price: ${noPrice.toFixed(4)}. Reduce trade size.`
+        );
+      }
+
+      // Calculate price impact and validate slippage for both buys and sells
       const currentPrice = params.position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
+      const newPrice = params.position === "YES" ? yesPrice : noPrice;
+      const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
+      
+      // Check slippage protection for both buy and sell trades
+      if (priceImpact > slippageTolerance) {
+        throw new ValidationError(
+          `Price impact (${(priceImpact * 100).toFixed(2)}%) exceeds slippage tolerance (${(slippageTolerance * 100).toFixed(2)}%). Current price: ${currentPrice.toFixed(4)}, New price: ${newPrice.toFixed(4)}. Reduce trade size or increase slippage tolerance.`
+        );
+      }
 
       // STEP 4: Create bet record
       const [createdBet] = await tx
@@ -650,7 +698,7 @@ export class DbStorage implements IStorage {
         })
         .where(eq(markets.id, params.marketId));
 
-      return { bet: createdBet };
+      return { bet: createdBet, priceImpact };
     });
   }
 
