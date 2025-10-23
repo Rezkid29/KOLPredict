@@ -496,9 +496,110 @@ export class MarketGeneratorService {
     ];
 
     let marketsCreated = 0;
+    let headToHeadCreated = 0;
+    const minHeadToHead = 2;
+
+    // PHASE 1: Generate at least 2 head-to-head markets first
+    console.log(`\n${'═'.repeat(70)}`);
+    console.log(`PHASE 1: Generating minimum ${minHeadToHead} head-to-head markets`);
+    console.log(`${'═'.repeat(70)}`);
+
+    for (let i = 0; i < minHeadToHead && headToHeadCreated < minHeadToHead && marketsCreated < count; i++) {
+      console.log(`\n${'─'.repeat(70)}`);
+      console.log(`HEAD-TO-HEAD MARKET ${headToHeadCreated + 1}/${minHeadToHead}`);
+      console.log('─'.repeat(70));
+
+      const availableKols = kolData.filter(k => !usedKolsThisCycle.has(k.username));
+      console.log(`  Available KOLs: ${availableKols.length}/${kolData.length}`);
+
+      if (availableKols.length < 2) {
+        console.log('  ⚠️ Not enough KOLs available for head-to-head market');
+        break;
+      }
+
+      let generatedMarket: GeneratedMarket | null = null;
+
+      // Shuffle head-to-head generators for variety
+      const shuffledH2HGenerators = [...headToHeadGenerators].sort(() => 0.5 - Math.random());
+      
+      for (const generator of shuffledH2HGenerators) {
+        console.log(`  Trying ${generator.type}...`);
+        generatedMarket = await generator.fn(availableKols);
+        
+        if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
+          // Mark both KOLs as used
+          usedKolsThisCycle.add(generatedMarket.metadata.kolA);
+          usedKolsThisCycle.add(generatedMarket.metadata.kolB);
+          break;
+        }
+      }
+
+      if (generatedMarket) {
+        try {
+          const createdMarket = await dbStorage.createMarket(generatedMarket.market);
+
+          await dbStorage.createMarketMetadata({
+            marketId: createdMarket.id,
+            marketType: generatedMarket.metadata.marketType,
+            kolA: generatedMarket.metadata.kolA || null,
+            kolB: generatedMarket.metadata.kolB || null,
+            xHandle: generatedMarket.metadata.xHandle || null,
+            currentFollowers: generatedMarket.metadata.currentFollowers || null,
+            currentRankA: generatedMarket.metadata.currentRankA || null,
+            currentRankB: generatedMarket.metadata.currentRankB || null,
+            currentUsd: generatedMarket.metadata.currentUsd || null,
+            currentSolA: generatedMarket.metadata.currentSolA || null,
+            currentSolB: generatedMarket.metadata.currentSolB || null,
+            currentUsdA: generatedMarket.metadata.currentUsdA || null,
+            currentUsdB: generatedMarket.metadata.currentUsdB || null,
+            currentWinsLossesA: generatedMarket.metadata.currentWinsLossesA || null,
+            currentWinsLossesB: generatedMarket.metadata.currentWinsLossesB || null,
+            threshold: generatedMarket.metadata.threshold || null,
+            timeframeDays: generatedMarket.metadata.timeframeDays || null,
+          });
+
+          createdMarkets.push({
+            marketId: createdMarket.id,
+            title: createdMarket.title,
+            type: generatedMarket.metadata.marketType,
+          });
+
+          console.log('\n✅ CREATED HEAD-TO-HEAD MARKET');
+          console.log(`  ID: ${createdMarket.id}`);
+          console.log(`  Title: ${createdMarket.title}`);
+          console.log(`  Resolves: ${format(createdMarket.resolvesAt, 'yyyy-MM-dd HH:mm:ss')}`);
+          console.log(`  Type: ${generatedMarket.metadata.marketType}`);
+          console.log(`  KOLs: ${generatedMarket.metadata.kolA} vs ${generatedMarket.metadata.kolB}`);
+
+          marketsCreated++;
+          headToHeadCreated++;
+        } catch (error) {
+          console.error('\n❌ FAILED to save head-to-head market:', error);
+        }
+      } else {
+        console.log('\n⚠️ Could not generate head-to-head market');
+      }
+
+      if (i < minHeadToHead - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+
+    console.log(`\n${'═'.repeat(70)}`);
+    console.log(`PHASE 1 COMPLETE: ${headToHeadCreated} head-to-head markets created`);
+    console.log(`${'═'.repeat(70)}`);
+
+    // PHASE 2: Fill remaining markets with mixed strategy
+    if (marketsCreated < count) {
+      console.log(`\n${'═'.repeat(70)}`);
+      console.log(`PHASE 2: Generating remaining ${count - marketsCreated} markets (mixed strategy)`);
+      console.log(`${'═'.repeat(70)}`);
+    }
 
     // Strategy: Each KOL appears in EXACTLY ONE market per generation cycle
     for (let i = 0; i < count && marketsCreated < count; i++) {
+      if (marketsCreated >= count) break;
+
       console.log(`\n${'─'.repeat(70)}`);
       console.log(`MARKET ${marketsCreated + 1}/${count}`);
       console.log('─'.repeat(70));
@@ -623,6 +724,7 @@ export class MarketGeneratorService {
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🎉 Market generation complete: ${createdMarkets.length}/${count} markets created`);
     console.log(`   📊 ALL KOLs featured: ${usedKolsThisCycle.size}/${kolData.length} unique KOLs`);
+    console.log(`   🆚 Head-to-head markets: ${headToHeadCreated} (minimum ${minHeadToHead} required)`);
     console.log(`   💰 SOL Gain threshold markets: ${solGainThresholdCount} (max ${maxSolGainThreshold})`);
     console.log(`   🎲 Randomized market types across all categories`);
     console.log(`   ✅ Each KOL appears in EXACTLY ONE market`);
