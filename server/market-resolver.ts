@@ -125,7 +125,8 @@ export class MarketResolver {
       let reason: string;
 
       if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' || 
-          marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening') {
+          marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening' ||
+          marketType === 'top_rank_maintain' || marketType === 'streak_continuation' || marketType === 'rank_improvement') {
         const metadata = await storage.getMarketMetadata(market.id);
         if (!metadata) {
           console.error(`Market ${market.id} metadata not found for special market type`);
@@ -152,8 +153,20 @@ export class MarketResolver {
           const result = await this.resolveUsdGainFlippeningMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
-        } else {
+        } else if (marketType === 'winrate_flippening') {
           const result = await this.resolveWinRateFlippeningMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'top_rank_maintain') {
+          const result = await this.resolveTopRankMaintainMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else if (marketType === 'streak_continuation') {
+          const result = await this.resolveStreakContinuationMarket(metadata);
+          outcome = result.outcome;
+          reason = result.reason;
+        } else {
+          const result = await this.resolveRankImprovementMarket(metadata);
           outcome = result.outcome;
           reason = result.reason;
         }
@@ -579,6 +592,67 @@ export class MarketResolver {
     
     const outcome = winRateA > winRateB ? "yes" : "no";
     const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveTopRankMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData) {
+      console.warn(`Missing KOL data for top rank maintain market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
+      };
+    }
+    
+    const currentRank = parseInt(kolData.rank);
+    const threshold = metadata.threshold || 10;
+    const outcome = currentRank <= threshold ? "yes" : "no";
+    const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Maintained position in top ${threshold}` : `Dropped below top ${threshold}`}. Previously ranked #${metadata.currentRankA}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveStreakContinuationMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData) {
+      console.warn(`Missing KOL data for streak continuation market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
+      };
+    }
+    
+    const previousWinRate = this.parseWinRate(metadata.currentWinsLossesA);
+    const currentWinRate = this.parseWinRate(kolData.winsLosses);
+    
+    const outcome = currentWinRate > previousWinRate ? "yes" : "no";
+    const reason = `${metadata.kolA} ${outcome === 'yes' ? 'improved' : 'did not improve'} their win rate. Current: ${kolData.winsLosses || '0/0'} (${(currentWinRate * 100).toFixed(1)}%), Previous: ${metadata.currentWinsLossesA || '0/0'} (${(previousWinRate * 100).toFixed(1)}%)`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveRankImprovementMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData) {
+      console.warn(`Missing KOL data for rank improvement market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
+      };
+    }
+    
+    const currentRank = parseInt(kolData.rank);
+    const targetRank = metadata.threshold || 1;
+    const outcome = currentRank <= targetRank ? "yes" : "no";
+    const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Reached target of #${targetRank} or better` : `Did not reach #${targetRank}`}. Previously ranked #${metadata.currentRankA}`;
     
     return { outcome, reason };
   }

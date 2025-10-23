@@ -211,6 +211,97 @@ export class MarketGeneratorService {
     return { market, metadata };
   }
 
+  async generateTopRankMaintainMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const topKOLs = kolData.filter(k => {
+      const rankNum = parseInt(k.rank);
+      return !isNaN(rankNum) && rankNum <= 10;
+    });
+    
+    if (topKOLs.length === 0) return null;
+    
+    const kol = this.sampleKOLs(topKOLs, 1)[0];
+    const currentRankNum = parseInt(kol.rank);
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kol.username} stay in the top ${currentRankNum <= 5 ? '5' : '10'} on tomorrow's leaderboard?`,
+      description: `${kol.username} is currently ranked #${kol.rank}. Will they maintain their elite position?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'top_rank_maintain',
+      marketCategory: 'ranking',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'top_rank_maintain',
+      kolA: kol.username,
+      currentRankA: kol.rank,
+      threshold: currentRankNum <= 5 ? 5 : 10,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateStreakContinuationMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => k.winsLosses);
+    if (validKOLs.length === 0) return null;
+
+    const kol = this.sampleKOLs(validKOLs, 1)[0];
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kol.username} improve their win rate by tomorrow?`,
+      description: `${kol.username} currently has a ${kol.winsLosses} record. Will they add more wins tomorrow?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'streak_continuation',
+      marketCategory: 'performance',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'streak_continuation',
+      kolA: kol.username,
+      currentWinsLossesA: kol.winsLosses || undefined,
+    };
+
+    return { market, metadata };
+  }
+
+  async generateRankImprovementMarket(kolData: ScrapedKol[]): Promise<GeneratedMarket | null> {
+    const validKOLs = kolData.filter(k => {
+      const rankNum = parseInt(k.rank);
+      return !isNaN(rankNum) && rankNum > 3;
+    });
+    
+    if (validKOLs.length === 0) return null;
+    
+    const kol = this.sampleKOLs(validKOLs, 1)[0];
+    const currentRankNum = parseInt(kol.rank);
+    const targetRank = Math.max(1, currentRankNum - this.randomChoice([1, 2, 3, 5]));
+
+    const market: InsertMarket = {
+      kolId: null,
+      title: `Will ${kol.username} reach rank #${targetRank} or better by tomorrow?`,
+      description: `${kol.username} is currently #${kol.rank}. Can they climb to #${targetRank} or higher?`,
+      outcome: 'pending',
+      resolvesAt: addDays(new Date(), 1),
+      marketType: 'rank_improvement',
+      marketCategory: 'ranking',
+      requiresXApi: false,
+    };
+
+    const metadata = {
+      marketType: 'rank_improvement',
+      kolA: kol.username,
+      currentRankA: kol.rank,
+      threshold: targetRank,
+    };
+
+    return { market, metadata };
+  }
+
   async generateMarkets(count: number = 5): Promise<{ marketId: string; title: string; type: string }[]> {
     console.log(`🎯 Generating ${count} markets from scraped KOL data...`);
 
@@ -232,6 +323,9 @@ export class MarketGeneratorService {
       () => this.generateSolGainFlippeningMarket(kolData),
       () => this.generateUsdGainFlippeningMarket(kolData),
       () => this.generateWinRateFlippeningMarket(kolData),
+      () => this.generateTopRankMaintainMarket(kolData),
+      () => this.generateStreakContinuationMarket(kolData),
+      () => this.generateRankImprovementMarket(kolData),
     ];
     
     const followerGrowthGenerator = () => this.generateFollowerGrowthMarket(kolData);
