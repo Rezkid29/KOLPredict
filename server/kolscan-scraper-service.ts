@@ -32,8 +32,12 @@ export class KolscanScraperService {
   }
 
   parseSolGain(solGain: string): number {
-    const match = solGain.match(/[+-]?[\d.]+/);
-    return match ? parseFloat(match[0]) : 0;
+    const cleaned = solGain.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return 0;
+    
+    const numStr = match[0].replace(/,/g, '');
+    return parseFloat(numStr) || 0;
   }
 
   async transformScrapedKol(scrapedData: KOLData): Promise<InsertKol> {
@@ -151,21 +155,34 @@ export class KolscanScraperService {
     console.log(`🎲 Generating markets for ${kols.length} KOLs...`);
     let createdCount = 0;
 
+    const existingMarkets = await this.storage.getAllMarkets();
+
     for (const kol of kols) {
       try {
-        const existingMarkets = await this.storage.getAllMarkets();
-        const kolHasActiveMarket = existingMarkets.some(
+        const kolActiveMarkets = existingMarkets.filter(
           (m: Market) => m.kolId === kol.id && m.isLive && !m.resolved
         );
 
-        if (kolHasActiveMarket) {
-          console.log(`  ⏭️  ${kol.name} already has active markets, skipping...`);
+        if (kolActiveMarkets.length > 0) {
+          console.log(`  ⏭️  ${kol.name} already has ${kolActiveMarkets.length} active market(s), skipping...`);
           continue;
         }
 
         const marketTemplates = await this.generateMarketsForKol(kol);
         
         for (const marketTemplate of marketTemplates) {
+          const duplicateExists = existingMarkets.some(
+            (m: Market) => 
+              m.kolId === kol.id && 
+              m.title === marketTemplate.title && 
+              m.isLive
+          );
+
+          if (duplicateExists) {
+            console.log(`  ⏭️  Market "${marketTemplate.title}" already exists, skipping...`);
+            continue;
+          }
+
           await this.storage.createMarket(marketTemplate);
           createdCount++;
           console.log(`  ✅ Created market: "${marketTemplate.title}"`);

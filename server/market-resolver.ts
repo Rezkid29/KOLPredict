@@ -144,6 +144,26 @@ export class MarketResolver {
           outcome = result.outcome;
           reason = result.reason;
         }
+      } else if (marketType === 'kolscan') {
+        if (!market.kol || !market.kol.id) {
+          console.error(`Invalid market data for resolution:`, { marketId: market.id });
+          return null;
+        }
+
+        const freshKol = await storage.getKol(market.kol.id);
+        if (!freshKol) {
+          console.error(`KOL ${market.kol.id} not found`);
+          return null;
+        }
+
+        const latestMetrics = {
+          followers: freshKol.followers,
+          engagementRate: parseFloat(freshKol.engagementRate),
+          trending: freshKol.trending || false,
+        };
+        
+        outcome = this.determineOutcome(market, freshKol, latestMetrics);
+        reason = this.generateReason(market, freshKol, latestMetrics, outcome);
       } else {
         if (!market.kol || !market.kol.id) {
           console.error(`Invalid market data for resolution:`, { marketId: market.id });
@@ -220,6 +240,13 @@ export class MarketResolver {
   ): "yes" | "no" {
     const title = market.title.toLowerCase();
     
+    if (kol.scrapedFromKolscan) {
+      const kolscanOutcome = this.determineKolscanOutcome(market, kol, title);
+      if (kolscanOutcome !== null) {
+        return kolscanOutcome;
+      }
+    }
+    
     if (title.includes("followers")) {
       const targetMatch = title.match(/(\d+)k?\s*followers/i);
       if (targetMatch) {
@@ -253,16 +280,120 @@ export class MarketResolver {
     return random > 0.5 ? "yes" : "no";
   }
 
+  private determineKolscanOutcome(market: Market, kol: Kol, title: string): "yes" | "no" | null {
+    if (title.includes("sol") && (title.includes("gain") || title.includes("profit"))) {
+      if (!kol.kolscanSolGain) {
+        console.warn(`No SOL gain data for ${kol.name}, cannot resolve`);
+        return null;
+      }
+      
+      const solGainMatch = kol.kolscanSolGain.match(/([+-]?[\d,]+\.?\d*)/);
+      if (!solGainMatch) {
+        console.warn(`Cannot parse SOL gain: ${kol.kolscanSolGain}`);
+        return null;
+      }
+      
+      const currentSolGain = parseFloat(solGainMatch[1].replace(/,/g, ''));
+      const targetMatch = title.match(/([+-]?[\d,]+\.?\d*)\s*sol/i);
+      
+      if (!targetMatch) {
+        console.warn(`Cannot extract target SOL from title: ${title}`);
+        return null;
+      }
+      
+      const targetSol = parseFloat(targetMatch[1].replace(/,/g, ''));
+      console.log(`  📊 ${kol.name} SOL gain: ${currentSolGain} vs target: ${targetSol}`);
+      return currentSolGain >= targetSol ? "yes" : "no";
+    }
+    
+    if (title.includes("win") && (title.includes("rate") || title.includes("ratio"))) {
+      if (!kol.kolscanWins || !kol.kolscanLosses) {
+        console.warn(`No win/loss data for ${kol.name}, cannot resolve`);
+        return null;
+      }
+      
+      const totalTrades = kol.kolscanWins + kol.kolscanLosses;
+      const winRate = totalTrades > 0 ? kol.kolscanWins / totalTrades : 0;
+      const targetMatch = title.match(/([\d.]+)%/);
+      
+      if (!targetMatch) {
+        console.warn(`Cannot extract target win rate from title: ${title}`);
+        return null;
+      }
+      
+      const targetRate = parseFloat(targetMatch[1]) / 100;
+      console.log(`  📊 ${kol.name} win rate: ${(winRate * 100).toFixed(1)}% vs target: ${(targetRate * 100).toFixed(1)}%`);
+      return winRate >= targetRate ? "yes" : "no";
+    }
+    
+    if (title.includes("rank") || title.includes("top")) {
+      if (!kol.kolscanRank) {
+        console.warn(`No rank data for ${kol.name}, cannot resolve`);
+        return null;
+      }
+      
+      const rankMatch = kol.kolscanRank.match(/(\d+)/);
+      if (!rankMatch) {
+        console.warn(`Cannot parse rank: ${kol.kolscanRank}`);
+        return null;
+      }
+      
+      const currentRank = parseInt(rankMatch[1], 10);
+      const targetMatch = title.match(/top\s+(\d+)/i) || title.match(/rank\s+(\d+)/i) || title.match(/#(\d+)/);
+      
+      if (!targetMatch) {
+        console.warn(`Cannot extract target rank from title: ${title}`);
+        return null;
+      }
+      
+      const targetRank = parseInt(targetMatch[1], 10);
+      console.log(`  📊 ${kol.name} rank: ${currentRank} vs target: ${targetRank}`);
+      return currentRank <= targetRank ? "yes" : "no";
+    }
+    
+    return null;
+  }
+
   private generateReason(
     market: Market,
     kol: Kol,
     currentMetrics: { followers: number; engagementRate: number; trending: boolean },
     outcome: "yes" | "no"
   ): string {
+    if (kol.scrapedFromKolscan) {
+      const kolscanReason = this.generateKolscanReason(market, kol, outcome);
+      if (kolscanReason) {
+        return kolscanReason;
+      }
+    }
+    
     const followerChange = currentMetrics.followers - kol.followers;
     const engagementChange = currentMetrics.engagementRate - parseFloat(kol.engagementRate);
 
     return `Market resolved ${outcome.toUpperCase()}. ${kol.name} currently has ${currentMetrics.followers.toLocaleString()} followers (${followerChange > 0 ? '+' : ''}${followerChange.toLocaleString()}) with ${currentMetrics.engagementRate}% engagement rate (${engagementChange > 0 ? '+' : ''}${engagementChange.toFixed(2)}%).`;
+  }
+
+  private generateKolscanReason(market: Market, kol: Kol, outcome: "yes" | "no"): string | null {
+    const title = market.title.toLowerCase();
+    
+    if (title.includes("sol") && (title.includes("gain") || title.includes("profit"))) {
+      if (!kol.kolscanSolGain) return null;
+      return `Market resolved ${outcome.toUpperCase()}. ${kol.name} has ${kol.kolscanSolGain} SOL gain on kolscan.io (Rank: ${kol.kolscanRank || 'N/A'}, W/L: ${kol.kolscanWins || 0}/${kol.kolscanLosses || 0}).`;
+    }
+    
+    if (title.includes("win") && (title.includes("rate") || title.includes("ratio"))) {
+      if (!kol.kolscanWins || !kol.kolscanLosses) return null;
+      const totalTrades = kol.kolscanWins + kol.kolscanLosses;
+      const winRate = totalTrades > 0 ? ((kol.kolscanWins / totalTrades) * 100).toFixed(1) : '0.0';
+      return `Market resolved ${outcome.toUpperCase()}. ${kol.name} has a ${winRate}% win rate (${kol.kolscanWins} wins, ${kol.kolscanLosses} losses) on kolscan.io.`;
+    }
+    
+    if (title.includes("rank") || title.includes("top")) {
+      if (!kol.kolscanRank) return null;
+      return `Market resolved ${outcome.toUpperCase()}. ${kol.name} is currently ranked ${kol.kolscanRank} on kolscan.io (SOL gain: ${kol.kolscanSolGain || 'N/A'}).`;
+    }
+    
+    return null;
   }
 
   private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
