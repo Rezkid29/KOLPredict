@@ -19,10 +19,20 @@ export function useAuth() {
     if (typeof window !== 'undefined' && window.solana?.on) {
       const handleDisconnect = () => {
         console.log("Wallet disconnected");
-        localStorage.removeItem("userId");
-        localStorage.removeItem("solanaWalletAddress");
-        setUserIdState(null);
-        window.location.reload();
+        
+        // Show user notification
+        const event = new CustomEvent("wallet-disconnected", {
+          detail: { message: "Your Solana wallet has been disconnected. Please reconnect to continue." }
+        });
+        window.dispatchEvent(event);
+        
+        // Delay to allow toast to be visible before reload
+        setTimeout(() => {
+          localStorage.removeItem("userId");
+          localStorage.removeItem("solanaWalletAddress");
+          setUserIdState(null);
+          window.location.reload();
+        }, 2000);
       };
 
       const handleAccountChanged = (publicKey: any) => {
@@ -32,10 +42,20 @@ export function useAuth() {
         
         if (storedAddress && storedAddress !== newAddress) {
           console.log("Different wallet detected, logging out");
-          localStorage.removeItem("userId");
-          localStorage.removeItem("solanaWalletAddress");
-          setUserIdState(null);
-          window.location.reload();
+          
+          // Show user notification
+          const event = new CustomEvent("wallet-account-changed", {
+            detail: { message: "Your wallet account has changed. You have been logged out." }
+          });
+          window.dispatchEvent(event);
+          
+          // Delay to allow toast to be visible before reload
+          setTimeout(() => {
+            localStorage.removeItem("userId");
+            localStorage.removeItem("solanaWalletAddress");
+            setUserIdState(null);
+            window.location.reload();
+          }, 2000);
         }
       };
 

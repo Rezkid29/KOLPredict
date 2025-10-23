@@ -4,6 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 import { AuthModal } from "@/components/auth-modal";
 import { useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/home";
@@ -27,12 +28,42 @@ function Router() {
 function App() {
   const { userId, setUserId } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!userId) {
       setShowAuthModal(true);
     }
   }, [userId]);
+
+  useEffect(() => {
+    // Listen for wallet disconnection events
+    const handleWalletDisconnected = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      toast({
+        title: "Wallet Disconnected",
+        description: customEvent.detail?.message || "Your wallet has been disconnected.",
+        variant: "destructive",
+      });
+    };
+
+    const handleWalletAccountChanged = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      toast({
+        title: "Wallet Account Changed",
+        description: customEvent.detail?.message || "Your wallet account has changed.",
+        variant: "destructive",
+      });
+    };
+
+    window.addEventListener("wallet-disconnected", handleWalletDisconnected);
+    window.addEventListener("wallet-account-changed", handleWalletAccountChanged);
+
+    return () => {
+      window.removeEventListener("wallet-disconnected", handleWalletDisconnected);
+      window.removeEventListener("wallet-account-changed", handleWalletAccountChanged);
+    };
+  }, [toast]);
 
   const handleAuthSuccess = (newUserId: string) => {
     setUserId(newUserId);
