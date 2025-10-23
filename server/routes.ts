@@ -672,6 +672,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Import scheduler
+  const { scheduler } = await import("./scheduler");
+
+  // Manual trigger for scraping
+  app.post("/api/admin/scrape-kols", async (req, res) => {
+    try {
+      const result = await scheduler.performScraping();
+      res.json(result);
+    } catch (error) {
+      console.error("Error scraping KOLs:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to scrape KOLs",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Manual trigger for market generation
+  app.post("/api/admin/generate-markets", async (req, res) => {
+    try {
+      const count = req.body.count || 5;
+      const result = await scheduler.performMarketGeneration();
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating markets:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to generate markets",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get scheduler status
+  app.get("/api/admin/scheduler-status", async (req, res) => {
+    try {
+      const status = scheduler.getStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get scheduler status" });
+    }
+  });
+
+  // Update scheduler configuration
+  app.post("/api/admin/scheduler-config", async (req, res) => {
+    try {
+      const updates = req.body;
+      scheduler.updateConfig(updates);
+      res.json({ 
+        message: "Scheduler configuration updated",
+        config: scheduler.getConfig()
+      });
+    } catch (error) {
+      console.error("Error updating scheduler config:", error);
+      res.status(500).json({ message: "Failed to update scheduler configuration" });
+    }
+  });
+
+  // Start/stop scheduler tasks
+  app.post("/api/admin/scheduler-control", async (req, res) => {
+    try {
+      const { action, task } = req.body;
+      
+      if (action === 'start') {
+        if (task === 'scraping') {
+          scheduler.startScrapingSchedule();
+        } else if (task === 'market-generation') {
+          scheduler.startMarketGenerationSchedule();
+        } else if (task === 'all') {
+          scheduler.startAllSchedules();
+        }
+      } else if (action === 'stop') {
+        if (task === 'scraping') {
+          scheduler.stopScrapingSchedule();
+        } else if (task === 'market-generation') {
+          scheduler.stopMarketGenerationSchedule();
+        } else if (task === 'all') {
+          scheduler.stopAllSchedules();
+        }
+      }
+      
+      res.json({ 
+        message: `Scheduler ${action} ${task} completed`,
+        status: scheduler.getStatus()
+      });
+    } catch (error) {
+      console.error("Error controlling scheduler:", error);
+      res.status(500).json({ message: "Failed to control scheduler" });
+    }
+  });
+
   // Simulate market price updates (for demo purposes)
   setInterval(() => {
     storage.getAllMarkets().then((markets) => {
@@ -710,6 +802,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Start automatic market resolution every 5 minutes
   console.log("Starting automatic market resolution...");
   marketResolver.startAutoResolution(5);
+
+  // Start daily scheduler for scraping and market generation
+  console.log("Starting daily scheduler...");
+  scheduler.startAllSchedules();
 
   // Set up callback for market resolutions to broadcast via WebSocket
   const originalResolveExpiredMarkets = marketResolver.resolveExpiredMarkets.bind(marketResolver);
