@@ -265,6 +265,83 @@ export class MarketResolver {
     return `Market resolved ${outcome.toUpperCase()}. ${kol.name} currently has ${currentMetrics.followers.toLocaleString()} followers (${followerChange > 0 ? '+' : ''}${followerChange.toLocaleString()}) with ${currentMetrics.engagementRate}% engagement rate (${engagementChange > 0 ? '+' : ''}${engagementChange.toFixed(2)}%).`;
   }
 
+  private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolAData = latestKols.find(k => k.username === metadata.kolA);
+    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    
+    if (!kolAData || !kolBData) {
+      console.warn(`Missing KOL data for rank flippening market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
+      };
+    }
+    
+    const rankA = parseInt(kolAData.rank.replace(/[^\d]/g, '')) || 999;
+    const rankB = parseInt(kolBData.rank.replace(/[^\d]/g, '')) || 999;
+    
+    const outcome = rankA < rankB ? "yes" : "no";
+    const reason = `${metadata.kolA} is now rank #${rankA} vs ${metadata.kolB} at rank #${rankB}. Previously: ${metadata.kolA} was #${metadata.currentRankA}, ${metadata.kolB} was #${metadata.currentRankB}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveProfitStreakMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    const latestKols = await storage.getLatestScrapedKols(20);
+    
+    const kolData = latestKols.find(k => k.username === metadata.kolA);
+    
+    if (!kolData || !kolData.usdGain) {
+      console.warn(`Missing KOL data for profit streak market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - missing latest USD gain data for ${metadata.kolA}`
+      };
+    }
+    
+    const hasPositiveGain = kolData.usdGain.includes('+') && kolData.usdGain.includes('$');
+    const outcome = hasPositiveGain ? "yes" : "no";
+    const reason = `${metadata.kolA} current USD gain: ${kolData.usdGain}. Previously: ${metadata.currentUsd}`;
+    
+    return { outcome, reason };
+  }
+
+  private async resolveFollowerGrowthMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
+    if (!metadata.xHandle || !metadata.currentFollowers || !metadata.threshold) {
+      console.warn(`Missing metadata for follower growth market`);
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - incomplete metadata`
+      };
+    }
+    
+    const currentFollowers = await xApiClient.getFollowerCount(metadata.xHandle);
+    
+    if (currentFollowers === null) {
+      console.warn(`Could not fetch current follower count for @${metadata.xHandle}`);
+      const cached = await storage.getFollowerCache(metadata.xHandle);
+      if (cached) {
+        const growth = cached.followers - metadata.currentFollowers;
+        const outcome = growth >= metadata.threshold ? "yes" : "no";
+        const reason = `@${metadata.xHandle} follower growth: ${growth.toLocaleString()} (using cached data from ${new Date(cached.cachedAt).toLocaleDateString()}). Target was ${metadata.threshold.toLocaleString()}.`;
+        return { outcome, reason };
+      }
+      
+      return {
+        outcome: "no",
+        reason: `Market could not be resolved - X API unavailable and no cached data`
+      };
+    }
+    
+    const growth = currentFollowers - metadata.currentFollowers;
+    const outcome = growth >= metadata.threshold ? "yes" : "no";
+    const reason = `@${metadata.xHandle} went from ${metadata.currentFollowers.toLocaleString()} to ${currentFollowers.toLocaleString()} followers (${growth > 0 ? '+' : ''}${growth.toLocaleString()}). Target was ${metadata.threshold.toLocaleString()}.`;
+    
+    return { outcome, reason };
+  }
+
   private async settleBets(marketId: string, outcome: "yes" | "no"): Promise<number> {
     const allBets = await storage.getMarketBets(marketId);
     const pendingBets = allBets.filter(bet => bet.status === "pending");
