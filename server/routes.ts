@@ -656,6 +656,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resolve ALL markets and generate new ones
+  app.post("/api/admin/reset-markets", async (req, res) => {
+    try {
+      console.log('\n' + '='.repeat(70));
+      console.log('MARKET RESET: Resolving all markets and generating new ones');
+      console.log('='.repeat(70));
+
+      const resolutions = await marketResolver.resolveAllMarkets();
+      
+      for (const resolution of resolutions) {
+        const market = await storage.getMarketWithKol(resolution.marketId);
+        if (market) {
+          broadcast({
+            type: 'MARKET_RESOLVED',
+            market,
+            resolution,
+          });
+        }
+      }
+
+      console.log(`✅ Resolved ${resolutions.length} markets`);
+      console.log('🔄 Generating new markets...');
+
+      const generationResult = await scheduler.performMarketGeneration();
+
+      console.log('='.repeat(70));
+      console.log(`MARKET RESET COMPLETED: ${resolutions.length} resolved, ${generationResult.created} new markets created`);
+      console.log('='.repeat(70) + '\n');
+
+      res.json({ 
+        message: "Market reset completed", 
+        resolved: resolutions.length,
+        generated: generationResult.created,
+        resolutions,
+      });
+    } catch (error) {
+      console.error("Error resetting markets:", error);
+      res.status(500).json({ 
+        message: "Failed to reset markets",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Get API integration status
   app.get("/api/admin/api-status", async (req, res) => {
     try {

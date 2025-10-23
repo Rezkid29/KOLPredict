@@ -159,12 +159,12 @@ export class KolscanScraperService {
 
     for (const kol of kols) {
       try {
-        const kolActiveMarkets = existingMarkets.filter(
-          (m: Market) => m.kolId === kol.id && m.isLive && !m.resolved
+        const kolPendingMarkets = existingMarkets.filter(
+          (m: Market) => m.kolId === kol.id && m.isLive && !m.resolved && m.outcome === 'pending'
         );
 
-        if (kolActiveMarkets.length > 0) {
-          console.log(`  ⏭️  ${kol.name} already has ${kolActiveMarkets.length} active market(s), skipping...`);
+        if (kolPendingMarkets.length > 0) {
+          console.log(`  ⏭️  ${kol.name} already has ${kolPendingMarkets.length} pending market(s), skipping...`);
           continue;
         }
 

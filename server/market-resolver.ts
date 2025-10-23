@@ -720,6 +720,57 @@ export class MarketResolver {
       console.log("Auto-resolution stopped");
     }
   }
+
+  async resolveAllMarkets(): Promise<MarketResolution[]> {
+    if (this.isResolving) {
+      console.log("Resolution already in progress, skipping...");
+      return [];
+    }
+
+    this.isResolving = true;
+    console.log("Force resolving ALL unresolved markets...");
+
+    let successCount = 0;
+    let failureCount = 0;
+    const resolutions: MarketResolution[] = [];
+
+    try {
+      let markets;
+      try {
+        markets = await storage.getAllMarketsWithKols();
+      } catch (error) {
+        console.error("Critical error: Failed to fetch markets from storage:", error);
+        return [];
+      }
+
+      for (const market of markets) {
+        try {
+          if (market.isLive && market.outcome === "pending") {
+            console.log(`Force resolving market: ${market.title} (${market.id})`);
+            
+            const resolution = await this.resolveMarket(market);
+            if (resolution) {
+              resolutions.push(resolution);
+              successCount++;
+            } else {
+              failureCount++;
+            }
+          }
+        } catch (error) {
+          failureCount++;
+          console.error(`Error resolving market ${market.id}:`, error);
+        }
+      }
+
+      console.log(`Force resolution completed: ${successCount} successful, ${failureCount} failed`);
+      return resolutions;
+    } catch (error) {
+      console.error("Unexpected error in force resolution:", error);
+      return [];
+    } finally {
+      this.isResolving = false;
+    }
+  }
 }
 
 export const marketResolver = new MarketResolver();
