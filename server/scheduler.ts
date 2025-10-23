@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { KolscanScraperService } from './kolscan-scraper-service';
+import { MarketGeneratorService } from './market-generator-service';
 import { dbStorage as storage } from './db-storage';
 import { metricsUpdater } from './metrics-updater';
 import { marketResolver } from './market-resolver';
@@ -14,6 +15,7 @@ interface SchedulerConfig {
 
 export class Scheduler {
   private kolscanService: KolscanScraperService;
+  private marketGenerator: MarketGeneratorService;
   private scrapingTask: ScheduledTask | null = null;
   private marketGenerationTask: ScheduledTask | null = null;
   
@@ -27,6 +29,7 @@ export class Scheduler {
 
   constructor() {
     this.kolscanService = new KolscanScraperService(storage);
+    this.marketGenerator = new MarketGeneratorService();
   }
 
   async performScraping(): Promise<{ success: boolean; scraped: number; saved: number; error?: string }> {
@@ -64,10 +67,31 @@ export class Scheduler {
     console.log('='.repeat(70));
     
     try {
-      const kols = await storage.getAllKols();
-      const scrapedKols = kols.filter(kol => kol.scrapedFromKolscan);
+      const allKols = await storage.getAllKols();
+      const kolsWithScrapedData = allKols.filter(kol => kol.scrapedFromKolscan && kol.kolscanRank);
       
-      const created = await this.kolscanService.generateMarkets(scrapedKols);
+      if (kolsWithScrapedData.length === 0) {
+        console.log('⚠️  No scraped KOLs found. Run scraping first or seed demo data.');
+        console.log('='.repeat(70) + '\n');
+        return {
+          success: true,
+          created: 0,
+        };
+      }
+      
+      const scrapedKols = kolsWithScrapedData.map(kol => ({
+        username: kol.name,
+        rank: kol.kolscanRank?.toString() || '?',
+        xHandle: kol.handle,
+        winsLosses: kol.kolscanWins != null && kol.kolscanLosses != null 
+          ? `${kol.kolscanWins}/${kol.kolscanLosses}` 
+          : null,
+        solGain: kol.kolscanSolGain || null,
+        usdGain: kol.kolscanUsdGain || null,
+      }));
+      
+      const result = await this.marketGenerator.generateMarkets(scrapedKols, this.config.marketGenerationCount);
+      const created = result.length;
       console.log('='.repeat(70));
       console.log(`MARKET GENERATION COMPLETED: ${created} markets created`);
       console.log('='.repeat(70) + '\n');

@@ -9,6 +9,13 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 **Last Updated**: October 23, 2025
 
 ## Recent Changes
+- **October 23, 2025**: Market generation system fixes and documentation
+  - **Fixed Market Diversity**: Updated scheduler to use `MarketGeneratorService` instead of simple SOL gain generator
+  - **9+ Market Types**: Now generates diverse markets (rank flippening, profit streak, follower growth, etc.)
+  - **Comprehensive Documentation**: Added detailed market generation system docs in replit.md
+  - **Admin Endpoint**: `/api/admin/reset-markets` now generates diverse market types
+  - **Smart KOL Selection**: Prevents duplicate market types for each KOL
+
 - **October 23, 2025**: Kolscan.io scraping integration
   - **Web Scraping**: Integrated Puppeteer-based scraper for kolscan.io leaderboard data
   - **Chromium Configuration**: Configured system Chromium for Replit environment with fallback to environment variable
@@ -34,6 +41,62 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
   - Added WebSocket support for real-time market updates
   - Implemented bonding curve pricing mechanism
   - Created mock KolScan data with 6 KOLs and markets
+
+## Market Generation System
+
+### Overview
+The platform uses a sophisticated market generation system that creates diverse prediction markets based on KOL data from kolscan.io. Markets are automatically generated and resolved based on real-world performance metrics.
+
+### Key Files for Market Generation
+1. **`server/market-generator-service.ts`** - PRIMARY MARKET GENERATOR
+   - Generates 9+ diverse market types with intelligent KOL selection
+   - Used by scheduler for daily market generation
+   - Prevents duplicate market types per KOL
+   - Creates both solo markets (single KOL) and head-to-head markets (KOL vs KOL)
+
+2. **`server/kolscan-scraper-service.ts`** - SIMPLE GENERATOR (Legacy)
+   - Only generates basic "KOL to gain +X SOL" markets
+   - Should NOT be used for market generation
+   - Kept for backward compatibility with scraping flow
+
+3. **`server/scheduler.ts`** - AUTOMATED SCHEDULER
+   - Runs market generation daily at 3 AM
+   - Uses `MarketGeneratorService.generateDiverseMarkets()` for variety
+   - Configurable market count (default: 5 per day)
+
+4. **`server/market-resolver.ts`** - MARKET RESOLUTION
+   - Resolves expired markets based on kolscan.io data
+   - Evaluates outcomes for all market types
+   - Settles bets and updates user balances
+
+5. **`server/routes.ts`** - API ENDPOINTS
+   - `/api/admin/reset-markets` - Resolve all markets and generate new ones
+   - `/api/admin/generate-markets` - Manually trigger market generation
+   - Both use the proper `MarketGeneratorService`
+
+### Market Types Available
+The `MarketGeneratorService` creates 9+ different market types:
+
+**Solo Markets (Single KOL):**
+1. **Profit Streak** - Will KOL maintain positive USD gain?
+2. **Top Rank Maintain** - Will top-ranked KOL stay in top position?
+3. **Streak Continuation** - Will KOL's winning streak continue?
+4. **Rank Improvement** - Will KOL improve their rank?
+5. **Win/Loss Ratio Maintain** - Will KOL maintain their win rate?
+6. **Follower Growth** - Will KOL gain X followers? (requires Twitter API)
+
+**Head-to-Head Markets (KOL vs KOL):**
+7. **Rank Flippening** - Will KOL A rank higher than KOL B?
+8. **SOL Gain Flippening** - Who will have higher SOL gains?
+9. **USD Gain Flippening** - Who will have higher USD gains?
+10. **Win Rate Flippening** - Who will have better win rate?
+
+### Important Notes
+- **ALWAYS use `MarketGeneratorService`** for diverse markets
+- **NEVER use `KolscanScraperService.generateMarkets()`** - it only creates basic SOL gain markets
+- The scheduler has been updated to use the correct service (October 23, 2025)
+- Markets automatically resolve based on scraped kolscan.io data
+- Each KOL gets variety - won't receive duplicate market types
 
 ## Project Architecture
 

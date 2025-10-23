@@ -440,15 +440,14 @@ export class MarketGeneratorService {
     return { market, metadata };
   }
 
-  async generateMarkets(count: number = 5): Promise<{ marketId: string; title: string; type: string }[]> {
-    console.log(`🎯 Generating ${count} diverse markets from scraped KOL data...`);
+  async generateMarkets(kolData: ScrapedKol[], count: number = 5): Promise<{ marketId: string; title: string; type: string }[]> {
+    console.log(`🎯 Generating ${count} diverse markets from ${kolData.length} scraped KOLs...`);
 
-    const kolData = await dbStorage.getLatestScrapedKols(50);
     if (kolData.length < 2) {
       throw new Error('Need at least 2 scraped KOLs to generate markets. Run scraper first!');
     }
 
-    console.log(`📊 Loaded ${kolData.length} KOLs from latest scrape`);
+    console.log(`📊 Processing ${kolData.length} KOLs for market generation`);
 
     // Get existing active markets to track what's already been created
     const existingMarkets = await dbStorage.getAllMarkets();
