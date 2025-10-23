@@ -45,6 +45,25 @@ export interface IStorage {
   getMarketBets(marketId: string): Promise<Bet[]>;
   createBet(bet: InsertBet): Promise<Bet>;
   updateBetStatus(id: string, status: string, profit?: string): Promise<void>;
+  
+  // Transactional bet placement - atomically executes all bet-related updates
+  placeBetTransaction(params: {
+    bet: InsertBet;
+    userId: string;
+    marketId: string;
+    position: string;
+    shares: number;
+    action: string;
+    newBalance: string;
+    totalBets: number;
+    totalWins: number;
+    totalProfit: string;
+    yesPool: string;
+    noPool: string;
+    yesPrice: string;
+    noPrice: string;
+    newVolume: string;
+  }): Promise<Bet>;
 
   // Position methods
   getUserPosition(userId: string, marketId: string, position: string): Promise<Position | undefined>;
@@ -451,6 +470,34 @@ export class MemStorage implements IStorage {
       }
       this.bets.set(id, bet);
     }
+  }
+
+  // Transaction-like bet placement for MemStorage (not truly atomic but maintains order)
+  async placeBetTransaction(params: {
+    bet: InsertBet;
+    userId: string;
+    marketId: string;
+    position: string;
+    shares: number;
+    action: string;
+    newBalance: string;
+    totalBets: number;
+    totalWins: number;
+    totalProfit: string;
+    yesPool: string;
+    noPool: string;
+    yesPrice: string;
+    noPrice: string;
+    newVolume: string;
+  }): Promise<Bet> {
+    // Note: MemStorage doesn't support true transactions, but we execute in order
+    const createdBet = await this.createBet(params.bet);
+    await this.updateUserPosition(params.userId, params.marketId, params.position, params.shares, params.action);
+    await this.updateUserBalance(params.userId, params.newBalance);
+    await this.updateUserStats(params.userId, params.totalBets, params.totalWins, params.totalProfit);
+    await this.updateMarketPools(params.marketId, params.yesPool, params.noPool, params.yesPrice, params.noPrice);
+    await this.updateMarketVolume(params.marketId, params.newVolume);
+    return createdBet;
   }
 
   // Position methods

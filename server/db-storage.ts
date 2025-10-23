@@ -214,6 +214,106 @@ export class DbStorage implements IStorage {
     }
   }
 
+  // Transactional bet placement - all operations succeed or all fail
+  async placeBetTransaction(params: {
+    bet: InsertBet;
+    userId: string;
+    marketId: string;
+    position: string;
+    shares: number;
+    action: string;
+    newBalance: string;
+    totalBets: number;
+    totalWins: number;
+    totalProfit: string;
+    yesPool: string;
+    noPool: string;
+    yesPrice: string;
+    noPrice: string;
+    newVolume: string;
+  }): Promise<Bet> {
+    return await db.transaction(async (tx) => {
+      // 1. Create the bet
+      const [createdBet] = await tx.insert(bets).values(params.bet).returning();
+
+      // 2. Update user position
+      const existingPosition = await tx
+        .select()
+        .from(positions)
+        .where(
+          sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
+        )
+        .limit(1);
+
+      if (existingPosition.length > 0) {
+        const pos = existingPosition[0];
+        const currentShares = parseFloat(pos.shares);
+        const currentAvgPrice = parseFloat(pos.averagePrice);
+        
+        if (params.action === "buy") {
+          const newShares = currentShares + params.shares;
+          const newAvgPrice = ((currentShares * currentAvgPrice) + (params.shares * parseFloat(params.bet.price))) / newShares;
+          
+          await tx
+            .update(positions)
+            .set({
+              shares: newShares.toFixed(2),
+              averagePrice: newAvgPrice.toFixed(4),
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, pos.id));
+        } else {
+          await tx
+            .update(positions)
+            .set({
+              shares: Math.max(0, currentShares - params.shares).toFixed(2),
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, pos.id));
+        }
+      } else if (params.action === "buy") {
+        // Create new position
+        await tx.insert(positions).values({
+          userId: params.userId,
+          marketId: params.marketId,
+          position: params.position,
+          shares: params.shares.toFixed(2),
+          averagePrice: params.bet.price,
+        });
+      }
+
+      // 3. Update user balance
+      await tx
+        .update(users)
+        .set({ balance: params.newBalance })
+        .where(eq(users.id, params.userId));
+
+      // 4. Update user stats
+      await tx
+        .update(users)
+        .set({
+          totalBets: params.totalBets,
+          totalWins: params.totalWins,
+          totalProfit: params.totalProfit,
+        })
+        .where(eq(users.id, params.userId));
+
+      // 5. Update market pools and prices
+      await tx
+        .update(markets)
+        .set({
+          yesPool: params.yesPool,
+          noPool: params.noPool,
+          yesPrice: params.yesPrice,
+          noPrice: params.noPrice,
+          totalVolume: params.newVolume,
+        })
+        .where(eq(markets.id, params.marketId));
+
+      return createdBet;
+    });
+  }
+
   // Leaderboard
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
     const result = await db

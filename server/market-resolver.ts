@@ -12,6 +12,8 @@ export interface MarketResolution {
 export class MarketResolver {
   private resolutionInterval: NodeJS.Timeout | null = null;
   private isResolving = false;
+  private consecutiveFailures = 0;
+  private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
   async resolveExpiredMarkets(): Promise<MarketResolution[]> {
     if (this.isResolving) {
@@ -22,33 +24,81 @@ export class MarketResolver {
     this.isResolving = true;
     console.log("Checking for expired markets...");
 
+    let successCount = 0;
+    let failureCount = 0;
+    const resolutions: MarketResolution[] = [];
+
     try {
-      const markets = await storage.getAllMarketsWithKols();
+      let markets;
+      try {
+        markets = await storage.getAllMarketsWithKols();
+      } catch (error) {
+        console.error("Critical error: Failed to fetch markets from storage:", error);
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.MAX_CONSECUTIVE_FAILURES) {
+          console.error(`ALERT: Market resolver has failed ${this.consecutiveFailures} times consecutively. Manual intervention may be required.`);
+        }
+        return [];
+      }
+
       const now = new Date();
-      const resolutions: MarketResolution[] = [];
 
       for (const market of markets) {
-        const resolvesAt = new Date(market.resolvesAt);
-        
-        if (market.isLive && market.outcome === "pending" && resolvesAt <= now) {
-          console.log(`Resolving market: ${market.title}`);
-          
-          const resolution = await this.resolveMarket(market);
-          if (resolution) {
-            resolutions.push(resolution);
+        try {
+          // Validate market data
+          if (!market.resolvesAt) {
+            console.warn(`Market ${market.id} has no resolution date, skipping`);
+            continue;
           }
+
+          const resolvesAt = new Date(market.resolvesAt);
+          
+          // Check if date is valid
+          if (isNaN(resolvesAt.getTime())) {
+            console.error(`Market ${market.id} has invalid resolution date: ${market.resolvesAt}`);
+            continue;
+          }
+          
+          if (market.isLive && market.outcome === "pending" && resolvesAt <= now) {
+            console.log(`Resolving market: ${market.title} (${market.id})`);
+            
+            const resolution = await this.resolveMarket(market);
+            if (resolution) {
+              resolutions.push(resolution);
+              successCount++;
+            } else {
+              failureCount++;
+            }
+          }
+        } catch (error) {
+          failureCount++;
+          console.error(`Error resolving market ${market.id}:`, error);
+          // Continue with other markets even if one fails
         }
       }
 
       if (resolutions.length > 0) {
-        console.log(`Resolved ${resolutions.length} markets`);
+        console.log(`Market resolution completed: ${successCount} successful, ${failureCount} failed`);
+        this.consecutiveFailures = 0;
       } else {
         console.log("No markets ready for resolution");
       }
 
+      if (failureCount > 0 && successCount === 0 && markets.length > 0) {
+        this.consecutiveFailures++;
+      } else {
+        this.consecutiveFailures = 0;
+      }
+
+      if (this.consecutiveFailures >= this.MAX_CONSECUTIVE_FAILURES) {
+        console.error(`ALERT: Market resolver has failed ${this.consecutiveFailures} times consecutively. Stopping automatic resolution.`);
+        this.stopAutoResolve();
+      }
+
       return resolutions;
     } catch (error) {
-      console.error("Error resolving markets:", error);
+      console.error("Unexpected error in market resolution:", error);
+      this.consecutiveFailures++;
       return [];
     } finally {
       this.isResolving = false;
@@ -57,17 +107,67 @@ export class MarketResolver {
 
   private async resolveMarket(market: Market & { kol: Kol }): Promise<MarketResolution | null> {
     try {
-      const latestMetrics = await socialMediaClient.fetchKolMetrics(market.kol);
+      // Validate market and KOL data
+      if (!market.id || !market.kol || !market.kol.id) {
+        console.error(`Invalid market data for resolution:`, { marketId: market.id, kolId: market.kol?.id });
+        return null;
+      }
+
+      if (!market.title) {
+        console.error(`Market ${market.id} has no title - cannot determine outcome`);
+        return null;
+      }
+
+      let latestMetrics;
+      try {
+        latestMetrics = await socialMediaClient.fetchKolMetrics(market.kol);
+      } catch (error) {
+        console.error(`Failed to fetch metrics for KOL ${market.kol.name} (market ${market.id}):`, error);
+        return null;
+      }
+
+      // Validate metrics before using them
+      if (!latestMetrics) {
+        console.error(`No metrics returned for KOL ${market.kol.name}`);
+        return null;
+      }
+
+      if (typeof latestMetrics.followers !== 'number' || typeof latestMetrics.engagementRate !== 'number') {
+        console.error(`Invalid metrics data for KOL ${market.kol.name}:`, latestMetrics);
+        return null;
+      }
+
+      if (isNaN(latestMetrics.followers) || !isFinite(latestMetrics.followers)) {
+        console.error(`Invalid follower count for KOL ${market.kol.name}: ${latestMetrics.followers}`);
+        return null;
+      }
+
+      if (isNaN(latestMetrics.engagementRate) || !isFinite(latestMetrics.engagementRate)) {
+        console.error(`Invalid engagement rate for KOL ${market.kol.name}: ${latestMetrics.engagementRate}`);
+        return null;
+      }
       
       const outcome = this.determineOutcome(market, market.kol, latestMetrics);
       const reason = this.generateReason(market, market.kol, latestMetrics, outcome);
 
-      await storage.updateMarket(market.id, {
-        outcome: outcome,
-        isLive: false,
-      });
+      try {
+        await storage.updateMarket(market.id, {
+          outcome: outcome,
+          isLive: false,
+        });
+      } catch (error) {
+        console.error(`Failed to update market ${market.id} outcome:`, error);
+        return null;
+      }
 
-      const settledBets = await this.settleBets(market.id, outcome);
+      let settledBets = 0;
+      try {
+        settledBets = await this.settleBets(market.id, outcome);
+      } catch (error) {
+        console.error(`Failed to settle bets for market ${market.id}:`, error);
+        // Market is marked as resolved but bets failed to settle
+        // Log the error but still return the resolution
+      }
 
       return {
         marketId: market.id,
@@ -76,7 +176,7 @@ export class MarketResolver {
         settledBets,
       };
     } catch (error) {
-      console.error(`Error resolving market ${market.id}:`, error);
+      console.error(`Unexpected error resolving market ${market.id}:`, error);
       return null;
     }
   }
