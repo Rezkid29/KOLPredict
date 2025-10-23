@@ -26,6 +26,11 @@ The platform is built with a focus on real-time data, automated market dynamics,
 - **Framework**: Express.js with TypeScript
 - **Storage**: PostgreSQL via Drizzle ORM (with MemStorage fallback for development)
 - **Real-time**: WebSocket server for broadcasting market and bet updates
+- **Blockchain**: Solana integration with custodial wallet system
+    - **Hot Wallet**: Platform-managed wallet for all user deposits/withdrawals
+    - **Deposit Monitor**: Runs every 10 seconds, monitors on-chain transactions via WebSocket
+    - **Withdrawal Processor**: Runs every 5 seconds, processes pending withdrawals with limits and validation
+    - **Network**: Devnet for testing, supports mainnet-beta for production
 - **Background Tasks**:
     - **Metrics Updater**: Runs every 30 minutes to fetch and store KOL metrics.
     - **Market Resolver**: Runs every 5 minutes to resolve expired markets, calculate outcomes, and settle bets.
@@ -48,6 +53,12 @@ The platform is built with a focus on real-time data, automated market dynamics,
 - **Real-time Updates & Notifications**: WebSocket-driven price updates, bet notifications, and market resolution toasts.
 - **Automated Market Resolution**: Scheduled task to evaluate market outcomes, settle bets, and update user balances.
 - **Kolscan.io Integration**: Daily scraping of kolscan.io leaderboard to update KOL data and auto-generate markets.
+- **Solana Wallet System**: 
+    - Custodial hot wallet managing all user deposits and withdrawals
+    - Real-time deposit monitoring via Solana WebSocket
+    - Automated withdrawal processing with validation and limits
+    - Platform fee collection (2-5%) on all bets
+    - Transaction history tracking and audit trail
 
 ### Design System
 - **Colors**: Deep blue-grey background, vibrant purple primary, mint green for success, coral red for destructive, amber for warning.
@@ -59,3 +70,40 @@ The platform is built with a focus on real-time data, automated market dynamics,
 - **kolscan.io**: External website scraped daily for KOL performance data.
 - **Twitter API**: Used for real-time KOL metrics (e.g., follower counts).
 - **Puppeteer**: Node.js library for web scraping kolscan.io.
+- **Solana**: Blockchain integration for deposits/withdrawals via @solana/web3.js.
+
+## Recent Changes (October 23, 2025)
+
+### Solana Integration - Backend Complete
+Added complete Solana blockchain integration for cryptocurrency deposits and withdrawals:
+
+**Database Schema (shared/schema.ts)**:
+- Extended `users` table with `solanaAddress` (user's wallet) and `depositAddress` (hot wallet) fields
+- Added `solanaDeposits` table: Track deposits with status (pending/confirmed/failed), confirmations, amounts
+- Added `solanaWithdrawals` table: Track withdrawal requests with processing status and signatures
+- Added `platformFees` table: Track all platform fees collected from bets
+
+**Core Services (server/)**:
+- `solana-wallet.ts`: Hot wallet management, SOL transfers, balance checking
+- `solana-deposit-monitor.ts`: WebSocket-based deposit monitoring (runs every 10 seconds)
+- `solana-withdrawal-processor.ts`: Queue-based withdrawal processing (runs every 5 seconds)
+- `db-storage.ts`: Added 13 new methods for Solana operations (deposits, withdrawals, fees)
+
+**API Endpoints (server/routes.ts)**:
+- `GET /api/solana/deposit-address`: Generate unique deposit address per user
+- `POST /api/solana/withdraw`: Request withdrawal (validates balance and limits)
+- `GET /api/solana/deposits`: View user's deposit history
+- `GET /api/solana/withdrawals`: View user's withdrawal history
+- `GET /api/solana/balance`: Check hot wallet balance
+- `GET /api/solana/platform-fees`: View total platform fees collected
+
+**Configuration**:
+- Environment variable `SOLANA_HOT_WALLET_PRIVATE_KEY` for production wallet
+- Auto-generates temporary hot wallet for testing if not provided
+- Uses devnet by default, supports mainnet-beta for production
+
+**Next Steps**:
+- Platform fee collection on bet placement (2-5% configurable)
+- Frontend wallet dashboard with deposit/withdrawal UI
+- Update betting interface to use SOL amounts instead of points
+- Add notification system for deposit confirmations
