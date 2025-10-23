@@ -53,6 +53,18 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                 </Button>
               </div>
             </Link>
+            <Link href="/wallet">
+              <div data-testid="link-wallet">
+                <Button 
+                  variant={location === "/wallet" ? "secondary" : "ghost"} 
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Wallet
+                </Button>
+              </div>
+            </Link>
             <Link href="/leaderboard">
               <div data-testid="link-leaderboard">
                 <Button 
@@ -140,6 +152,17 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                     >
                       <BarChart3 className="h-4 w-4" />
                       Portfolio
+                    </Button>
+                  </Link>
+                  <Link href="/wallet">
+                    <Button 
+                      variant={location === "/wallet" ? "secondary" : "ghost"} 
+                      className="w-full justify-start gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                      data-testid="mobile-link-wallet"
+                    >
+                      <Wallet className="h-4 w-4" />
+                      Wallet
                     </Button>
                   </Link>
                   <Link href="/leaderboard">

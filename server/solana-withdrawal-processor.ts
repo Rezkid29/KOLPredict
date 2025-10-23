@@ -10,9 +10,11 @@ export class SolanaWithdrawalProcessor {
   private storage: IStorage;
   private isProcessing: boolean = false;
   private processingInterval: NodeJS.Timeout | null = null;
+  private broadcastCallback?: (data: any) => void;
 
-  constructor(storage: IStorage) {
+  constructor(storage: IStorage, broadcastCallback?: (data: any) => void) {
     this.storage = storage;
+    this.broadcastCallback = broadcastCallback;
   }
 
   async start() {
@@ -100,6 +102,22 @@ export class SolanaWithdrawalProcessor {
       console.log(`✅ Withdrawal completed: ${amount} SOL`);
       console.log(`   Signature: ${signature}`);
       console.log(`   New user balance: ${newBalance} SOL`);
+      
+      // Broadcast withdrawal completion via WebSocket
+      if (this.broadcastCallback) {
+        this.broadcastCallback({
+          type: 'WITHDRAWAL_COMPLETED',
+          withdrawal: {
+            id: withdrawal.id,
+            userId: withdrawal.userId,
+            amount: withdrawal.amount,
+            destinationAddress: withdrawal.destinationAddress,
+            signature,
+            status: 'completed'
+          },
+          newBalance
+        });
+      }
     } catch (error: any) {
       console.error(`❌ Error processing withdrawal ${withdrawal.id}:`, error);
       
@@ -109,6 +127,21 @@ export class SolanaWithdrawalProcessor {
         undefined,
         error.message || "Unknown error"
       );
+      
+      // Broadcast withdrawal failure via WebSocket
+      if (this.broadcastCallback) {
+        this.broadcastCallback({
+          type: 'WITHDRAWAL_FAILED',
+          withdrawal: {
+            id: withdrawal.id,
+            userId: withdrawal.userId,
+            amount: withdrawal.amount,
+            destinationAddress: withdrawal.destinationAddress,
+            status: 'failed',
+            error: error.message || "Unknown error"
+          }
+        });
+      }
     }
   }
 
@@ -201,6 +234,6 @@ export class SolanaWithdrawalProcessor {
   }
 }
 
-export function createWithdrawalProcessor(storage: IStorage): SolanaWithdrawalProcessor {
-  return new SolanaWithdrawalProcessor(storage);
+export function createWithdrawalProcessor(storage: IStorage, broadcastCallback?: (data: any) => void): SolanaWithdrawalProcessor {
+  return new SolanaWithdrawalProcessor(storage, broadcastCallback);
 }

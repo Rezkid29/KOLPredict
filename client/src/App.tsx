@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import Home from "@/pages/home";
 import Portfolio from "@/pages/portfolio";
 import Leaderboard from "@/pages/leaderboard";
+import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/leaderboard" component={Leaderboard} />
+      <Route path="/wallet" component={Wallet} />
       <Route component={NotFound} />
     </Switch>
   );

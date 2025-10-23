@@ -10,9 +10,11 @@ export class SolanaDepositMonitor {
   private isMonitoring: boolean = false;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private processedSignatures: Set<string> = new Set();
+  private broadcastCallback?: (data: any) => void;
 
-  constructor(storage: IStorage) {
+  constructor(storage: IStorage, broadcastCallback?: (data: any) => void) {
     this.storage = storage;
+    this.broadcastCallback = broadcastCallback;
   }
 
   async start() {
@@ -93,6 +95,22 @@ export class SolanaDepositMonitor {
         console.log(`✅ Deposit confirmed: ${deposit.amount} SOL for user ${deposit.userId}`);
         console.log(`   Signature: ${deposit.signature}`);
         console.log(`   New balance: ${newBalance} SOL`);
+        
+        // Broadcast deposit confirmation via WebSocket
+        if (this.broadcastCallback) {
+          this.broadcastCallback({
+            type: 'DEPOSIT_CONFIRMED',
+            deposit: {
+              id: deposit.id,
+              userId: deposit.userId,
+              amount: deposit.amount,
+              signature: deposit.signature,
+              status: 'confirmed',
+              confirmations
+            },
+            newBalance
+          });
+        }
       } else {
         await this.storage.updateDepositStatus(deposit.id, "pending", confirmations);
         console.log(`⏳ Deposit ${deposit.id} has ${confirmations}/${REQUIRED_CONFIRMATIONS} confirmations`);
@@ -150,6 +168,6 @@ export class SolanaDepositMonitor {
   }
 }
 
-export function createDepositMonitor(storage: IStorage): SolanaDepositMonitor {
-  return new SolanaDepositMonitor(storage);
+export function createDepositMonitor(storage: IStorage, broadcastCallback?: (data: any) => void): SolanaDepositMonitor {
+  return new SolanaDepositMonitor(storage, broadcastCallback);
 }

@@ -38,8 +38,13 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
   const betAmount = parseFloat(amount) || 0;
   const currentShares = position === "YES" ? userYesShares : userNoShares;
 
+  // Platform fee calculation (2-5% based on PLATFORM_FEE_PERCENTAGE env var, default 2%)
+  const PLATFORM_FEE_RATE = 0.02; // 2% default
+  const platformFee = action === "buy" ? betAmount * PLATFORM_FEE_RATE : 0;
+  const amountAfterFee = betAmount - platformFee;
+
   // Calculate shares (simplified for UI - server will use AMM formula)
-  const estimatedShares = betAmount > 0 ? betAmount / currentPrice : 0;
+  const estimatedShares = amountAfterFee > 0 ? amountAfterFee / currentPrice : 0;
   
   // Potential payout if position wins (each share pays $1.00)
   const potentialPayout = action === "buy" ? estimatedShares * 1.0 : betAmount;
@@ -211,6 +216,22 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
                 <span className="text-muted-foreground">Est. Shares</span>
                 <span className="font-semibold tabular-nums">{estimatedShares.toFixed(2)}</span>
               </div>
+            )}
+            {action === "buy" && platformFee > 0 && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Platform Fee (2%)</span>
+                  <span className="font-semibold tabular-nums text-muted-foreground" data-testid="text-platform-fee">
+                    ${platformFee.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Amount After Fee</span>
+                  <span className="font-semibold tabular-nums" data-testid="text-amount-after-fee">
+                    ${amountAfterFee.toFixed(2)}
+                  </span>
+                </div>
+              </>
             )}
             <div className="h-px bg-border" />
             <div className="flex justify-between">

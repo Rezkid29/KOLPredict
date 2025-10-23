@@ -12,8 +12,9 @@ import { createDepositMonitor } from "./solana-deposit-monitor";
 import { createWithdrawalProcessor } from "./solana-withdrawal-processor";
 import { addDays } from "date-fns";
 
-const depositMonitor = createDepositMonitor(storage);
-const withdrawalProcessor = createWithdrawalProcessor(storage);
+// We'll initialize these after the broadcast function is created
+let depositMonitor: ReturnType<typeof createDepositMonitor>;
+let withdrawalProcessor: ReturnType<typeof createWithdrawalProcessor>;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -57,6 +58,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('WebSocket client disconnected');
     });
   });
+
+  // Initialize deposit monitor and withdrawal processor with broadcast callback
+  depositMonitor = createDepositMonitor(storage, broadcast);
+  withdrawalProcessor = createWithdrawalProcessor(storage, broadcast);
 
   // Constant Product AMM (Automated Market Maker) calculations
   // In this system: yesPrice + noPrice = 1.00
