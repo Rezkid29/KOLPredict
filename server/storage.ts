@@ -10,6 +10,9 @@ import {
   type ScrapedKol, type InsertScrapedKol,
   type FollowerCacheEntry, type InsertFollowerCache,
   type MarketMetadata, type InsertMarketMetadata,
+  type SolanaDeposit, type InsertSolanaDeposit,
+  type SolanaWithdrawal, type InsertSolanaWithdrawal,
+  type PlatformFee, type InsertPlatformFee,
   type LeaderboardEntry,
   type PriceHistoryPoint
 } from "@shared/schema";
@@ -23,6 +26,8 @@ export interface IStorage {
   getUserByTwitterId(twitterId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserBalance(id: string, balance: string): Promise<void>;
+  updateUserSolanaBalance(id: string, solanaBalance: string): Promise<void>;
+  updateUserDepositAddress(id: string, address: string): Promise<void>;
   updateUserStats(id: string, totalBets: number, totalWins: number, totalProfit: string): Promise<void>;
   
   // KOL methods
@@ -110,6 +115,23 @@ export interface IStorage {
   createMarketMetadata(metadata: InsertMarketMetadata): Promise<MarketMetadata>;
   getMarketMetadata(marketId: string): Promise<MarketMetadata | undefined>;
   getAllMarketMetadata(): Promise<MarketMetadata[]>;
+  
+  // Solana deposits
+  createDeposit(deposit: InsertSolanaDeposit): Promise<SolanaDeposit>;
+  getPendingDeposits(): Promise<SolanaDeposit[]>;
+  getUserDeposits(userId: string, limit?: number): Promise<SolanaDeposit[]>;
+  updateDepositStatus(id: string, status: string, confirmations: number): Promise<void>;
+  
+  // Solana withdrawals
+  createWithdrawal(withdrawal: InsertSolanaWithdrawal): Promise<SolanaWithdrawal>;
+  getPendingWithdrawals(): Promise<SolanaWithdrawal[]>;
+  getUserWithdrawals(userId: string, limit?: number): Promise<SolanaWithdrawal[]>;
+  updateWithdrawalStatus(id: string, status: string, signature?: string, error?: string): Promise<void>;
+  
+  // Platform fees
+  createPlatformFee(fee: InsertPlatformFee): Promise<PlatformFee>;
+  getTotalPlatformFees(): Promise<string>;
+  getUserPlatformFees(userId: string): Promise<PlatformFee[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -121,6 +143,9 @@ export class MemStorage implements IStorage {
   private comments: Map<string, Comment>;
   private scrapedKols: ScrapedKol[];
   private followerCache: Map<string, FollowerCacheEntry>;
+  private solanaDeposits: Map<string, SolanaDeposit>;
+  private solanaWithdrawals: Map<string, SolanaWithdrawal>;
+  private platformFees: Map<string, PlatformFee>;
 
   constructor() {
     this.users = new Map();
@@ -131,6 +156,9 @@ export class MemStorage implements IStorage {
     this.comments = new Map();
     this.scrapedKols = [];
     this.followerCache = new Map();
+    this.solanaDeposits = new Map();
+    this.solanaWithdrawals = new Map();
+    this.platformFees = new Map();
     this.initializeMockData();
   }
 
@@ -145,6 +173,8 @@ export class MemStorage implements IStorage {
       twitterId: null,
       twitterHandle: null,
       balance: "1000.00",
+      solanaDepositAddress: null,
+      solanaBalance: "0.000000000",
       totalBets: 0,
       totalWins: 0,
       totalProfit: "0.00",
@@ -306,6 +336,8 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id,
       balance: "1000.00",
+      solanaDepositAddress: null,
+      solanaBalance: "0.000000000",
       totalBets: 0,
       totalWins: 0,
       totalProfit: "0.00",
@@ -319,6 +351,22 @@ export class MemStorage implements IStorage {
     const user = this.users.get(id);
     if (user) {
       user.balance = balance;
+      this.users.set(id, user);
+    }
+  }
+
+  async updateUserSolanaBalance(id: string, solanaBalance: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.solanaBalance = solanaBalance;
+      this.users.set(id, user);
+    }
+  }
+
+  async updateUserDepositAddress(id: string, address: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.solanaDepositAddress = address;
       this.users.set(id, user);
     }
   }
@@ -858,6 +906,117 @@ export class MemStorage implements IStorage {
 
   async getAllMarketMetadata(): Promise<MarketMetadata[]> {
     return [];
+  }
+
+  // Solana deposits methods
+  async createDeposit(insertDeposit: InsertSolanaDeposit): Promise<SolanaDeposit> {
+    const id = randomUUID();
+    const deposit: SolanaDeposit = {
+      ...insertDeposit,
+      id,
+      status: "pending",
+      confirmations: 0,
+      createdAt: new Date(),
+      confirmedAt: null,
+    };
+    this.solanaDeposits.set(id, deposit);
+    return deposit;
+  }
+
+  async getPendingDeposits(): Promise<SolanaDeposit[]> {
+    return Array.from(this.solanaDeposits.values())
+      .filter((deposit) => deposit.status === "pending")
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getUserDeposits(userId: string, limit: number = 50): Promise<SolanaDeposit[]> {
+    return Array.from(this.solanaDeposits.values())
+      .filter((deposit) => deposit.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async updateDepositStatus(id: string, status: string, confirmations: number): Promise<void> {
+    const deposit = this.solanaDeposits.get(id);
+    if (deposit) {
+      deposit.status = status;
+      deposit.confirmations = confirmations;
+      if (status === "confirmed" && !deposit.confirmedAt) {
+        deposit.confirmedAt = new Date();
+      }
+      this.solanaDeposits.set(id, deposit);
+    }
+  }
+
+  // Solana withdrawals methods
+  async createWithdrawal(insertWithdrawal: InsertSolanaWithdrawal): Promise<SolanaWithdrawal> {
+    const id = randomUUID();
+    const withdrawal: SolanaWithdrawal = {
+      ...insertWithdrawal,
+      id,
+      signature: null,
+      status: "pending",
+      error: null,
+      createdAt: new Date(),
+      processedAt: null,
+    };
+    this.solanaWithdrawals.set(id, withdrawal);
+    return withdrawal;
+  }
+
+  async getPendingWithdrawals(): Promise<SolanaWithdrawal[]> {
+    return Array.from(this.solanaWithdrawals.values())
+      .filter((withdrawal) => withdrawal.status === "pending")
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getUserWithdrawals(userId: string, limit: number = 50): Promise<SolanaWithdrawal[]> {
+    return Array.from(this.solanaWithdrawals.values())
+      .filter((withdrawal) => withdrawal.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async updateWithdrawalStatus(id: string, status: string, signature?: string, error?: string): Promise<void> {
+    const withdrawal = this.solanaWithdrawals.get(id);
+    if (withdrawal) {
+      withdrawal.status = status;
+      if (signature !== undefined) {
+        withdrawal.signature = signature;
+      }
+      if (error !== undefined) {
+        withdrawal.error = error;
+      }
+      if ((status === "completed" || status === "failed") && !withdrawal.processedAt) {
+        withdrawal.processedAt = new Date();
+      }
+      this.solanaWithdrawals.set(id, withdrawal);
+    }
+  }
+
+  // Platform fees methods
+  async createPlatformFee(insertFee: InsertPlatformFee): Promise<PlatformFee> {
+    const id = randomUUID();
+    const fee: PlatformFee = {
+      ...insertFee,
+      id,
+      betId: insertFee.betId ?? null,
+      createdAt: new Date(),
+    };
+    this.platformFees.set(id, fee);
+    return fee;
+  }
+
+  async getTotalPlatformFees(): Promise<string> {
+    const total = Array.from(this.platformFees.values())
+      .reduce((sum, fee) => sum + parseFloat(fee.amount), 0);
+    return total.toFixed(9);
+  }
+
+  async getUserPlatformFees(userId: string): Promise<PlatformFee[]> {
+    return Array.from(this.platformFees.values())
+      .filter((fee) => fee.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 }
 

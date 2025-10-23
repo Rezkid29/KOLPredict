@@ -12,6 +12,8 @@ export const users = pgTable("users", {
   twitterId: text("twitter_id").unique(),
   twitterHandle: text("twitter_handle"),
   balance: decimal("balance", { precision: 10, scale: 2 }).notNull().default("1000.00"),
+  solanaDepositAddress: text("solana_deposit_address").unique(),
+  solanaBalance: decimal("solana_balance", { precision: 18, scale: 9 }).notNull().default("0.000000000"),
   totalBets: integer("total_bets").notNull().default(0),
   totalWins: integer("total_wins").notNull().default(0),
   totalProfit: decimal("total_profit", { precision: 10, scale: 2 }).notNull().default("0.00"),
@@ -151,9 +153,66 @@ export const marketMetadata = pgTable("market_metadata", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const solanaDeposits = pgTable("solana_deposits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  signature: text("signature").notNull().unique(),
+  amount: decimal("amount", { precision: 18, scale: 9 }).notNull(),
+  depositAddress: text("deposit_address").notNull(),
+  status: text("status").notNull().default("pending"),
+  confirmations: integer("confirmations").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  confirmedAt: timestamp("confirmed_at"),
+});
+
+export const solanaWithdrawals = pgTable("solana_withdrawals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  destinationAddress: text("destination_address").notNull(),
+  amount: decimal("amount", { precision: 18, scale: 9 }).notNull(),
+  signature: text("signature").unique(),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
+export const platformFees = pgTable("platform_fees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  betId: varchar("bet_id").references(() => bets.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  amount: decimal("amount", { precision: 18, scale: 9 }).notNull(),
+  feePercentage: decimal("fee_percentage", { precision: 5, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertSolanaDepositSchema = createInsertSchema(solanaDeposits).omit({
+  id: true,
+  createdAt: true,
+  confirmedAt: true,
+  status: true,
+  confirmations: true,
+});
+
+export const insertSolanaWithdrawalSchema = createInsertSchema(solanaWithdrawals).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  status: true,
+  signature: true,
+  error: true,
+});
+
+export const insertPlatformFeeSchema = createInsertSchema(platformFees).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   balance: true,
+  solanaBalance: true,
+  solanaDepositAddress: true,
   totalBets: true,
   totalWins: true,
   totalProfit: true,
@@ -247,6 +306,15 @@ export type FollowerCacheEntry = typeof followerCache.$inferSelect;
 
 export type InsertMarketMetadata = z.infer<typeof insertMarketMetadataSchema>;
 export type MarketMetadata = typeof marketMetadata.$inferSelect;
+
+export type InsertSolanaDeposit = z.infer<typeof insertSolanaDepositSchema>;
+export type SolanaDeposit = typeof solanaDeposits.$inferSelect;
+
+export type InsertSolanaWithdrawal = z.infer<typeof insertSolanaWithdrawalSchema>;
+export type SolanaWithdrawal = typeof solanaWithdrawals.$inferSelect;
+
+export type InsertPlatformFee = z.infer<typeof insertPlatformFeeSchema>;
+export type PlatformFee = typeof platformFees.$inferSelect;
 
 export type MarketWithKol = Market & { kol: Kol };
 export type BetWithMarket = Bet & { market: MarketWithKol };
