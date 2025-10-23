@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserCircle, LogIn, UserPlus, Wallet, User } from "lucide-react";
+import { UserCircle, LogIn, UserPlus, Wallet, User, AlertCircle } from "lucide-react";
 import { SiX } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import bs58 from "bs58";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface AuthModalProps {
   open: boolean;
@@ -16,11 +17,63 @@ interface AuthModalProps {
   onSuccess: (userId: string) => void;
 }
 
+const SOLANA_WALLET_TIMEOUT = 30000; // 30 seconds
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 2000; // 2 seconds
+
+async function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = MAX_RETRY_ATTEMPTS,
+  baseDelay: number = RETRY_DELAY
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      if (error.code === 4001) {
+        throw error;
+      }
+      
+      if (attempt < maxAttempts) {
+        const delayMs = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Attempt ${attempt} failed, retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    )
+  ]);
+}
+
 export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
   const [loginUsername, setLoginUsername] = useState("");
   const [registerUsername, setRegisterUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [walletDetected, setWalletDetected] = useState(true);
   const { toast } = useToast();
+
+  const checkWalletInstalled = () => {
+    const hasWallet = typeof window !== 'undefined' && !!window.solana;
+    setWalletDetected(hasWallet);
+    return hasWallet;
+  };
 
   const handleLogin = async () => {
     if (!loginUsername.trim()) {
@@ -150,74 +203,129 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
   };
 
   const handleSolanaConnect = async () => {
+    if (!checkWalletInstalled()) {
+      toast({
+        title: "Wallet not found",
+        description: "Please install Phantom or another Solana wallet extension and refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
+    let nonce: string | null = null;
+
     try {
-      if (!window.solana) {
-        toast({
-          title: "Wallet not found",
-          description: "Please install Phantom or another Solana wallet extension.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
+      const getNonce = async () => {
+        const nonceResponse = await withTimeout(
+          apiRequest("POST", "/api/auth/solana/nonce", {}),
+          10000,
+          "Request timeout: Failed to get authentication nonce"
+        );
 
-      const nonceResponse = await apiRequest("POST", "/api/auth/solana/nonce", {});
-      if (!nonceResponse.ok) {
-        toast({
-          title: "Error",
-          description: "Failed to initialize authentication. Please try again.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-      const { nonce } = await nonceResponse.json();
+        if (!nonceResponse.ok) {
+          const errorData = await nonceResponse.json().catch(() => ({}));
+          throw new Error(errorData.message || "Failed to initialize authentication");
+        }
 
-      const resp = await window.solana.connect();
+        const data = await nonceResponse.json();
+        return data.nonce;
+      };
+
+      nonce = await retryWithBackoff(getNonce);
+
+      const connectWallet = async () => {
+        return await withTimeout(
+          window.solana!.connect(),
+          SOLANA_WALLET_TIMEOUT,
+          "Wallet connection timeout: Please try again"
+        );
+      };
+
+      const resp = await connectWallet();
       const publicKey = resp.publicKey.toString();
       
       const message = `Sign this message to authenticate with KOL Predict.\n\nWallet: ${publicKey}\nNonce: ${nonce}`;
-      const encodedMessage = new TextEncoder().encode(message);
-      const signedMessage = await window.solana.signMessage(encodedMessage, "utf8");
       
+      const signMessage = async () => {
+        const encodedMessage = new TextEncoder().encode(message);
+        return await withTimeout(
+          window.solana!.signMessage(encodedMessage, "utf8"),
+          SOLANA_WALLET_TIMEOUT,
+          "Signature timeout: Please try signing again"
+        );
+      };
+
+      const signedMessage = await signMessage();
       const signature = bs58.encode(signedMessage.signature);
 
-      const response = await apiRequest("POST", "/api/auth/solana/verify", {
-        publicKey,
-        signature,
-        message,
-        nonce,
-      });
+      const verifySignature = async () => {
+        const response = await withTimeout(
+          apiRequest("POST", "/api/auth/solana/verify", {
+            publicKey,
+            signature,
+            message,
+            nonce,
+          }),
+          15000,
+          "Verification timeout: Please try again"
+        );
 
-      if (response.ok) {
-        const data = await response.json();
-        toast({
-          title: "Wallet connected!",
-          description: `Welcome ${data.username}`,
-        });
-        onSuccess(data.userId);
-        onClose();
-      } else {
-        const data = await response.json();
-        toast({
-          title: "Authentication failed",
-          description: data.message || "Failed to verify wallet signature.",
-          variant: "destructive",
-        });
-      }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          if (response.status === 429) {
+            throw new Error("Too many authentication attempts. Please wait a minute and try again.");
+          }
+          
+          const errorMessage = errorData.message || "Failed to verify wallet signature";
+          const errorCode = errorData.errorCode;
+          
+          if (errorCode) {
+            console.error(`Authentication error [${errorCode}]:`, errorMessage);
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        return response;
+      };
+
+      const response = await retryWithBackoff(verifySignature, 2);
+      const data = await response.json();
+      
+      toast({
+        title: "Wallet connected!",
+        description: `Welcome ${data.username}. You've been given 1000 PTS to start trading.`,
+      });
+      
+      onSuccess(data.userId);
+      onClose();
     } catch (error: any) {
+      console.error("Solana auth error:", error);
+      
       if (error.code === 4001) {
         toast({
           title: "Connection cancelled",
           description: "You cancelled the wallet connection.",
           variant: "destructive",
         });
-      } else {
-        console.error("Solana auth error:", error);
+      } else if (error.message?.includes("timeout") || error.message?.includes("Timeout")) {
         toast({
-          title: "Error",
-          description: "Failed to connect Solana wallet. Please try again.",
+          title: "Connection timeout",
+          description: error.message || "The wallet connection timed out. Please try again.",
+          variant: "destructive",
+        });
+      } else if (error.message?.includes("rate limit") || error.message?.includes("Too many")) {
+        toast({
+          title: "Too many attempts",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Authentication failed",
+          description: error.message || "Failed to connect Solana wallet. Please try again.",
           variant: "destructive",
         });
       }
@@ -313,12 +421,31 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
           <TabsContent value="wallet" className="space-y-4 pt-4">
             <div className="space-y-4">
+              {!walletDetected && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No Solana wallet detected. Please install{" "}
+                    <a 
+                      href="https://phantom.app/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      Phantom
+                    </a>{" "}
+                    or another Solana wallet extension.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="text-sm text-muted-foreground text-center">
                 Connect your Solana wallet to get started
               </div>
+              
               <Button 
                 onClick={handleSolanaConnect} 
-                disabled={loading}
+                disabled={loading || !walletDetected}
                 className="w-full gap-2"
                 variant="default"
                 data-testid="button-solana-connect"
@@ -387,6 +514,9 @@ declare global {
       isPhantom?: boolean;
       connect: () => Promise<{ publicKey: { toString: () => string } }>;
       signMessage: (message: Uint8Array, display: string) => Promise<{ signature: Uint8Array }>;
+      disconnect: () => Promise<void>;
+      on?: (event: string, handler: (args: any) => void) => void;
+      off?: (event: string, handler: (args: any) => void) => void;
     };
   }
 }

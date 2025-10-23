@@ -6,11 +6,12 @@ import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
 import { socialMediaClient } from "./social-api-client";
-import { verifySolanaSignature } from "./solana-auth";
+import { verifySolanaSignature, validateAuthMessage } from "./solana-auth";
 import { solanaWallet } from "./solana-wallet";
 import { createDepositMonitor } from "./solana-deposit-monitor";
 import { createWithdrawalProcessor } from "./solana-withdrawal-processor";
 import { addDays } from "date-fns";
+import rateLimit from "express-rate-limit";
 
 // We'll initialize these after the broadcast function is created
 let depositMonitor: ReturnType<typeof createDepositMonitor>;
@@ -225,21 +226,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Solana wallet authentication - nonce storage (in-memory with 5-minute expiration)
   const solananonces = new Map<string, { timestamp: number }>();
   const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
+  const MAX_NONCE_AGE_FOR_MESSAGE = 10 * 60 * 1000; // 10 minutes - prevents very old signatures
 
   // Clean up expired nonces periodically
-  setInterval(() => {
+  const nonceCleanupInterval = setInterval(() => {
     const now = Date.now();
+    let cleanedCount = 0;
     for (const [nonce, data] of Array.from(solananonces.entries())) {
       if (now - data.timestamp > NONCE_EXPIRATION_MS) {
         solananonces.delete(nonce);
+        cleanedCount++;
       }
+    }
+    if (cleanedCount > 0) {
+      console.log(`Cleaned up ${cleanedCount} expired nonces. Current nonce count: ${solananonces.size}`);
     }
   }, 60000); // Clean up every minute
 
-  app.post("/api/auth/solana/nonce", async (req, res) => {
+  // Clear all nonces on server shutdown (for testing purposes)
+  process.on('SIGTERM', () => {
+    clearInterval(nonceCleanupInterval);
+    solananonces.clear();
+    console.log('Cleared all authentication nonces on shutdown');
+  });
+
+  // Rate limiter for authentication endpoints
+  const authRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // 5 requests per minute per IP
+    message: { message: "Too many authentication attempts. Please try again in a minute." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+      console.warn(`Rate limit exceeded for IP: ${req.ip} on ${req.path}`);
+      res.status(429).json({ 
+        message: "Too many authentication attempts. Please try again in a minute.",
+        retryAfter: 60 
+      });
+    }
+  });
+
+  app.post("/api/auth/solana/nonce", authRateLimiter, async (req, res) => {
     try {
       const nonce = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
       solananonces.set(nonce, { timestamp: Date.now() });
+      console.log(`Generated nonce: ${nonce}, total active nonces: ${solananonces.size}`);
       res.json({ nonce });
     } catch (error) {
       console.error("Nonce generation error:", error);
@@ -247,47 +278,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/solana/verify", async (req, res) => {
+  app.post("/api/auth/solana/verify", authRateLimiter, async (req, res) => {
     try {
       const { publicKey, signature, message, nonce } = req.body;
       
       if (!publicKey || !signature || !message || !nonce) {
+        console.warn("Solana auth attempt with missing fields");
         return res.status(400).json({ 
-          message: "Missing required fields: publicKey, signature, message, nonce" 
+          message: "Missing required fields: publicKey, signature, message, nonce",
+          errorCode: "MISSING_FIELDS"
         });
       }
 
+      // Validate message format includes public key and nonce
+      const messageValidation = validateAuthMessage(message, publicKey, nonce);
+      if (!messageValidation.valid) {
+        console.warn(`Message validation failed: ${messageValidation.error}`);
+        return res.status(400).json({ 
+          message: messageValidation.error,
+          errorCode: messageValidation.errorCode
+        });
+      }
+
+      // Check if nonce exists and is valid
       const nonceData = solananonces.get(nonce);
       if (!nonceData) {
-        return res.status(401).json({ message: "Invalid or expired nonce" });
+        console.warn(`Invalid or expired nonce attempted: ${nonce}`);
+        return res.status(401).json({ 
+          message: "Invalid or expired nonce. Please request a new authentication nonce.",
+          errorCode: "INVALID_NONCE"
+        });
       }
 
-      if (Date.now() - nonceData.timestamp > NONCE_EXPIRATION_MS) {
+      // Check nonce expiration
+      const nonceAge = Date.now() - nonceData.timestamp;
+      if (nonceAge > NONCE_EXPIRATION_MS) {
         solananonces.delete(nonce);
-        return res.status(401).json({ message: "Nonce has expired" });
+        console.warn(`Expired nonce attempted (age: ${nonceAge}ms): ${nonce}`);
+        return res.status(401).json({ 
+          message: "Nonce has expired. Please request a new authentication nonce.",
+          errorCode: "NONCE_EXPIRED"
+        });
       }
 
-      if (!message.includes(nonce)) {
-        return res.status(401).json({ message: "Nonce mismatch in message" });
-      }
-
+      // Delete nonce immediately (single-use)
       solananonces.delete(nonce);
+      console.log(`Nonce consumed: ${nonce}, remaining nonces: ${solananonces.size}`);
 
-      const isValid = verifySolanaSignature(publicKey, signature, message);
+      // Verify Solana signature with comprehensive validation
+      const verificationResult = verifySolanaSignature(publicKey, signature, message);
       
-      if (!isValid) {
-        return res.status(401).json({ message: "Invalid signature" });
+      if (!verificationResult.valid) {
+        console.warn(`Signature verification failed: ${verificationResult.error}, code: ${verificationResult.errorCode}`);
+        return res.status(401).json({ 
+          message: verificationResult.error || "Invalid signature",
+          errorCode: verificationResult.errorCode || "INVALID_SIGNATURE"
+        });
       }
 
+      // Get or create user
       let user = await storage.getUserByWalletAddress(publicKey);
       
       if (!user) {
+        console.log(`Creating new user for wallet: ${publicKey.substring(0, 8)}...`);
         user = await storage.createUser({
           walletAddress: publicKey,
           authProvider: "solana",
           isGuest: false,
           username: `Wallet_${publicKey.substring(0, 8)}`,
         });
+        console.log(`New user created: ${user.id}, username: ${user.username}`);
+      } else {
+        console.log(`Existing user authenticated: ${user.id}, username: ${user.username}`);
       }
       
       res.json({ 
@@ -297,7 +359,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Solana auth error:", error);
-      res.status(500).json({ message: "Failed to authenticate with Solana wallet" });
+      if (error instanceof Error) {
+        console.error("Error stack:", error.stack);
+      }
+      res.status(500).json({ 
+        message: "Failed to authenticate with Solana wallet. Please try again.",
+        errorCode: "SERVER_ERROR"
+      });
     }
   });
 
@@ -577,8 +645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         bet: result.bet,
         priceImpact: result.priceImpact,
-        priceImpactPercent: (result.priceImpact * 100).toFixed(2) + '%',
-        platformFee: result.platformFee
+        priceImpactPercent: (result.priceImpact * 100).toFixed(2) + '%'
       });
     } catch (error) {
       console.error("Error creating bet:", error);
