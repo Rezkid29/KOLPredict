@@ -7,7 +7,13 @@ import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
 import { socialMediaClient } from "./social-api-client";
 import { verifySolanaSignature } from "./solana-auth";
+import { solanaWallet } from "./solana-wallet";
+import { createDepositMonitor } from "./solana-deposit-monitor";
+import { createWithdrawalProcessor } from "./solana-withdrawal-processor";
 import { addDays } from "date-fns";
+
+const depositMonitor = createDepositMonitor(storage);
+const withdrawalProcessor = createWithdrawalProcessor(storage);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -1111,6 +1117,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Solana: Get user's deposit address
+  app.get("/api/solana/deposit-address", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ message: "User ID required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.solanaDepositAddress) {
+        return res.json({ 
+          address: user.solanaDepositAddress,
+          balance: user.solanaBalance
+        });
+      }
+
+      const depositAddress = solanaWallet.generateDepositAddress(userId, 0);
+      await storage.updateUserDepositAddress(userId, depositAddress.toBase58());
+
+      res.json({ 
+        address: depositAddress.toBase58(),
+        balance: user.solanaBalance
+      });
+    } catch (error) {
+      console.error("Error generating deposit address:", error);
+      res.status(500).json({ message: "Failed to generate deposit address" });
+    }
+  });
+
+  // Solana: Record manual deposit (for testing/admin)
+  app.post("/api/solana/record-deposit", async (req, res) => {
+    try {
+      const { userId, signature, depositAddress } = req.body;
+
+      if (!userId || !signature || !depositAddress) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const deposit = await depositMonitor.recordManualDeposit(userId, signature, depositAddress);
+      res.json(deposit);
+    } catch (error: any) {
+      console.error("Error recording deposit:", error);
+      res.status(500).json({ message: error.message || "Failed to record deposit" });
+    }
+  });
+
+  // Solana: Get user's deposit history
+  app.get("/api/solana/deposits", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID required" });
+      }
+
+      const deposits = await storage.getUserDeposits(userId, limit);
+      res.json(deposits);
+    } catch (error) {
+      console.error("Error fetching deposits:", error);
+      res.status(500).json({ message: "Failed to fetch deposits" });
+    }
+  });
+
+  // Solana: Request withdrawal
+  app.post("/api/solana/withdraw", async (req, res) => {
+    try {
+      const { userId, destinationAddress, amount } = req.body;
+
+      if (!userId || !destinationAddress || !amount) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const amountNumber = parseFloat(amount);
+      if (isNaN(amountNumber) || amountNumber <= 0) {
+        return res.status(400).json({ message: "Invalid amount" });
+      }
+
+      const withdrawal = await withdrawalProcessor.requestWithdrawal(
+        userId,
+        destinationAddress,
+        amountNumber
+      );
+
+      res.json(withdrawal);
+    } catch (error: any) {
+      console.error("Error processing withdrawal:", error);
+      res.status(400).json({ message: error.message || "Failed to process withdrawal" });
+    }
+  });
+
+  // Solana: Get user's withdrawal history
+  app.get("/api/solana/withdrawals", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID required" });
+      }
+
+      const withdrawals = await storage.getUserWithdrawals(userId, limit);
+      res.json(withdrawals);
+    } catch (error) {
+      console.error("Error fetching withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawals" });
+    }
+  });
+
+  // Solana: Get withdrawal limits
+  app.get("/api/solana/withdrawal-limits", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID required" });
+      }
+
+      const limits = await withdrawalProcessor.getWithdrawalLimits(userId);
+      res.json(limits);
+    } catch (error) {
+      console.error("Error fetching withdrawal limits:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawal limits" });
+    }
+  });
+
+  // Solana: Get total platform fees collected
+  app.get("/api/solana/platform-fees", async (req, res) => {
+    try {
+      const totalFees = await storage.getTotalPlatformFees();
+      res.json({ totalFees });
+    } catch (error) {
+      console.error("Error fetching platform fees:", error);
+      res.status(500).json({ message: "Failed to fetch platform fees" });
+    }
+  });
+
   // Get scheduler status
   app.get("/api/admin/scheduler-status", async (req, res) => {
     try {
@@ -1211,6 +1358,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Start daily scheduler for scraping and market generation
   console.log("Starting daily scheduler...");
   scheduler.startAllSchedules();
+
+  // Start Solana deposit monitor
+  console.log("Starting Solana deposit monitor...");
+  depositMonitor.start();
+
+  // Start Solana withdrawal processor
+  console.log("Starting Solana withdrawal processor...");
+  withdrawalProcessor.start();
 
   // Set up callback for market resolutions to broadcast via WebSocket
   const originalResolveExpiredMarkets = marketResolver.resolveExpiredMarkets.bind(marketResolver);

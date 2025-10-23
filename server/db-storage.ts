@@ -32,6 +32,9 @@ import {
   scrapedKols,
   followerCache,
   marketMetadata,
+  solanaDeposits,
+  solanaWithdrawals,
+  platformFees,
   type User,
   type InsertUser,
   type Kol,
@@ -58,6 +61,12 @@ import {
   type InsertFollowerCache,
   type MarketMetadata,
   type InsertMarketMetadata,
+  type SolanaDeposit,
+  type InsertSolanaDeposit,
+  type SolanaWithdrawal,
+  type InsertSolanaWithdrawal,
+  type PlatformFee,
+  type InsertPlatformFee,
   type LeaderboardEntry,
   type PriceHistoryPoint,
 } from "@shared/schema";
@@ -992,6 +1001,118 @@ export class DbStorage implements IStorage {
 
   async getAllMarketMetadata(): Promise<MarketMetadata[]> {
     return await db.select().from(marketMetadata);
+  }
+
+  // User Solana methods
+  async updateUserSolanaBalance(id: string, solanaBalance: string): Promise<void> {
+    await db.update(users).set({ solanaBalance }).where(eq(users.id, id));
+  }
+
+  async updateUserDepositAddress(id: string, address: string): Promise<void> {
+    await db.update(users).set({ solanaDepositAddress: address }).where(eq(users.id, id));
+  }
+
+  // Solana deposit methods
+  async createDeposit(insertDeposit: InsertSolanaDeposit): Promise<SolanaDeposit> {
+    const result = await db.insert(solanaDeposits).values(insertDeposit).returning();
+    return result[0];
+  }
+
+  async getPendingDeposits(): Promise<SolanaDeposit[]> {
+    return await db
+      .select()
+      .from(solanaDeposits)
+      .where(eq(solanaDeposits.status, "pending"))
+      .orderBy(desc(solanaDeposits.createdAt));
+  }
+
+  async getUserDeposits(userId: string, limit: number = 50): Promise<SolanaDeposit[]> {
+    return await db
+      .select()
+      .from(solanaDeposits)
+      .where(eq(solanaDeposits.userId, userId))
+      .orderBy(desc(solanaDeposits.createdAt))
+      .limit(limit);
+  }
+
+  async updateDepositStatus(id: string, status: string, confirmations: number): Promise<void> {
+    const updates: { status: string; confirmations: number; confirmedAt?: Date } = {
+      status,
+      confirmations,
+    };
+    
+    if (status === "confirmed") {
+      updates.confirmedAt = new Date();
+    }
+    
+    await db.update(solanaDeposits).set(updates).where(eq(solanaDeposits.id, id));
+  }
+
+  // Solana withdrawal methods
+  async createWithdrawal(insertWithdrawal: InsertSolanaWithdrawal): Promise<SolanaWithdrawal> {
+    const result = await db.insert(solanaWithdrawals).values(insertWithdrawal).returning();
+    return result[0];
+  }
+
+  async getPendingWithdrawals(): Promise<SolanaWithdrawal[]> {
+    return await db
+      .select()
+      .from(solanaWithdrawals)
+      .where(eq(solanaWithdrawals.status, "pending"))
+      .orderBy(desc(solanaWithdrawals.createdAt));
+  }
+
+  async getUserWithdrawals(userId: string, limit: number = 50): Promise<SolanaWithdrawal[]> {
+    return await db
+      .select()
+      .from(solanaWithdrawals)
+      .where(eq(solanaWithdrawals.userId, userId))
+      .orderBy(desc(solanaWithdrawals.createdAt))
+      .limit(limit);
+  }
+
+  async updateWithdrawalStatus(id: string, status: string, signature?: string, error?: string): Promise<void> {
+    const updates: { status: string; processedAt?: Date; signature?: string; error?: string } = {
+      status,
+    };
+    
+    if (status === "completed" || status === "failed") {
+      updates.processedAt = new Date();
+    }
+    
+    if (signature !== undefined) {
+      updates.signature = signature;
+    }
+    
+    if (error !== undefined) {
+      updates.error = error;
+    }
+    
+    await db.update(solanaWithdrawals).set(updates).where(eq(solanaWithdrawals.id, id));
+  }
+
+  // Platform fee methods
+  async createPlatformFee(insertFee: InsertPlatformFee): Promise<PlatformFee> {
+    const result = await db.insert(platformFees).values(insertFee).returning();
+    return result[0];
+  }
+
+  async getTotalPlatformFees(): Promise<string> {
+    const result = await db
+      .select({
+        total: sql`COALESCE(SUM(CAST(${platformFees.amount} AS DECIMAL)), 0)`,
+      })
+      .from(platformFees);
+    
+    return result[0]?.total?.toString() || "0";
+  }
+
+  async getUserPlatformFees(userId: string): Promise<PlatformFee[]> {
+    return await db
+      .select()
+      .from(platformFees)
+      .where(eq(platformFees.userId, userId))
+      .orderBy(desc(platformFees.createdAt));
   }
 }
 
