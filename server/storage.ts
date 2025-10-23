@@ -76,6 +76,20 @@ export interface IStorage {
     newVolume: string;
   }): Promise<Bet>;
 
+  // Enhanced transactional bet placement with row-level locking and slippage protection
+  placeBetWithLocking(params: {
+    userId: string;
+    marketId: string;
+    position: "YES" | "NO";
+    amount: number;
+    action: "buy" | "sell";
+    slippageTolerance?: number;
+  }): Promise<{
+    bet: Bet;
+    priceImpact: number;
+    platformFee?: number;
+  }>;
+
   // Position methods
   getUserPosition(userId: string, marketId: string, position: string): Promise<Position | undefined>;
   getUserPositions(userId: string): Promise<Position[]>;

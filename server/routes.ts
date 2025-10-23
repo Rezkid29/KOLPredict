@@ -572,7 +572,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         bet: result.bet,
         priceImpact: result.priceImpact,
-        priceImpactPercent: (result.priceImpact * 100).toFixed(2) + '%'
+        priceImpactPercent: (result.priceImpact * 100).toFixed(2) + '%',
+        platformFee: result.platformFee
       });
     } catch (error) {
       console.error("Error creating bet:", error);

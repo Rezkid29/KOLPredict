@@ -483,10 +483,15 @@ export class DbStorage implements IStorage {
         }
       };
 
+      // Platform fee configuration (2% by default, can be set via environment)
+      const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || "0.02");
+      
       let betAmount: number;
       let sharesAmount: number;
       let newYesPool: number;
       let newNoPool: number;
+      let platformFee: number = 0;
+      let netBetAmount: number;
 
       if (params.action === "buy") {
         // Re-validate balance inside transaction
@@ -496,29 +501,33 @@ export class DbStorage implements IStorage {
           );
         }
 
+        // Calculate platform fee for buy orders (deducted from bet amount)
+        platformFee = params.amount * PLATFORM_FEE_PERCENTAGE;
+        netBetAmount = params.amount - platformFee;
+
         // Validate trade size relative to pool (max 40% of available liquidity)
         const totalLiquidity = yesPool + noPool;
         const maxTradeSize = totalLiquidity * MAX_TRADE_PERCENTAGE;
-        if (params.amount > maxTradeSize) {
+        if (netBetAmount > maxTradeSize) {
           throw new ValidationError(
-            `Trade size too large. Maximum allowed is ${maxTradeSize.toFixed(2)} (40% of pool). Your trade: ${params.amount.toFixed(2)}`
+            `Trade size too large. Maximum allowed is ${maxTradeSize.toFixed(2)} (40% of pool). Your trade: ${netBetAmount.toFixed(2)}`
           );
         }
 
-        betAmount = params.amount;
-        sharesAmount = calculateSharesForBuy(params.amount, params.position, yesPool, noPool);
+        betAmount = params.amount; // Total amount user pays
+        sharesAmount = calculateSharesForBuy(netBetAmount, params.position, yesPool, noPool);
 
         // Validate calculation
         if (isNaN(sharesAmount) || !isFinite(sharesAmount) || sharesAmount < 0) {
           throw new ValidationError("Invalid share calculation - trade too large for pool liquidity");
         }
 
-        // Calculate new pools
+        // Calculate new pools (using net amount after fee)
         if (params.position === "YES") {
-          newYesPool = yesPool + params.amount;
+          newYesPool = yesPool + netBetAmount;
           newNoPool = noPool - sharesAmount;
         } else {
-          newNoPool = noPool + params.amount;
+          newNoPool = noPool + netBetAmount;
           newYesPool = yesPool - sharesAmount;
         }
 
@@ -625,6 +634,16 @@ export class DbStorage implements IStorage {
         })
         .returning();
 
+      // STEP 4.5: Record platform fee if this was a buy order
+      if (params.action === "buy" && platformFee > 0) {
+        await tx.insert(platformFees).values({
+          betId: createdBet.id,
+          userId: params.userId,
+          amount: platformFee.toFixed(9),
+          feePercentage: (PLATFORM_FEE_PERCENTAGE * 100).toFixed(2),
+        });
+      }
+
       // STEP 5: Update user position
       const existingPosition = await tx
         .select()
@@ -707,7 +726,11 @@ export class DbStorage implements IStorage {
         })
         .where(eq(markets.id, params.marketId));
 
-      return { bet: createdBet, priceImpact };
+      return { 
+        bet: createdBet, 
+        priceImpact,
+        platformFee: platformFee > 0 ? platformFee : undefined 
+      };
     });
   }
 
