@@ -11,7 +11,7 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 ## Recent Changes
 - **October 22, 2025**: Enhanced platform with real data integration and automation
   - **Real-time Notifications**: Added toast notifications for bet placements and market resolutions via WebSocket
-  - **Social Media API Integration**: Created comprehensive API client supporting Instagram, Twitter, and YouTube with intelligent fallback to enhanced mock data
+  - **Social Media API Integration**: Created API client supporting Twitter with intelligent fallback to enhanced mock data
   - **Automatic KOL Metrics Updates**: Implemented scheduled updater that runs every 30 minutes, fetches real data when configured, and stores metrics history
   - **Automated Bet Settlement**: Built complete market resolution system that runs every 5 minutes, resolves expired markets, calculates outcomes, settles bets, and updates user balances
   - **Extended Storage Layer**: Added `updateKol`, `updateMarket`, and `getMarketBets` methods to both in-memory and database storage implementations
@@ -44,7 +44,7 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 - **Background Tasks**: 
   - Metrics updater (30-minute intervals)
   - Market resolver (5-minute intervals)
-- **Social API Integration**: Instagram, Twitter, YouTube clients with mock data fallback
+- **Social API Integration**: Twitter client with mock data fallback
 - **API Endpoints**:
   - `GET /api/user` - Get current user data
   - `GET /api/markets` - Get all markets with KOL data
@@ -109,9 +109,9 @@ A modern prediction market betting platform focused on Key Opinion Leader (KOL) 
 - Smart notification filtering (suppress self-bet notifications)
 
 ### 7. Social Media Data Integration
-- Multi-platform API client (Instagram, Twitter, YouTube)
+- Twitter API client for real-time metrics
 - Environment variable configuration for API credentials
-- Intelligent fallback to enhanced mock data when APIs not configured
+- Intelligent fallback to enhanced mock data when API not configured
 - Periodic metrics updates (every 30 minutes)
 - Historical metrics tracking
 
@@ -202,7 +202,7 @@ This starts both the Express backend and Vite frontend on the same port.
 - **Interactions**: Smooth hover effects, minimal animations
 
 ## Future Enhancements (Phase 2)
-- ✅ ~~Real social media API integration~~ (COMPLETED - Instagram, Twitter, YouTube support)
+- ✅ ~~Real social media API integration~~ (COMPLETED - Twitter support)
 - ✅ ~~Automated bet settlement based on real KOL metrics~~ (COMPLETED)
 - ✅ ~~Database persistence (PostgreSQL)~~ (COMPLETED - via Drizzle ORM)
 - Authentication and authorization for admin endpoints
