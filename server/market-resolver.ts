@@ -242,10 +242,7 @@ export class MarketResolver {
       }
 
       try {
-        await storage.updateMarket(market.id, {
-          outcome: outcome,
-          isLive: false,
-        });
+        await storage.resolveMarket(market.id, outcome);
       } catch (error) {
         console.error(`Failed to update market ${market.id} outcome:`, error);
         return null;
@@ -715,7 +712,7 @@ export class MarketResolver {
     }
     
     const currentSolGain = this.parseSolGain(kolData.solGain);
-    const threshold = metadata.threshold || 50;
+    const threshold = parseFloat(metadata.threshold) || 50;
     const outcome = currentSolGain >= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} current SOL gain: ${kolData.solGain} (${currentSolGain.toFixed(2)} SOL). ${outcome === 'yes' ? `Reached threshold of +${threshold} SOL` : `Did not reach +${threshold} SOL`}. Previously: ${metadata.currentSolA}`;
     
@@ -735,7 +732,7 @@ export class MarketResolver {
     }
     
     const currentRatio = this.parseWinLossRatio(kolData.winsLosses);
-    const threshold = metadata.threshold || 1.5;
+    const threshold = parseFloat(metadata.threshold) || 1.5;
     const outcome = currentRatio >= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${kolData.winsLosses}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
     
