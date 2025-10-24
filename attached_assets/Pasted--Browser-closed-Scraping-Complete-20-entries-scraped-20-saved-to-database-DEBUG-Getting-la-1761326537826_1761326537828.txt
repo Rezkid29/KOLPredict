@@ -1,0 +1,636 @@
+ Browser closed
+
+✅ Scraping Complete: 20 entries scraped, 20 saved to database
+
+🔍 DEBUG: Getting latest scraped KOLs...
+🔍 DEBUG: Found 20 KOLs from latest scrape
+📊 LATEST SCRAPED KOL DATA (Structured Format):
+
+====================================================================================================
+
+[1] RANK #1 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 269
+  Win Rate:     46.60
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[2] RANK #2 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 178
+  Win Rate:     19.20
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[3] RANK #3 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 175
+  Win Rate:     51.50
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[4] RANK #4 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 98
+  Win Rate:     46.50
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[5] RANK #5 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 5
+  Win Rate:     66.70
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[6] RANK #6 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 33
+  Win Rate:     35.30
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[7] RANK #7 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 41
+  Win Rate:     53.80
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[8] RANK #8 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 18
+  Win Rate:     40.90
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[9] RANK #9 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 19
+  Win Rate:     31.00
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[10] RANK #10 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 82
+  Win Rate:     36.60
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[11] RANK #11 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 43
+  Win Rate:     60.00
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[12] RANK #12 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 58
+  Win Rate:     43.80
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[13] RANK #13 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 157
+  Win Rate:     65.50
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[14] RANK #14 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 36
+  Win Rate:     58.50
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[15] RANK #15 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 9
+  Win Rate:     100.00
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[16] RANK #16 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 4
+  Win Rate:     100.00
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[17] RANK #17 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 42
+  Win Rate:     31.50
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[18] RANK #18 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 20
+  Win Rate:     21.40
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[19] RANK #19 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 19
+  Win Rate:     58.80
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+[20] RANK #20 - unknown
+----------------------------------------------------------------------------------------------------
+  Username:     unknown
+  X Handle:     N/A
+  Wins/Losses:  N/A
+  SOL Gain:     N/A
+  USD Gain:     N/A
+  PNL 7D:       N/A
+  PNL 30D:      N/A
+  Total Trades: 4
+  Win Rate:     50.00
+  Scraped At:   Fri Oct 24 2025 17:17:41 GMT+0000 (Coordinated Universal Time)
+
+====================================================================================================
+
+📋 JSON FORMAT (for programmatic use):
+
+[
+  {
+    "id": "9543f1f1-96c6-420f-a5cc-b0511b30abb5",
+    "rank": 1,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 269,
+    "winRatePercent": "46.60",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "95a66eec-7cde-4c25-99d6-b774aac38698",
+    "rank": 2,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 178,
+    "winRatePercent": "19.20",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "d06ebbf9-aac7-40c3-aec7-86bfcf8d1a2c",
+    "rank": 3,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 175,
+    "winRatePercent": "51.50",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "49d66946-7f8f-4c79-8a69-bd0f82691095",
+    "rank": 4,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 98,
+    "winRatePercent": "46.50",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/Ez2jp3rwXUbaTx7XwiHGaWVgTPFdzJoSg8TopqbxfaJN?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "e1b87303-2a56-4908-b13e-432109045166",
+    "rank": 5,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 5,
+    "winRatePercent": "66.70",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/2T5NgDDidkvhJQg8AHDi74uCFwgp25pYFMRZXBaCUNBH?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "434b137d-7487-4f05-a39a-ce025cf91e78",
+    "rank": 6,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 33,
+    "winRatePercent": "35.30",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/5B79fMkcFeRTiwm7ehsZsFiKsC7m7n1Bgv9yLxPp9q2X?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "faef430a-d991-4ce9-baef-ff6d8003c87a",
+    "rank": 7,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 41,
+    "winRatePercent": "53.80",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/G6fUXjMKPJzCY1rveAE6Qm7wy5U3vZgKDJmN1VPAdiZC?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "3b67e63a-34ed-49ae-a76e-46b10d2cfe9e",
+    "rank": 8,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 18,
+    "winRatePercent": "40.90",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/CUKFKdJw7F91bZBbtAJMrLLxqtVigVSJhx644EFnCnw?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "2321a167-a09e-448f-828d-b660b8a72286",
+    "rank": 9,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 19,
+    "winRatePercent": "31.00",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/DZAa55HwXgv5hStwaTEJGXZz1DhHejvpb7Yr762urXam?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "96e567ce-7781-4f2f-932c-4ff0c853013d",
+    "rank": 10,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 82,
+    "winRatePercent": "36.60",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/98T65wcMEjoNLDTJszBHGZEX75QRe8QaANXokv4yw3Mp?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "9dce8e31-533e-4cf2-a424-efd6787e0f5f",
+    "rank": 11,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 43,
+    "winRatePercent": "60.00",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "decb20a3-995c-4716-98bd-c0503e3235b4",
+    "rank": 12,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 58,
+    "winRatePercent": "43.80",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/BQVz7fQ1WsQmSTMY3umdPEPPTm1sdcBcX9sP7o6kPRmB?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "9ed6a6ea-de6f-43ea-a345-4e3ac599f011",
+    "rank": 13,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 157,
+    "winRatePercent": "65.50",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "3469687b-e40a-41bb-91a6-815d220a732c",
+    "rank": 14,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 36,
+    "winRatePercent": "58.50",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "7b95eb8d-b027-4e04-9f3e-0c0cfc9533c7",
+    "rank": 15,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 9,
+    "winRatePercent": "100.00",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/4NtyFqqRzvHWsTmJZoT26H9xtL7asWGTxpcpCxiKax9a?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "e7775cf7-e3b5-43bb-98b1-4fb71d71f2ff",
+    "rank": 16,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 4,
+    "winRatePercent": "100.00",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/Huk3KuMLsLBZSer2n7MXmMPAJE1eKcr8dJS6DDoM3m8f?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "581c2e78-9a95-48ec-b28a-75dc1eba1204",
+    "rank": 17,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 42,
+    "winRatePercent": "31.50",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/Hw5UKBU5k3YudnGwaykj5E8cYUidNMPuEewRRar5Xoc7?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "2fcacfec-4465-436f-a9fb-e5110ddf6ac1",
+    "rank": 18,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 20,
+    "winRatePercent": "21.40",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/qP3Q8d4WWsGbqkTfyA9Dr6cAD7DQoBuxPJMFTK48rWU?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "3cac1332-a73a-42f1-9c64-f9677ce963e8",
+    "rank": 19,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 19,
+    "winRatePercent": "58.80",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/EHg5YkU2SZBTvuT87rUsvxArGp3HLeye1fXaSDfuMyaf?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  },
+  {
+    "id": "34e34f09-6ebf-40e7-a3b1-5e09a8cc7faa",
+    "rank": 20,
+    "username": "unknown",
+    "xHandle": null,
+    "wins": null,
+    "losses": null,
+    "solGain": null,
+    "usdGain": null,
+    "pnl7d": null,
+    "pnl30d": null,
+    "totalTrades": 4,
+    "winRatePercent": "50.00",
+    "holdings": null,
+    "tradeHistory": null,
+    "profileUrl": "/account/DEdEW3SMPU2dCfXEcgj2YppmX9H3bnMDJaU4ctn2BQDQ?timeframe=1",
+    "scrapedAt": "2025-10-24T17:17:41.893Z"
+  }
+]
