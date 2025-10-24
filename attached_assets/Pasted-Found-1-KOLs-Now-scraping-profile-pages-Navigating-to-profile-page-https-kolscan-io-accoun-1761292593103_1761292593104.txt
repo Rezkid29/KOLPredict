@@ -1,0 +1,23 @@
+Found 1 KOLs. Now scraping profile pages...
+🔎 Navigating to profile page: https://kolscan.io/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1
+📄 Extracting detailed data from https://kolscan.io/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1...
+❌ Failed to scrape profile https://kolscan.io/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1: Error [ReferenceError]: __name is not defined
+    at evaluate (evaluate at KOLScraperV2.scrapeKOLProfile (file:///home/runner/workspace/server/kol-scraper-v2.ts:1:5627), <anonymous>:0:28)
+    at ExecutionContext.#evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:456:13)
+    at async ExecutionContext.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:293:12)
+    at async IsolatedWorld.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/IsolatedWorld.ts:196:12)
+    at async CdpFrame.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:488:12)
+    at async CdpPage.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:2320:12)
+    at async KOLScraperV2.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2.ts:259:28)
+    at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:414:31)
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:448:32)
+❌ Failed to process profile for trav 🎒 (/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1) Error [ReferenceError]: __name is not defined
+    at evaluate (evaluate at KOLScraperV2.scrapeKOLProfile (file:///home/runner/workspace/server/kol-scraper-v2.ts:1:5627), <anonymous>:0:28)
+    at ExecutionContext.#evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:456:13)
+    at async ExecutionContext.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:293:12)
+    at async IsolatedWorld.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/IsolatedWorld.ts:196:12)
+    at async CdpFrame.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:488:12)
+    at async CdpPage.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:2320:12)
+    at async KOLScraperV2.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2.ts:259:28)
+    at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:414:31)
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:448:32)
