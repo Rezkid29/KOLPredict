@@ -80,49 +80,8 @@ export class KOLScraperV2 {
       const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
         const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
         
-        // The page uses a specific structure - look for the main container first
-        // Based on the screenshot, rows are in a flex/grid layout
-        const possibleContainers = [
-          'div[class*="leaderboard"]',
-          'div[class*="list"]',
-          'main',
-          '[role="main"]',
-          'body'
-        ];
-        
-        let mainContainer: Element | null = null;
-        for (const selector of possibleContainers) {
-          const el = document.querySelector(selector);
-          if (el) {
-            mainContainer = el;
-            break;
-          }
-        }
-        
-        if (!mainContainer) {
-          console.log('No main container found');
-          return [];
-        }
-        
-        // Find all clickable row elements - they likely wrap each leaderboard entry
-        // Look for divs that contain both an avatar image AND text content AND a rank number
-        const allDivs = Array.from(mainContainer.querySelectorAll('div'));
-        const rows: Element[] = [];
-        
-        for (const div of allDivs) {
-          const hasImage = div.querySelector('img') !== null;
-          const hasText = (div.textContent || '').trim().length > 10;
-          const hasLinks = div.querySelectorAll('a').length > 0;
-          
-          // Check if this div looks like a leaderboard row
-          if (hasImage && hasText && hasLinks) {
-            // Make sure it's not a nested child of another row we already found
-            const isNested = rows.some(existingRow => existingRow.contains(div));
-            if (!isNested && div.textContent!.match(/\d+\/\d+/)) {
-              rows.push(div);
-            }
-          }
-        }
+        // Use reliable selector: all <a> tags whose href starts with "/account/"
+        const rows = Array.from(document.querySelectorAll('a[href^="/account/"]'));
         
         console.log(`Found ${rows.length} potential KOL entry rows`);
         
@@ -131,69 +90,54 @@ export class KOLScraperV2 {
           try {
             const text = row.textContent || '';
             
-            // Extract rank - look for standalone number at start
-            const rank = (i + 1).toString();
+            // 1. Get Profile URL (easy, it's the row itself)
+            const profileUrl = row.getAttribute('href');
+
+            // 2. Get Rank
+            const rankEl = row.querySelector('div > span, div > p');
+            const rank = rankEl ? (rankEl.textContent || (i + 1).toString()).trim() : (i + 1).toString();
+
+            // 3. Get Username - finds the most prominent text
+            const usernameEl = row.querySelector('p[class*="font-semibold"], p[class*="font-bold"]');
+            let username = usernameEl ? usernameEl.textContent?.trim() : 'Unknown';
             
-            // Find username - it's usually in a link or next to the avatar
-            let username: string | null = null;
-            const allLinks = Array.from(row.querySelectorAll('a'));
-            
-            // First link that's not twitter/x is usually the username
-            for (const link of allLinks) {
-              const href = link.getAttribute('href') || '';
-              if (!href.includes('twitter') && !href.includes('x.com') && link.textContent) {
-                const potentialName = link.textContent.trim();
-                if (potentialName.length >= 2 && potentialName.length <= 50 && !potentialName.match(/^\d+$/)) {
-                  username = potentialName;
-                  break;
-                }
-              }
+            // Fallback if the first selector fails
+            if (username === 'Unknown') {
+                const textNodes = Array.from(row.querySelectorAll('p, span'));
+                const nameNode = textNodes.find(n => n.textContent && n.textContent.length > 2 && !n.textContent.match(/[\d\/\$]/));
+                if (nameNode) username = nameNode.textContent.trim();
             }
-            
-            if (!username) continue;
-            
-            // Extract profile URL
-            let profileUrl: string | null = null;
-            for (const link of allLinks) {
-              const href = link.getAttribute('href') || '';
-              if (href.includes('/profile/') || href.startsWith('/kol/') || (href.startsWith('/') && !href.includes('twitter'))) {
-                profileUrl = href;
-                break;
-              }
-            }
-            
-            // Extract X handle from twitter/x.com link
+
+            // 4. Get X Handle
+            const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
             let xHandle: string | null = null;
-            for (const link of allLinks) {
-              const href = link.getAttribute('href') || '';
-              if (href.includes('twitter.com/') || href.includes('x.com/')) {
+            if (xLinkEl) {
+                const href = xLinkEl.getAttribute('href') || '';
                 const match = href.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]+)/);
                 if (match && match[1]) {
                   xHandle = match[1];
-                  break;
                 }
-              }
             }
             
-            // Extract wins/losses - format: "1/0" or "12/4"
+            // 5. Get Wins/Losses
             let winsLosses: string | null = null;
             const wlMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
             if (wlMatch) {
               winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
             }
             
-            // Extract SOL gain - look for "+XX.XX Sol" or green text with "Sol"
+            // 6. Get SOL Gain
             let solGain: string | null = null;
             const solMatch = text.match(/\+?([\d,]+\.?\d*)\s*Sol/i);
             if (solMatch) {
-              solGain = '+' + solMatch[1] + ' Sol';
+              solGain = solMatch[1]; // Store just the number
             }
             
-            // Extract USD gain - format: "($XX,XXX.XX)" or "$XX,XXX"
+            // 7. Get USD Gain - look for ($X,XXX.XX)
             let usdGain: string | null = null;
             const usdMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
             if (usdMatch) {
-              usdGain = '$' + usdMatch[1];
+              usdGain = usdMatch[1].replace(/,/g, ''); // Store just the number
             }
 
             extractedEntries.push({
@@ -226,14 +170,14 @@ export class KOLScraperV2 {
     }
   }
 
-  async scrapeKOLProfile(profileUrl: string): Promise<KOLDetailedData> {
+  async scrapeKOLProfile(profileUrl: string, mode: 'full' | 'pnlOnly' = 'full'): Promise<KOLDetailedData> {
     if (!this.browser) {
       throw new Error('Browser not initialized');
     }
 
     let profilePage: Page | null = null;
     const fullUrl = `https://kolscan.io${profileUrl}`;
-    console.log(`🔎 Navigating to profile page: ${fullUrl}`);
+    console.log(`🔎 Navigating to profile page: ${fullUrl} (Mode: ${mode})`);
 
     try {
       profilePage = await this.browser.newPage();
@@ -244,121 +188,166 @@ export class KOLScraperV2 {
         timeout: 30000
       });
 
-      // Wait for page to load
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
+      // Wait for stats to appear
       try {
-        await profilePage.waitForSelector('body', { timeout: 5000 });
+        await profilePage.waitForSelector('div[class*="border-b"] > div[class*="grid"]', { timeout: 7000 });
       } catch (e) {
-        console.log('⚠️ Profile page structure different than expected');
+        console.log('⚠️ Profile page stats container not found. Content may be limited.');
       }
 
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
-      // Pass the entire code block as a string to prevent transpiler issues
-      const detailedData = await profilePage.evaluate(`
-        (() => {
-          function findStatByLabel(labelRegex) {
-            try {
-              const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
-              const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
-              if (!labelNode) return null;
-              
-              const parent = labelNode.parentElement;
-              let valueNode = labelNode.nextElementSibling || (parent ? parent.querySelector('[class*="value"], [class*="stat"]') : null);
-              
-              if (valueNode && valueNode.textContent) return valueNode.textContent.trim();
+      const detailedData = await profilePage.evaluate((pageMode) => {
+        
+        // Robust helper function - finds a label and returns the text of its sibling
+        const findStatValueByLabel = (labelRegex: RegExp): string | null => {
+          try {
+            const allTextNodes = Array.from(document.querySelectorAll('main p, main span'));
+            const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
+            
+            if (!labelNode) return null;
 
-              if (parent && parent.textContent) {
-                const parentText = parent.textContent;
+            // The value is usually in the next element sibling
+            let valueNode = labelNode.nextElementSibling;
+            
+            // Or, they are both wrapped in a div, and the value is the last child
+            if (!valueNode && labelNode.parentElement) {
+                valueNode = labelNode.parentElement.lastElementChild;
+            }
+
+            if (valueNode && valueNode.textContent && valueNode.textContent !== labelNode.textContent) {
+                return valueNode.textContent.trim();
+            }
+            
+            // Fallback: check parent text (e.g., "Win Rate33.4%")
+            if(labelNode.parentElement && labelNode.parentElement.textContent) {
+                const parentText = labelNode.parentElement.textContent;
                 const labelText = labelNode.textContent || '';
                 const value = parentText.replace(labelText, '').trim();
                 if (value.length > 0 && value.length < 20) return value;
-              }
-              return null;
+            }
+
+            return null;
+          } catch (e) {
+            return null;
+          }
+        };
+        
+        // Helper finds the main PnL display, which changes per page
+        const findMainPnL = (): string | null => {
+            try {
+                // Find all elements that look like a PnL value (e.g., "+19.90 Sol ($3,784.8)")
+                const pnlNodes = Array.from(document.querySelectorAll('div[class*="text-green"], span[class*="text-green"], div[class*="text-red"], span[class*="text-red"]'));
+                const pnlNode = pnlNodes.find(el => el.textContent && el.textContent.includes('Sol') && el.textContent.includes('$'));
+                
+                if (pnlNode) return pnlNode.textContent.trim();
+                
+                // Fallback for timeframe PnL
+                return findStatValueByLabel(/PnL/i);
             } catch (e) {
-              return null;
+                return null;
             }
-          }
+        };
 
-          const pnl7d = findStatByLabel(/7D PnL/i);
-          const pnl30d = findStatByLabel(/30D PnL/i);
-          const totalTrades = findStatByLabel(/Total Trades/i);
-          const winRatePercent = findStatByLabel(/Win Rate/i);
+        // --- Data Extraction Logic ---
+        
+        let pnl: string | null = null;
+        let pnl7d: string | null = null;
+        let pnl30d: string | null = null;
+        
+        let totalTrades: string | null = null;
+        let winRatePercent: string | null = null;
+        let holdings: any[] = [];
+        let tradeHistory: any[] = [];
 
-          const holdings = [];
-          const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
-          if (portfolioSection) {
-            const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
-            
-            for (let i = 0; i < holdingRows.length; i++) {
-              try {
-                const row = holdingRows[i];
-                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-                const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
-                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-                const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
-                
-                const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
-                const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
-                                    (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
-                                    nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
-                
-                if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
+        // Find the main PnL for the current page (1d, 7d, or 30d)
+        pnl = findMainPnL();
+        
+        const url = window.location.href;
+        if (url.includes('timeframe=7')) {
+            pnl7d = pnl;
+        } else if (url.includes('timeframe=30')) {
+            pnl30d = pnl;
+        }
+        
+        // If we are in 'full' mode, scrape everything else
+        if (pageMode === 'full') {
+            totalTrades = findStatValueByLabel(/Volume/i) || findStatValueByLabel(/Realized Profits/i);
+            winRatePercent = findStatValueByLabel(/Win Rate/i);
 
-                holdings.push({
-                  tokenName: tokenName,
-                  tokenSymbol: tokenSymbol,
-                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
-                });
-              } catch (e) { 
-                continue; 
+            // Holdings logic
+            const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
+            if (portfolioSection) {
+              const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
+              
+              for (let i = 0; i < holdingRows.length; i++) {
+                try {
+                  const row = holdingRows[i];
+                  const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                  const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
+                  const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                  const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
+                  
+                  const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
+                  const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
+                                      (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
+                                      nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
+                  
+                  if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
+
+                  holdings.push({
+                    tokenName: tokenName,
+                    tokenSymbol: tokenSymbol,
+                    valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                    amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
+                  });
+                } catch (e) { 
+                  continue; 
+                }
               }
             }
-          }
 
-          const tradeHistory = [];
-          const historySection = document.querySelector('[class*="trades"], [class*="history"]');
-          if (historySection) {
-            const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
-            
-            for (let j = 0; j < tradeRows.length; j++) {
-              try {
-                const row = tradeRows[j];
-                const text = (row.textContent || '').toLowerCase();
-                const type = text.includes('buy') ? 'buy' : 'sell';
+            // Trade history logic
+            const historySection = document.querySelector('[class*="trades"], [class*="history"]');
+            if (historySection) {
+              const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
+              
+              for (let j = 0; j < tradeRows.length; j++) {
+                try {
+                  const row = tradeRows[j];
+                  const text = (row.textContent || '').toLowerCase();
+                  const type = text.includes('buy') ? 'buy' : 'sell';
 
-                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-                const amountEl = row.querySelector('[class*="amount"]');
-                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-                const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
+                  const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                  const amountEl = row.querySelector('[class*="amount"]');
+                  const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                  const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
 
-                if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
-                
-                tradeHistory.push({
-                  type: type,
-                  tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
-                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
-                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                  timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
-                });
-              } catch (e) { 
-                continue; 
+                  if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
+                  
+                  tradeHistory.push({
+                    type: type,
+                    tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
+                    amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
+                    valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                    timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
+                  });
+                } catch (e) { 
+                  continue; 
+                }
               }
             }
-          }
+        }
 
-          return { 
-            pnl7d: pnl7d, 
-            pnl30d: pnl30d, 
-            totalTrades: totalTrades, 
-            winRatePercent: winRatePercent, 
-            holdings: holdings, 
-            tradeHistory: tradeHistory 
-          };
-        })()
-      `);
+        return { 
+          pnl7d: pnl7d, 
+          pnl30d: pnl30d, 
+          totalTrades: totalTrades, 
+          winRatePercent: winRatePercent, 
+          holdings: holdings, 
+          tradeHistory: tradeHistory 
+        };
+      }, mode);
 
       return detailedData as KOLDetailedData;
 
@@ -414,11 +403,28 @@ export class KOLScraperV2 {
         try {
           await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-          const profileData = await this.scrapeKOLProfile(entry.profileUrl);
+          // Ensure the base URL is set to timeframe=1 for 1d stats
+          const baseUrl = entry.profileUrl.includes('?') 
+              ? entry.profileUrl.split('?')[0]
+              : entry.profileUrl;
+          
+          const url1d = `${baseUrl}?timeframe=1`;
+          const url7d = `${baseUrl}?timeframe=7`;
+          const url30d = `${baseUrl}?timeframe=30`;
+
+          // Scrape the main 1d page for Win Rate, Volume, etc.
+          const profileData = await this.scrapeKOLProfile(url1d, 'full');
+          
+          // Scrape the 7d and 30d pages just for PnL
+          const pnlData7d = await this.scrapeKOLProfile(url7d, 'pnlOnly');
+          await new Promise(resolve => setTimeout(resolve, 500)); // small delay
+          const pnlData30d = await this.scrapeKOLProfile(url30d, 'pnlOnly');
           
           allKOLData.push({
             ...entry.summary,
             ...profileData,
+            pnl7d: pnlData7d.pnl7d,     // Overwrite with 7d data
+            pnl30d: pnlData30d.pnl30d,  // Overwrite with 30d data
             profileUrl: entry.profileUrl
           });
 
