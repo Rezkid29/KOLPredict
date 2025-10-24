@@ -9,7 +9,7 @@ async function seed() {
     const defaultUser: InsertUser = {
       username: "trader1",
     };
-    
+
     let user;
     try {
       user = await dbStorage.createUser(defaultUser);
@@ -115,10 +115,10 @@ async function seed() {
         title: marketTitles[i],
         description: `Prediction market for ${kol.name}'s performance metrics`,
         outcome: "pending",
-        yesPool: "100.00",
-        noPool: "100.00",
-        yesPrice: yesPrice.toFixed(4),
-        noPrice: (1.0 - yesPrice).toFixed(4),
+        yesPool: "10000.00",
+        noPool: "10000.00",
+        yesPrice: "0.5000",
+        noPrice: "0.5000",
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
