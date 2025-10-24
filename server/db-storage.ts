@@ -639,8 +639,17 @@ export class DbStorage implements IStorage {
         sharesAmount = params.amount;
         betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);
 
-        // Calculate profit: payout - (shares sold * average cost)
-        profit = betAmount - (params.amount * averageCost);
+        // Calculate profit: payout - total original investment
+        // Total investment = shares sold × average cost per share
+        const totalInvestment = params.amount * averageCost;
+        profit = betAmount - totalInvestment;
+        
+        console.log(`\n💰 SELL P&L CALCULATION:`);
+        console.log(`   Shares sold: ${params.amount}`);
+        console.log(`   Average cost per share: ${averageCost.toFixed(4)}`);
+        console.log(`   Total investment: ${totalInvestment.toFixed(2)}`);
+        console.log(`   Payout received: ${betAmount.toFixed(2)}`);
+        console.log(`   Profit/Loss: ${profit.toFixed(2)} (${profit >= 0 ? 'PROFIT' : 'LOSS'})\n`);
 
         // Validate calculation
         if (isNaN(betAmount) || !isFinite(betAmount) || betAmount < 0) {
