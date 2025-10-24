@@ -198,7 +198,7 @@ export class KOLScraperV2 {
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       const detailedData = await profilePage.evaluate((pageMode) => {
-        let pnl = null;
+        let pnl1d = null;
         let pnl7d = null;
         let pnl30d = null;
         let totalTrades = null;
@@ -207,128 +207,76 @@ export class KOLScraperV2 {
         let tradeHistory = [];
 
         try {
-          // Find PnL - look for green/red text with "Sol" and "$"
-          const pnlNodes = Array.from(document.querySelectorAll('div[class*="text-green"], span[class*="text-green"], div[class*="text-red"], span[class*="text-red"]'));
-          const pnlNode = pnlNodes.find(el => el.textContent && el.textContent.includes('Sol') && el.textContent.includes('$'));
-          
-          if (pnlNode) {
-            pnl = pnlNode.textContent.trim();
-          }
-          
           const url = window.location.href;
-          if (url.includes('timeframe=7')) {
-            pnl7d = pnl;
-          } else if (url.includes('timeframe=30')) {
-            pnl30d = pnl;
+          const allText = document.body.innerText;
+          
+          // Extract PnL based on current timeframe
+          // Look for patterns like "+123.45 Sol ($12,345.67)" or "-123.45 Sol ($12,345.67)"
+          const pnlMatch = allText.match(/([+-]?[\d,]+\.?\d*)\s*Sol\s*\(\$[\d,]+\.?\d*\)/i);
+          if (pnlMatch) {
+            const pnlValue = pnlMatch[0]; // Full match with Sol and USD
+            
+            if (url.includes('timeframe=1')) {
+              pnl1d = pnlValue;
+            } else if (url.includes('timeframe=7')) {
+              pnl7d = pnlValue;
+            } else if (url.includes('timeframe=30')) {
+              pnl30d = pnlValue;
+            }
           }
           
           if (pageMode === 'full') {
-            // Find stats by looking for label-value pairs
-            const allTextNodes = Array.from(document.querySelectorAll('main p, main span'));
-            
-            // Win Rate
-            const winRateLabel = allTextNodes.find(el => /Win Rate/i.test(el.textContent || ''));
-            if (winRateLabel) {
-              let valueNode = winRateLabel.nextElementSibling;
-              if (!valueNode && winRateLabel.parentElement) {
-                valueNode = winRateLabel.parentElement.lastElementChild;
-              }
-              if (valueNode && valueNode.textContent && valueNode.textContent !== winRateLabel.textContent) {
-                winRatePercent = valueNode.textContent.trim();
-              } else if (winRateLabel.parentElement && winRateLabel.parentElement.textContent) {
-                const parentText = winRateLabel.parentElement.textContent;
-                const labelText = winRateLabel.textContent || '';
-                const value = parentText.replace(labelText, '').trim();
-                if (value.length > 0 && value.length < 20) {
-                  winRatePercent = value;
-                }
-              }
+            // Extract Win Rate - look for percentage pattern
+            const winRateMatch = allText.match(/Win\s*Rate[:\s]*([\d.]+%)/i);
+            if (winRateMatch) {
+              winRatePercent = winRateMatch[1];
             }
             
-            // Total Trades (Volume or Realized Profits)
-            const volumeLabel = allTextNodes.find(el => /Volume/i.test(el.textContent || ''));
-            if (volumeLabel) {
-              let valueNode = volumeLabel.nextElementSibling;
-              if (!valueNode && volumeLabel.parentElement) {
-                valueNode = volumeLabel.parentElement.lastElementChild;
-              }
-              if (valueNode && valueNode.textContent && valueNode.textContent !== volumeLabel.textContent) {
-                totalTrades = valueNode.textContent.trim();
-              }
+            // Extract Total Trades/Volume - look for number patterns near "Volume" or "Trades"
+            const volumeMatch = allText.match(/(?:Volume|Total\s*Trades)[:\s]*([\d,]+)/i);
+            if (volumeMatch) {
+              totalTrades = volumeMatch[1];
             }
             
+            // Alternative: look for "Realized Profits"
             if (!totalTrades) {
-              const profitsLabel = allTextNodes.find(el => /Realized Profits/i.test(el.textContent || ''));
-              if (profitsLabel) {
-                let valueNode = profitsLabel.nextElementSibling;
-                if (!valueNode && profitsLabel.parentElement) {
-                  valueNode = profitsLabel.parentElement.lastElementChild;
-                }
-                if (valueNode && valueNode.textContent && valueNode.textContent !== profitsLabel.textContent) {
-                  totalTrades = valueNode.textContent.trim();
-                }
+              const profitsMatch = allText.match(/Realized\s*Profits[:\s]*([\d,]+\.?\d*\s*Sol)/i);
+              if (profitsMatch) {
+                totalTrades = profitsMatch[1];
               }
             }
 
-            // Holdings
-            const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
-            if (portfolioSection) {
-              const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
-              
-              for (let i = 0; i < holdingRows.length; i++) {
-                try {
-                  const row = holdingRows[i];
-                  const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-                  const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
-                  const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-                  const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
-                  
-                  const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
-                  const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
-                                      (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
-                                      nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
-                  
-                  if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
-
-                  holdings.push({
-                    tokenName: tokenName,
-                    tokenSymbol: tokenSymbol,
-                    valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                    amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
-                  });
-                } catch (e) { 
-                  continue; 
-                }
+            // Try to extract holdings from any table-like structure
+            const rows = Array.from(document.querySelectorAll('tr, div[role="row"]'));
+            for (const row of rows) {
+              const text = row.textContent || '';
+              // Look for token names followed by values
+              const tokenMatch = text.match(/([A-Z]{3,10})\s+.*?\$?([\d,]+\.?\d*)/);
+              if (tokenMatch && holdings.length < 10) {
+                holdings.push({
+                  tokenName: tokenMatch[1],
+                  tokenSymbol: tokenMatch[1],
+                  valueUsd: tokenMatch[2],
+                  amount: null
+                });
               }
             }
 
-            // Trade history
-            const historySection = document.querySelector('[class*="trades"], [class*="history"]');
-            if (historySection) {
-              const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
-              
-              for (let j = 0; j < tradeRows.length; j++) {
-                try {
-                  const row = tradeRows[j];
-                  const text = (row.textContent || '').toLowerCase();
-                  const type = text.includes('buy') ? 'buy' : 'sell';
-
-                  const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-                  const amountEl = row.querySelector('[class*="amount"]');
-                  const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-                  const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
-
-                  if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
-                  
+            // Try to extract trade history
+            const tradeSections = Array.from(document.querySelectorAll('div, section'));
+            for (const section of tradeSections) {
+              const text = (section.textContent || '').toLowerCase();
+              if (text.includes('buy') || text.includes('sell')) {
+                const isBuy = text.includes('buy');
+                const tradeMatch = text.match(/([A-Z]{3,10}).*?([\d,]+\.?\d*)/);
+                if (tradeMatch && tradeHistory.length < 20) {
                   tradeHistory.push({
-                    type: type,
-                    tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
-                    amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
-                    valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                    timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
+                    type: isBuy ? 'buy' : 'sell',
+                    tokenName: tradeMatch[1],
+                    amount: tradeMatch[2],
+                    valueUsd: null,
+                    timestamp: null
                   });
-                } catch (e) { 
-                  continue; 
                 }
               }
             }
@@ -338,6 +286,7 @@ export class KOLScraperV2 {
         }
 
         return { 
+          pnl1d: pnl1d,
           pnl7d: pnl7d, 
           pnl30d: pnl30d, 
           totalTrades: totalTrades, 
@@ -414,15 +363,16 @@ export class KOLScraperV2 {
           const profileData = await this.scrapeKOLProfile(url1d, 'full');
           
           // Scrape the 7d and 30d pages just for PnL
+          await new Promise(resolve => setTimeout(resolve, 500));
           const pnlData7d = await this.scrapeKOLProfile(url7d, 'pnlOnly');
-          await new Promise(resolve => setTimeout(resolve, 500)); // small delay
+          await new Promise(resolve => setTimeout(resolve, 500));
           const pnlData30d = await this.scrapeKOLProfile(url30d, 'pnlOnly');
           
           allKOLData.push({
             ...entry.summary,
             ...profileData,
-            pnl7d: pnlData7d.pnl7d,     // Overwrite with 7d data
-            pnl30d: pnlData30d.pnl30d,  // Overwrite with 30d data
+            pnl7d: pnlData7d.pnl7d || profileData.pnl7d,     // Use 7d-specific or fallback
+            pnl30d: pnlData30d.pnl30d || profileData.pnl30d,  // Use 30d-specific or fallback
             profileUrl: entry.profileUrl
           });
 

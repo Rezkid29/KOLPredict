@@ -26,6 +26,7 @@ export interface KOLTrade {
 }
 
 export interface KOLDetailedData {
+  pnl1d?: string | null;
   pnl7d: string | null;
   pnl30d: string | null;
   totalTrades: string | null;
