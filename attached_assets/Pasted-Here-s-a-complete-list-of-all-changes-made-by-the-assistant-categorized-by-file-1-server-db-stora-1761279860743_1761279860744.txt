@@ -1,0 +1,16 @@
+Here’s a complete list of all changes made by the assistant, categorized by file:
+1. server/db-storage.ts
+* Fix P&L Calculation for Sells
+    * Updated the logic to calculate profit based on total original investment instead of average cost per share.
+    * Added debug logging to help diagnose P&L calculation issues.
+* Changes: sharesAmount = params.amount; betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);  // Calculate profit: payout - total original investment // Total investment = shares sold × average cost per share const totalInvestment = params.amount * averageCost; profit = betAmount - totalInvestment;  console.log(`\n💰 SELL P&L CALCULATION:`); console.log(` Shares sold: ${params.amount}`); console.log(` Average cost per share: ${averageCost.toFixed(4)}`); console.log(` Total investment: ${totalInvestment.toFixed(2)}`); console.log(` Payout received: ${betAmount.toFixed(2)}`); console.log(` Profit/Loss: ${profit.toFixed(2)} (${profit >= 0 ? 'PROFIT' : 'LOSS'})\n`);  // Validate calculation if (isNaN(betAmount) || !isFinite(betAmount) || betAmount < 0) { 
+* Fix Undefined Variable References
+    * Corrected references to userId, marketId, and position to reference params.userId, params.marketId, and params.position instead.
+* Changes: // For new positions, use actual cost per share const costPerShare = params.amount / sharesAmount; await tx.insert(positions).values({ userId: params.userId, marketId: params.marketId, position: params.position, shares: sharesAmount.toFixed(2), averagePrice: costPerShare.toFixed(4), }); 
+2. client/src/pages/portfolio.tsx
+* (No specific changes were detailed for this file in the assistant's responses)
+3. client/src/components/live-feed.tsx
+* (No specific changes were detailed for this file in the assistant's responses)
+4. client/src/pages/leaderboard.tsx
+* (No specific changes were detailed for this file in the assistant's responses)
+These modifications were essential for correcting the profit and loss calculations during share sales and ensuring that there are no undefined variable errors. If you have any further requests or need modifications to other files, let me know!
