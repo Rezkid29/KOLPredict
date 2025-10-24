@@ -17,6 +17,37 @@ export class MarketResolver {
   private consecutiveFailures = 0;
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
+  private parseRank(rankStr: string): number {
+    const match = rankStr.replace(/[^\d]/g, '');
+    return match ? parseInt(match, 10) : 999;
+  }
+
+  private parseWinsLosses(winsLossesStr: string | null): { wins: number | null; losses: number | null } {
+    if (!winsLossesStr) return { wins: null, losses: null };
+    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
+    if (!match) return { wins: null, losses: null };
+    return {
+      wins: parseInt(match[1], 10),
+      losses: parseInt(match[2], 10),
+    };
+  }
+
+  private parseSolGainStr(solGainStr: string | null): string | null {
+    if (!solGainStr) return null;
+    const cleaned = solGainStr.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return null;
+    return match[0].replace(/,/g, '');
+  }
+
+  private parseUsdGainStr(usdGainStr: string | null): string | null {
+    if (!usdGainStr) return null;
+    const cleaned = usdGainStr.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return null;
+    return match[0].replace(/,/g, '');
+  }
+
   private async getFreshKolData(limit: number = 20): Promise<ScrapedKol[]> {
     const dedicatedScraper = new KOLScraper();
     try {
@@ -24,16 +55,20 @@ export class MarketResolver {
       await dedicatedScraper.init();
       const freshData = await dedicatedScraper.scrapeLeaderboard();
       console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
-      return freshData.slice(0, limit).map(kol => ({
-        id: '',
-        rank: kol.rank,
-        username: kol.username,
-        xHandle: kol.xHandle || null,
-        winsLosses: kol.winsLosses || null,
-        solGain: kol.solGain || null,
-        usdGain: kol.usdGain || null,
-        scrapedAt: new Date(),
-      }));
+      return freshData.slice(0, limit).map(kol => {
+        const { wins, losses } = this.parseWinsLosses(kol.winsLosses);
+        return {
+          id: '',
+          rank: this.parseRank(kol.rank),
+          username: kol.username.toLowerCase(),
+          xHandle: kol.xHandle || null,
+          wins,
+          losses,
+          solGain: this.parseSolGainStr(kol.solGain),
+          usdGain: this.parseUsdGainStr(kol.usdGain),
+          scrapedAt: new Date(),
+        };
+      });
     } catch (error) {
       console.error('❌ On-demand scraping failed, falling back to cached data:', error);
       return await storage.getLatestScrapedKols(limit);
@@ -472,8 +507,8 @@ export class MarketResolver {
       };
     }
     
-    const rankA = parseInt(kolAData.rank.replace(/[^\d]/g, '')) || 999;
-    const rankB = parseInt(kolBData.rank.replace(/[^\d]/g, '')) || 999;
+    const rankA = kolAData.rank || 999;
+    const rankB = kolBData.rank || 999;
     
     const outcome = rankA < rankB ? "yes" : "no";
     const reason = `${metadata.kolA} is now rank #${rankA} vs ${metadata.kolB} at rank #${rankB}. Previously: ${metadata.kolA} was #${metadata.currentRankA}, ${metadata.kolB} was #${metadata.currentRankB}`;
@@ -553,23 +588,19 @@ export class MarketResolver {
     return parseFloat(numStr) || 0;
   }
 
-  private parseWinRate(winsLossesStr: string | null | undefined): number {
-    if (!winsLossesStr) return 0;
-    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
-    if (!match) return 0;
-    const wins = parseInt(match[1], 10);
-    const losses = parseInt(match[2], 10);
-    const total = wins + losses;
-    return total > 0 ? wins / total : 0;
+  private calculateWinRate(wins: number | null | undefined, losses: number | null | undefined): number {
+    if (!wins && !losses) return 0;
+    const w = wins || 0;
+    const l = losses || 0;
+    const total = w + l;
+    return total > 0 ? w / total : 0;
   }
 
-  private parseWinLossRatio(winsLossesStr: string | null | undefined): number {
-    if (!winsLossesStr) return 0;
-    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
-    if (!match) return 0;
-    const wins = parseInt(match[1], 10);
-    const losses = parseInt(match[2], 10);
-    return losses > 0 ? wins / losses : 0;
+  private calculateWinLossRatio(wins: number | null | undefined, losses: number | null | undefined): number {
+    if (!wins && !losses) return 0;
+    const w = wins || 0;
+    const l = losses || 0;
+    return l > 0 ? w / l : 0;
   }
 
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
@@ -632,11 +663,13 @@ export class MarketResolver {
       };
     }
     
-    const winRateA = this.parseWinRate(kolAData.winsLosses);
-    const winRateB = this.parseWinRate(kolBData.winsLosses);
+    const winRateA = this.calculateWinRate(kolAData.wins, kolAData.losses);
+    const winRateB = this.calculateWinRate(kolBData.wins, kolBData.losses);
     
     const outcome = winRateA > winRateB ? "yes" : "no";
-    const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
+    const wlA = `${kolAData.wins || 0}/${kolAData.losses || 0}`;
+    const wlB = `${kolBData.wins || 0}/${kolBData.losses || 0}`;
+    const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${wlA}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${wlB}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
     
     return { outcome, reason };
   }
@@ -655,11 +688,13 @@ export class MarketResolver {
       };
     }
     
-    const ratioA = this.parseWinLossRatio(kolAData.winsLosses);
-    const ratioB = this.parseWinLossRatio(kolBData.winsLosses);
+    const ratioA = this.calculateWinLossRatio(kolAData.wins, kolAData.losses);
+    const ratioB = this.calculateWinLossRatio(kolBData.wins, kolBData.losses);
     
     const outcome = ratioA > ratioB ? "yes" : "no";
-    const reason = `${metadata.kolA} has ${ratioA.toFixed(2)} W/L ratio (${kolAData.winsLosses || '0/0'}) vs ${metadata.kolB} with ${ratioB.toFixed(2)} W/L ratio (${kolBData.winsLosses || '0/0'}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
+    const wlA = `${kolAData.wins || 0}/${kolAData.losses || 0}`;
+    const wlB = `${kolBData.wins || 0}/${kolBData.losses || 0}`;
+    const reason = `${metadata.kolA} has ${ratioA.toFixed(2)} W/L ratio (${wlA}) vs ${metadata.kolB} with ${ratioB.toFixed(2)} W/L ratio (${wlB}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
     
     return { outcome, reason };
   }
@@ -676,7 +711,7 @@ export class MarketResolver {
       };
     }
     
-    const currentRank = parseInt(kolData.rank);
+    const currentRank = kolData.rank;
     const threshold = metadata.threshold || 10;
     const outcome = currentRank <= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Maintained position in top ${threshold}` : `Dropped below top ${threshold}`}. Previously ranked #${metadata.currentRankA}`;
@@ -696,11 +731,13 @@ export class MarketResolver {
       };
     }
     
-    const previousWinRate = this.parseWinRate(metadata.currentWinsLossesA);
-    const currentWinRate = this.parseWinRate(kolData.winsLosses);
+    const previousWL = this.parseWinsLosses(metadata.currentWinsLossesA);
+    const previousWinRate = this.calculateWinRate(previousWL.wins, previousWL.losses);
+    const currentWinRate = this.calculateWinRate(kolData.wins, kolData.losses);
     
     const outcome = currentWinRate > previousWinRate ? "yes" : "no";
-    const reason = `${metadata.kolA} ${outcome === 'yes' ? 'improved' : 'did not improve'} their win rate. Current: ${kolData.winsLosses || '0/0'} (${(currentWinRate * 100).toFixed(1)}%), Previous: ${metadata.currentWinsLossesA || '0/0'} (${(previousWinRate * 100).toFixed(1)}%)`;
+    const currentWL = `${kolData.wins || 0}/${kolData.losses || 0}`;
+    const reason = `${metadata.kolA} ${outcome === 'yes' ? 'improved' : 'did not improve'} their win rate. Current: ${currentWL} (${(currentWinRate * 100).toFixed(1)}%), Previous: ${metadata.currentWinsLossesA || '0/0'} (${(previousWinRate * 100).toFixed(1)}%)`;
     
     return { outcome, reason };
   }
@@ -717,7 +754,7 @@ export class MarketResolver {
       };
     }
     
-    const currentRank = parseInt(kolData.rank);
+    const currentRank = kolData.rank;
     const targetRank = metadata.threshold || 1;
     const outcome = currentRank <= targetRank ? "yes" : "no";
     const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Reached target of #${targetRank} or better` : `Did not reach #${targetRank}`}. Previously ranked #${metadata.currentRankA}`;
@@ -749,7 +786,7 @@ export class MarketResolver {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
-    if (!kolData || !kolData.winsLosses) {
+    if (!kolData || (kolData.wins === null && kolData.losses === null)) {
       console.warn(`Missing KOL data for win/loss ratio maintain market`);
       return {
         outcome: "no",
@@ -757,10 +794,11 @@ export class MarketResolver {
       };
     }
     
-    const currentRatio = this.parseWinLossRatio(kolData.winsLosses);
+    const currentRatio = this.calculateWinLossRatio(kolData.wins, kolData.losses);
     const threshold = parseFloat(metadata.threshold) || 1.5;
     const outcome = currentRatio >= threshold ? "yes" : "no";
-    const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${kolData.winsLosses}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
+    const currentWL = `${kolData.wins || 0}/${kolData.losses || 0}`;
+    const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${currentWL}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
     
     return { outcome, reason };
   }

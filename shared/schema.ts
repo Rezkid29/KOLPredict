@@ -115,12 +115,13 @@ export const kolMetricsHistory = pgTable("kol_metrics_history", {
 
 export const scrapedKols = pgTable("scraped_kols", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  rank: text("rank").notNull(),
+  rank: integer("rank").notNull(),
   username: text("username").notNull(),
   xHandle: text("x_handle"),
-  winsLosses: text("wins_losses"),
-  solGain: text("sol_gain"),
-  usdGain: text("usd_gain"),
+  wins: integer("wins"),
+  losses: integer("losses"),
+  solGain: decimal("sol_gain", { precision: 10, scale: 2 }),
+  usdGain: decimal("usd_gain", { precision: 10, scale: 2 }),
   scrapedAt: timestamp("scraped_at").notNull().defaultNow(),
 });
 
