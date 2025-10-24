@@ -109,7 +109,6 @@ async function seed() {
 
     for (let i = 0; i < createdKols.length; i++) {
       const kol = createdKols[i];
-      const yesPrice = 0.40 + Math.random() * 0.20; // Random between 0.40 and 0.60
       const market: InsertMarket = {
         kolId: kol.id,
         title: marketTitles[i],

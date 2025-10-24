@@ -499,7 +499,13 @@ export class DbStorage implements IStorage {
       const MIN_PRICE = 0.01;  // Minimum price to prevent prices from going to 0
       const MAX_PRICE = 0.99;  // Maximum price to prevent prices from going to 1
       const MAX_TRADE_PERCENTAGE = 0.40; // Maximum 40% of pool size per trade
-      const DEFAULT_SLIPPAGE_TOLERANCE = 0.05; // Default 5% slippage tolerance
+      const MAX_PRICE_IMPACT = 0.25; // Hard cap: 25% maximum price movement per trade
+      
+      // Slippage tolerance protects users from unexpected price movements
+      // With $20,000 pools, small trades ($10-50) typically have <0.5% impact
+      // Medium trades ($100-500) typically have 1-3% impact  
+      // Large trades ($1000-5000) can have 5-15% impact
+      const DEFAULT_SLIPPAGE_TOLERANCE = 0.10; // Default 10% slippage tolerance (user-friendly)
       
       // Use provided slippage tolerance or default
       const slippageTolerance = params.slippageTolerance ?? DEFAULT_SLIPPAGE_TOLERANCE;
@@ -681,10 +687,29 @@ export class DbStorage implements IStorage {
       const newPrice = params.position === "YES" ? yesPrice : noPrice;
       const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
       
+      // HARD CAP: Enforce maximum price impact regardless of user's slippage tolerance
+      // This prevents manipulation and ensures market stability
+      if (priceImpact > MAX_PRICE_IMPACT) {
+        const priceImpactPct = (priceImpact * 100).toFixed(2);
+        const maxImpactPct = (MAX_PRICE_IMPACT * 100).toFixed(2);
+        
+        throw new ValidationError(
+          `Trade rejected: Price impact ${priceImpactPct}% exceeds platform maximum of ${maxImpactPct}%. ` +
+          `Please split this into smaller trades to maintain market stability.`
+        );
+      }
+      
       // Check slippage protection for both buy and sell trades
       if (priceImpact > slippageTolerance) {
+        const priceImpactPct = (priceImpact * 100).toFixed(2);
+        const slippagePct = (slippageTolerance * 100).toFixed(2);
+        const currentPriceStr = currentPrice.toFixed(4);
+        const newPriceStr = newPrice.toFixed(4);
+        
         throw new ValidationError(
-          `Price impact (${(priceImpact * 100).toFixed(2)}%) exceeds slippage tolerance (${(slippageTolerance * 100).toFixed(2)}%). Current price: ${currentPrice.toFixed(4)}, New price: ${newPrice.toFixed(4)}. Reduce trade size or increase slippage tolerance.`
+          `Price impact too high: ${priceImpactPct}% (limit: ${slippagePct}%). ` +
+          `This trade would move the price from ${currentPriceStr} to ${newPriceStr}. ` +
+          `Try: 1) Reduce your trade size, 2) Split into multiple smaller trades, or 3) Increase slippage tolerance in settings.`
         );
       }
 

@@ -563,6 +563,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Preview price impact before placing a bet
+  app.post("/api/bets/preview", async (req, res) => {
+    try {
+      const { marketId, position, amount, action = "buy", slippageTolerance } = req.body;
+
+      // Input validation
+      if (!marketId || typeof marketId !== 'string') {
+        return res.status(400).json({ message: "Valid marketId is required" });
+      }
+
+      if (!position || (position !== "YES" && position !== "NO")) {
+        return res.status(400).json({ message: "Position must be 'YES' or 'NO'" });
+      }
+
+      if (!action || (action !== "buy" && action !== "sell")) {
+        return res.status(400).json({ message: "Action must be 'buy' or 'sell'" });
+      }
+
+      const amountValidation = validateNumericAmount(amount, "Amount", 0.01, 1000000);
+      if (!amountValidation.valid) {
+        return res.status(400).json({ message: amountValidation.error });
+      }
+
+      // Get market data
+      const market = await storage.getMarket(marketId);
+      if (!market) {
+        return res.status(404).json({ message: "Market not found" });
+      }
+
+      const yesPool = parseFloat(market.yesPool);
+      const noPool = parseFloat(market.noPool);
+      const currentPrice = position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
+      const tradeAmount = parseFloat(amount);
+
+      // Calculate AMM values
+      const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || "0.02");
+      const k = yesPool * noPool;
+
+      let sharesAmount: number;
+      let newYesPool: number;
+      let newNoPool: number;
+      let netAmount = tradeAmount;
+
+      if (action === "buy") {
+        // Deduct platform fee for buy orders
+        netAmount = tradeAmount * (1 - PLATFORM_FEE_PERCENTAGE);
+
+        // Calculate shares from constant product formula
+        if (position === "YES") {
+          newNoPool = k / (yesPool + netAmount);
+          sharesAmount = noPool - newNoPool;
+          newYesPool = yesPool + netAmount;
+        } else {
+          newYesPool = k / (noPool + netAmount);
+          sharesAmount = yesPool - newYesPool;
+          newNoPool = noPool + netAmount;
+        }
+      } else {
+        // Selling shares
+        sharesAmount = tradeAmount;
+        if (position === "YES") {
+          newNoPool = k / (yesPool - sharesAmount);
+          netAmount = newNoPool - noPool;
+          newYesPool = yesPool - sharesAmount;
+        } else {
+          newYesPool = k / (noPool - sharesAmount);
+          netAmount = newYesPool - yesPool;
+          newNoPool = noPool - sharesAmount;
+        }
+      }
+
+      // Apply same validation rules as DbStorage.placeBetWithLocking
+      const warnings = [];
+      const MAX_PRICE_IMPACT = 0.25; // Hard cap from db-storage.ts
+      const MAX_TRADE_PERCENTAGE = 0.40; // 40% max trade size
+      const DEFAULT_SLIPPAGE_TOLERANCE = 0.10; // 10% default from db-storage.ts
+      const HIGH_IMPACT_THRESHOLD = 0.10;
+      const MEDIUM_IMPACT_THRESHOLD = 0.05;
+      const MIN_PRICE = 0.01;
+      const MAX_PRICE = 0.99;
+
+      // Use same slippage tolerance logic as DbStorage.placeBetWithLocking
+      // Nullish coalescing (??) only defaults for null/undefined, NOT empty string
+      // Empty string coerces to 0 in numeric context (matches backend behavior)
+      const effectiveSlippageTolerance = slippageTolerance ?? DEFAULT_SLIPPAGE_TOLERANCE;
+
+      // Validate trade size (40% of pool maximum)
+      if (action === "buy") {
+        const totalLiquidity = yesPool + noPool;
+        const maxTradeSize = totalLiquidity * MAX_TRADE_PERCENTAGE;
+        if (netAmount > maxTradeSize) {
+          warnings.push({
+            severity: "error",
+            message: `Trade size too large. Maximum allowed is ${maxTradeSize.toFixed(2)} (40% of pool). Your trade: ${netAmount.toFixed(2)}. Trade will be rejected.`
+          });
+          return res.json({
+            currentPrice: currentPrice.toFixed(4),
+            newPrice: "N/A",
+            priceImpact: 0,
+            priceImpactPercent: "N/A",
+            estimatedShares: "0.00",
+            platformFee: (tradeAmount * PLATFORM_FEE_PERCENTAGE).toFixed(2),
+            netAmount: netAmount.toFixed(2),
+            warnings,
+            poolState: {
+              currentYesPool: yesPool.toFixed(2),
+              currentNoPool: noPool.toFixed(2),
+              newYesPool: "N/A",
+              newNoPool: "N/A",
+              totalLiquidity: (yesPool + noPool).toFixed(2),
+            }
+          });
+        }
+      }
+
+      // Calculate new price
+      const totalPool = newYesPool + newNoPool;
+      const newPrice = position === "YES" ? newYesPool / totalPool : newNoPool / totalPool;
+      const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
+
+      // Check price bounds
+      if (newPrice < MIN_PRICE || newPrice > MAX_PRICE) {
+        warnings.push({
+          severity: "error",
+          message: `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting price: ${newPrice.toFixed(4)}. Trade will be rejected.`
+        });
+      }
+
+      // HARD CAP: Enforce maximum price impact (can't be bypassed by slippage tolerance)
+      if (priceImpact > MAX_PRICE_IMPACT) {
+        warnings.push({
+          severity: "error",
+          message: `Price impact ${(priceImpact * 100).toFixed(2)}% exceeds platform maximum of ${(MAX_PRICE_IMPACT * 100).toFixed(2)}%. Trade will be rejected.`
+        });
+      }
+
+      // Slippage tolerance check (using user-provided or default 10%)
+      if (priceImpact > effectiveSlippageTolerance) {
+        warnings.push({
+          severity: "warning",
+          message: `Price impact ${(priceImpact * 100).toFixed(2)}% exceeds slippage tolerance of ${(effectiveSlippageTolerance * 100).toFixed(2)}%. Increase slippage tolerance or reduce trade size.`
+        });
+      } else if (priceImpact > HIGH_IMPACT_THRESHOLD) {
+        warnings.push({
+          severity: "warning",
+          message: `High price impact: ${(priceImpact * 100).toFixed(2)}%. Consider splitting into smaller trades.`
+        });
+      } else if (priceImpact > MEDIUM_IMPACT_THRESHOLD) {
+        warnings.push({
+          severity: "info",
+          message: `Moderate price impact: ${(priceImpact * 100).toFixed(2)}%.`
+        });
+      }
+
+      // Check liquidity
+      const totalLiquidity = yesPool + noPool;
+      const LOW_LIQUIDITY_THRESHOLD = 5000; // $5,000
+      if (totalLiquidity < LOW_LIQUIDITY_THRESHOLD) {
+        warnings.push({
+          severity: "warning",
+          message: `Low liquidity market (${totalLiquidity.toFixed(2)} total pool). Trades may have higher price impact.`
+        });
+      }
+
+      res.json({
+        currentPrice: currentPrice.toFixed(4),
+        newPrice: newPrice.toFixed(4),
+        priceImpact: priceImpact,
+        priceImpactPercent: (priceImpact * 100).toFixed(2) + '%',
+        estimatedShares: sharesAmount.toFixed(2),
+        platformFee: action === "buy" ? (tradeAmount * PLATFORM_FEE_PERCENTAGE).toFixed(2) : "0.00",
+        netAmount: netAmount.toFixed(2),
+        warnings,
+        poolState: {
+          currentYesPool: yesPool.toFixed(2),
+          currentNoPool: noPool.toFixed(2),
+          newYesPool: newYesPool.toFixed(2),
+          newNoPool: newNoPool.toFixed(2),
+          totalLiquidity: totalLiquidity.toFixed(2),
+        }
+      });
+    } catch (error) {
+      console.error("Error previewing trade:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to preview trade" 
+      });
+    }
+  });
+
   // Create a new bet (buy or sell YES/NO positions)
   // NOW USES ROBUST TRANSACTION WITH ROW-LEVEL LOCKING AND SLIPPAGE PROTECTION
   app.post("/api/bets", async (req, res) => {
@@ -969,11 +1158,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('First KOL:', scrapedKolsData[0]);
 
       const validKOLs = scrapedKolsData.filter(k => {
-        if (!k.winsLosses) return false;
-        const [winsStr, lossesStr] = k.winsLosses.split('/');
-        const wins = parseInt(winsStr);
-        const losses = parseInt(lossesStr);
-        return !isNaN(wins) && !isNaN(losses) && losses > 0;
+        const wins = k.wins;
+        const losses = k.losses;
+        return wins !== null && losses !== null && !isNaN(wins) && !isNaN(losses) && losses > 0;
       });
 
       console.log(`✅ ${validKOLs.length} KOLs have valid win/loss data`);
@@ -998,15 +1185,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const [kolA, kolB] = availableKOLs.slice(0, 2);
         
-        const [winsAStr, lossesAStr] = kolA.winsLosses!.split('/');
-        const [winsBStr, lossesBStr] = kolB.winsLosses!.split('/');
-        const winsA = parseInt(winsAStr);
-        const lossesA = parseInt(lossesAStr);
-        const winsB = parseInt(winsBStr);
-        const lossesB = parseInt(lossesBStr);
+        const winsA = kolA.wins!;
+        const lossesA = kolA.losses!;
+        const winsB = kolB.wins!;
+        const lossesB = kolB.losses!;
         
         const ratioA = (winsA / lossesA).toFixed(2);
         const ratioB = (winsB / lossesB).toFixed(2);
+        const winsLossesA = `${winsA}/${lossesA}`;
+        const winsLossesB = `${winsB}/${lossesB}`;
 
         const kolARecord = await storage.getKolByHandle(kolA.username);
         if (!kolARecord) {
@@ -1017,8 +1204,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const market = {
           kolId: kolARecord.id,
           title: `Will ${kolA.username} have a higher win/loss ratio than ${kolB.username} on tomorrow's leaderboard?`,
-          description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${kolA.winsLosses}) vs ${kolB.username} with ${ratioB} (${kolB.winsLosses})`,
+          description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${winsLossesA}) vs ${kolB.username} with ${ratioB} (${winsLossesB})`,
           outcome: 'pending' as const,
+          yesPool: "10000.00",
+          noPool: "10000.00",
           resolvesAt: addDays(new Date(), 1),
           marketType: 'winloss_ratio_flippening',
           marketCategory: 'performance',
@@ -1034,15 +1223,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           kolB: kolB.username,
           xHandle: null,
           currentFollowers: null,
-          currentRankA: kolA.rank || null,
-          currentRankB: kolB.rank || null,
+          currentRankA: kolA.rank.toString() || null,
+          currentRankB: kolB.rank.toString() || null,
           currentUsd: null,
           currentSolA: null,
           currentSolB: null,
           currentUsdA: null,
           currentUsdB: null,
-          currentWinsLossesA: kolA.winsLosses || null,
-          currentWinsLossesB: kolB.winsLosses || null,
+          currentWinsLossesA: winsLossesA,
+          currentWinsLossesB: winsLossesB,
           threshold: null,
           timeframeDays: null,
         });
@@ -1052,8 +1241,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         console.log(`\n✅ MARKET ${i + 1} CREATED`);
         console.log(`   Title: ${createdMarket.title}`);
-        console.log(`   ${kolA.username}: ${ratioA} ratio (${kolA.winsLosses})`);
-        console.log(`   ${kolB.username}: ${ratioB} ratio (${kolB.winsLosses})`);
+        console.log(`   ${kolA.username}: ${ratioA} ratio (${winsLossesA})`);
+        console.log(`   ${kolB.username}: ${ratioB} ratio (${winsLossesB})`);
         console.log(`   Market ID: ${createdMarket.id}`);
 
         createdMarkets.push({
