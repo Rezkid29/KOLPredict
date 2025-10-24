@@ -60,8 +60,15 @@ export class KOLScraperV2 {
       });
 
       console.log('⏳ Waiting for dynamic content to load...');
-      await this.leaderboardPage.waitForSelector('tr, div[class*="row"]', { timeout: 10000 });
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for network to be idle instead of specific selectors
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Try to wait for any table or list structure, but don't fail if not found
+      try {
+        await this.leaderboardPage.waitForSelector('body', { timeout: 5000 });
+      } catch (e) {
+        console.log('⚠️ Page structure different than expected, continuing anyway...');
+      }
 
       console.log('📜 Scrolling to load all content...');
       await this.leaderboardPage.evaluate(() => {
@@ -72,18 +79,68 @@ export class KOLScraperV2 {
       console.log('📄 Extracting leaderboard data and profile URLs...');
       const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
         const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
-        const rows = Array.from(document.querySelectorAll('tr, div[class*="row"], div[class*="item"], div[class*="entry"]'));
+        
+        // Try multiple selector strategies
+        let rows: Element[] = [];
+        
+        // Strategy 1: Table rows
+        const tableRows = Array.from(document.querySelectorAll('tr'));
+        if (tableRows.length > 5) {
+          rows = tableRows;
+        }
+        
+        // Strategy 2: Divs with common class patterns
+        if (rows.length === 0) {
+          const divRows = Array.from(document.querySelectorAll('div[class*="row"], div[class*="item"], div[class*="entry"], div[class*="card"]'));
+          if (divRows.length > 5) {
+            rows = divRows;
+          }
+        }
+        
+        // Strategy 3: Find all links and their parent containers
+        if (rows.length === 0) {
+          const links = Array.from(document.querySelectorAll('a[href*="/profile/"], a[href*="/kol/"], a[href*="twitter"], a[href*="x.com"]'));
+          const containers = new Set<Element>();
+          links.forEach(link => {
+            let parent = link.parentElement;
+            let depth = 0;
+            while (parent && depth < 5) {
+              if (parent.textContent && parent.textContent.length > 20) {
+                containers.add(parent);
+                break;
+              }
+              parent = parent.parentElement;
+              depth++;
+            }
+          });
+          rows = Array.from(containers);
+        }
+        
+        console.log(`Found ${rows.length} potential KOL entries`);
         
         let rank = 1;
         for (const row of rows) {
           try {
             const text = row.textContent || '';
             
-            const usernameEl = row.querySelector('[class*="name"], [class*="username"], [class*="kol"]');
-            const username = usernameEl?.textContent?.trim();
+            // Find username - try multiple strategies
+            let username: string | null = null;
+            const usernameEl = row.querySelector('[class*="name"], [class*="username"], [class*="kol"], [class*="user"]');
+            if (usernameEl) {
+              username = usernameEl.textContent?.trim() || null;
+            }
+            
+            // If no username element found, try to extract from links
+            if (!username) {
+              const nameLink = row.querySelector('a');
+              if (nameLink && !nameLink.href.includes('twitter') && !nameLink.href.includes('x.com')) {
+                username = nameLink.textContent?.trim() || null;
+              }
+            }
             
             if (!username || username.length < 2 || username.length > 50) continue;
             if (username.includes('Leaderboard') || username.includes('Daily') || username.includes('Weekly')) continue;
+            if (/^\d+$/.test(username)) continue; // Skip pure numbers
 
             let profileUrl: string | null = null;
             const profileLinkEl = row.querySelector('a[href*="/profile/"], a[href*="/kol/"]');
@@ -94,8 +151,9 @@ export class KOLScraperV2 {
             let xHandle: string | null = null;
             const handleEl = row.querySelector('a[href*="twitter"], a[href*="x.com"]');
             if (handleEl) {
-              const handleText = (handleEl.getAttribute('href') || '').replace('https://twitter.com/', '').replace('https://x.com/', '');
-              if (/^[A-Za-z0-9_]{3,15}$/.test(handleText)) {
+              const href = handleEl.getAttribute('href') || '';
+              const handleText = href.replace('https://twitter.com/', '').replace('https://x.com/', '').replace('@', '').split('/')[0] || '';
+              if (/^[A-Za-z0-9_]{1,15}$/.test(handleText)) {
                 xHandle = handleText;
               }
             }
@@ -107,7 +165,7 @@ export class KOLScraperV2 {
             }
             
             let solGain: string | null = null;
-            const solMatch = text.match(/([+-]?[\d,.]+)\s*Sol/i);
+            const solMatch = text.match(/([+-]?[\d,.]+)\s*(?:Sol|SOL)/i);
             if (solMatch) {
               solGain = solMatch[1];
             }
@@ -173,8 +231,14 @@ export class KOLScraperV2 {
         timeout: 30000
       });
 
-      await profilePage.waitForSelector('[class*="portfolio"], [class*="holdings"], [class*="trades"], [class*="history"]', { timeout: 15000 });
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for page to load, but don't fail if specific selectors aren't found
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      try {
+        await profilePage.waitForSelector('body', { timeout: 5000 });
+      } catch (e) {
+        console.log('⚠️ Profile page structure different than expected');
+      }
 
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
