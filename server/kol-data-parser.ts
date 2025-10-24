@@ -1,3 +1,4 @@
+
 import type { InsertScrapedKol } from '@shared/schema';
 
 export interface RawKOLData {
@@ -8,6 +9,32 @@ export interface RawKOLData {
   solGain: string | null;
   usdGain: string | null;
 }
+
+export interface KOLHolding {
+  tokenName: string;
+  tokenSymbol: string;
+  valueUsd: string | null;
+  amount: string | null;
+}
+
+export interface KOLTrade {
+  type: 'buy' | 'sell';
+  tokenName: string;
+  amount: string | null;
+  valueUsd: string | null;
+  timestamp: string | null;
+}
+
+export interface KOLDetailedData {
+  pnl7d: string | null;
+  pnl30d: string | null;
+  totalTrades: string | null;
+  winRatePercent: string | null;
+  holdings: KOLHolding[];
+  tradeHistory: KOLTrade[];
+}
+
+export type FullKOLData = RawKOLData & KOLDetailedData & { profileUrl?: string };
 
 export class KOLDataParser {
   static parseRank(rankStr: string): number {
@@ -41,6 +68,21 @@ export class KOLDataParser {
     return match[0].replace(/,/g, '');
   }
 
+  static parseDecimalValue(valueStr: string | null): string | null {
+    if (!valueStr) return null;
+    const cleaned = valueStr.replace(/[^0-9.+-]/g, '');
+    const match = cleaned.match(/[+-]?[\d,.]+/);
+    if (!match) return null;
+    return match[0].replace(/,/g, '');
+  }
+
+  static parseIntValue(valueStr: string | null): number | null {
+    if (!valueStr) return null;
+    const cleaned = valueStr.replace(/[^\d]/g, '');
+    const parsed = parseInt(cleaned, 10);
+    return isNaN(parsed) ? null : parsed;
+  }
+
   static normalizeUsername(username: string): string {
     return username.toLowerCase().trim();
   }
@@ -58,7 +100,33 @@ export class KOLDataParser {
     };
   }
 
+  static parseFullKOLData(raw: FullKOLData): InsertScrapedKol {
+    const { wins, losses } = this.parseWinsLosses(raw.winsLosses);
+    
+    return {
+      rank: this.parseRank(raw.rank),
+      username: this.normalizeUsername(raw.username),
+      xHandle: raw.xHandle || null,
+      wins,
+      losses,
+      solGain: this.parseSolGain(raw.solGain),
+      usdGain: this.parseUsdGain(raw.usdGain),
+      // New detailed fields
+      pnl7d: this.parseDecimalValue(raw.pnl7d),
+      pnl30d: this.parseDecimalValue(raw.pnl30d),
+      totalTrades: this.parseIntValue(raw.totalTrades),
+      winRatePercent: this.parseDecimalValue(raw.winRatePercent),
+      holdings: raw.holdings && raw.holdings.length > 0 ? JSON.stringify(raw.holdings) : null,
+      tradeHistory: raw.tradeHistory && raw.tradeHistory.length > 0 ? JSON.stringify(raw.tradeHistory) : null,
+      profileUrl: raw.profileUrl || null,
+    };
+  }
+
   static parseRawKOLDataBatch(rawData: RawKOLData[]): InsertScrapedKol[] {
     return rawData.map(raw => this.parseRawKOLData(raw));
+  }
+
+  static parseFullKOLDataBatch(rawData: FullKOLData[]): InsertScrapedKol[] {
+    return rawData.map(raw => this.parseFullKOLData(raw));
   }
 }
