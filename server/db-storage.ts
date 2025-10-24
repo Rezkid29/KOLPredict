@@ -512,13 +512,14 @@ export class DbStorage implements IStorage {
       }
 
       // STEP 3: Perform AMM calculations inside transaction
-      // Pools represent share inventory (not dollars)
-      // Price formula ensures Price(YES) + Price(NO) = 1.0
+      // Dual-pool CPMM pricing for prediction markets
+      // This ensures Price(YES) + Price(NO) = 1.0 always
       const calculateAMMPrices = (yesSP: number, yesCP: number, noSP: number, noCP: number) => {
-        // Price of YES = collateral in YES pool / shares in YES pool
-        const yesPrice = yesCP / yesSP;
-        // Price of NO = collateral in NO pool / shares in NO pool
-        const noPrice = noCP / noSP;
+        // For prediction markets with dual pools, price = collateral liquidity ratio
+        // This ensures yesPrice + noPrice = 1.0
+        const totalLiquidity = yesCP + noCP;
+        const yesPrice = yesCP / totalLiquidity;
+        const noPrice = noCP / totalLiquidity;
         return { yesPrice, noPrice };
       };
 
@@ -532,7 +533,7 @@ export class DbStorage implements IStorage {
       let newNoSharePool: number;
       let newNoCollateralPool: number;
       let platformFee: number = 0;
-      let netBetAmount: number;
+      let netBetAmount: number = 0; // Initialize to avoid TypeScript errors
 
       let profit: number = 0;
       let averageCost: number = 0;
@@ -805,8 +806,8 @@ export class DbStorage implements IStorage {
           noSharePool: newNoSharePool.toFixed(2),
           noCollateralPool: newNoCollateralPool.toFixed(2),
           totalVolume: (parseFloat(market.totalVolume) + betAmount).toFixed(2),
-          currentYesPrice: newYesCollateralPool / newYesSharePool,
-          currentNoPrice: newNoCollateralPool / newNoSharePool,
+          currentYesPrice: yesPrice.toFixed(4), // Use the calculated price
+          currentNoPrice: noPrice.toFixed(4),   // Use the calculated price
         })
         .where(eq(markets.id, params.marketId));
 
@@ -1241,7 +1242,7 @@ export class DbStorage implements IStorage {
   // AMM calculation methods
   private calculateAmmTrade(
     side: 'yes' | 'no',
-    amount: number, // Amount of collateral being added/removed
+    amount: number, // Amount user is spending (collateral)
     yesSharePool: number,
     yesCollateralPool: number,
     noSharePool: number,
@@ -1254,58 +1255,71 @@ export class DbStorage implements IStorage {
     newNoCollateralPool: number;
     avgPrice: number // Average price per share for this trade
   } {
-    let shares = 0;
-    let newYesSharePool = yesSharePool;
-    let newYesCollateralPool = yesCollateralPool;
-    let newNoSharePool = noSharePool;
-    let newNoCollateralPool = noCollateralPool;
-    let avgPrice = 0;
-
+    // Dual-pool CPMM for prediction markets
+    // Each side maintains: k = sharePool * collateralPool
+    // When buying: user adds collateral, receives shares from pool
+    // When selling: user returns shares, receives collateral from pool
+    
     if (side === 'yes') {
-      // Buying YES: User adds collateral (amount) to the YES pool, receives YES shares
-      // The constant product 'k' for the YES pool is yesSharePool * yesCollateralPool
-      const k = yesSharePool * yesCollateralPool;
-
-      // User adds collateral to the pool
-      newYesCollateralPool = yesCollateralPool + amount;
-
-      // Solve for new share pool to maintain k
-      newYesSharePool = k / newYesCollateralPool;
-
-      // Shares given to user = difference in share pool
-      shares = yesSharePool - newYesSharePool;
-      avgPrice = amount / shares; // Avg price = collateral added / shares received
-
-      // NO pool remains unchanged
+      // Maintain constant product for YES pool: k = yesSharePool * yesCollateralPool
+      const k_yes = yesSharePool * yesCollateralPool;
+      
+      // User adds collateral to YES pool
+      const newYesCollateralPool = yesCollateralPool + amount;
+      
+      // Maintain constant product: newYesSharePool * newYesCollateralPool = k
+      const newYesSharePool = k_yes / newYesCollateralPool;
+      
+      // Shares given to user = reduction in share pool
+      const shares = yesSharePool - newYesSharePool;
+      
+      // NO pool unchanged when buying YES
+      const newNoSharePool = noSharePool;
+      const newNoCollateralPool = noCollateralPool;
+      
+      // Calculate average price (total cost / shares received)
+      const avgPrice = amount / shares;
+      
+      return { 
+        shares, 
+        newYesSharePool, 
+        newYesCollateralPool,
+        newNoSharePool,
+        newNoCollateralPool,
+        avgPrice 
+      };
     } else {
-      // Buying NO: User adds collateral (amount) to the NO pool, receives NO shares
-      // The constant product 'k' for the NO pool is noSharePool * noCollateralPool
-      const k = noSharePool * noCollateralPool;
-
-      // User adds collateral to the pool
-      newNoCollateralPool = noCollateralPool + amount;
-
-      // Solve for new share pool to maintain k
-      newNoSharePool = k / newNoCollateralPool;
-
-      // Shares given to user = difference in share pool
-      shares = noSharePool - newNoSharePool;
-      avgPrice = amount / shares; // Avg price = collateral added / shares received
-
-      // YES pool remains unchanged
+      // Buying NO - same CPMM logic for NO pool
+      const k_no = noSharePool * noCollateralPool;
+      
+      // User adds collateral to NO pool
+      const newNoCollateralPool = noCollateralPool + amount;
+      
+      // Maintain constant product
+      const newNoSharePool = k_no / newNoCollateralPool;
+      
+      // Shares given to user
+      const shares = noSharePool - newNoSharePool;
+      
+      // YES pool unchanged when buying NO
+      const newYesSharePool = yesSharePool;
+      const newYesCollateralPool = yesCollateralPool;
+      
+      // Calculate average price
+      const avgPrice = amount / shares;
+      
+      return { 
+        shares, 
+        newYesSharePool, 
+        newYesCollateralPool,
+        newNoSharePool,
+        newNoCollateralPool,
+        avgPrice 
+      };
     }
-
-    return { 
-      shares, 
-      newYesSharePool, 
-      newYesCollateralPool,
-      newNoSharePool,
-      newNoCollateralPool,
-      avgPrice 
-    };
   }
 
-  // Selling shares returns collateral from the opposite pool
+  // Selling shares returns collateral based on CPMM formula
   private calculatePayoutForSell(
     sharesToSell: number,
     side: 'yes' | 'no',
@@ -1314,41 +1328,59 @@ export class DbStorage implements IStorage {
     noSharePool: number,
     noCollateralPool: number
   ): { payout: number; newYesSharePool: number; newYesCollateralPool: number; newNoSharePool: number; newNoCollateralPool: number } {
-    let payout = 0;
-    let newYesSharePool = yesSharePool;
-    let newYesCollateralPool = yesCollateralPool;
-    let newNoSharePool = noSharePool;
-    let newNoCollateralPool = noCollateralPool;
-
+    // Dual-pool CPMM for selling
+    // User returns shares to pool, receives collateral
+    // Maintains constant product: k = sharePool * collateralPool
+    
     if (side === 'yes') {
-      // Selling YES: User returns YES shares, receives collateral from NO pool
-      newYesSharePool = yesSharePool + sharesToSell; // Add shares back to YES pool
-      const k = yesSharePool * yesCollateralPool; // Constant product for YES pool
-      newYesCollateralPool = k / newYesSharePool; // Calculate new collateral pool
-
-      // Payout = difference in collateral pool (collateral removed from NO pool)
-      payout = yesCollateralPool - newYesCollateralPool; 
-
-      // Update NO pool collateral
-      newNoCollateralPool = noCollateralPool - payout;
-
-      // NO share pool remains unchanged
+      // Maintain constant product for YES pool
+      const k_yes = yesSharePool * yesCollateralPool;
+      
+      // User returns shares to YES pool
+      const newYesSharePool = yesSharePool + sharesToSell;
+      
+      // Maintain constant product: newYesSharePool * newYesCollateralPool = k
+      const newYesCollateralPool = k_yes / newYesSharePool;
+      
+      // Payout = reduction in collateral pool
+      const payout = yesCollateralPool - newYesCollateralPool;
+      
+      // NO pool unchanged when selling YES
+      const newNoSharePool = noSharePool;
+      const newNoCollateralPool = noCollateralPool;
+      
+      return { 
+        payout, 
+        newYesSharePool, 
+        newYesCollateralPool, 
+        newNoSharePool, 
+        newNoCollateralPool 
+      };
     } else {
-      // Selling NO: User returns NO shares, receives collateral from YES pool
-      newNoSharePool = noSharePool + sharesToSell; // Add shares back to NO pool
-      const k = noSharePool * noCollateralPool; // Constant product for NO pool
-      newNoSharePool = k / newNoSharePool; // Calculate new collateral pool
-
-      // Payout = difference in collateral pool (collateral removed from YES pool)
-      payout = yesCollateralPool - newYesCollateralPool;
-
-      // Update YES pool collateral
-      newYesCollateralPool = yesCollateralPool - payout;
-
-      // YES share pool remains unchanged
+      // Selling NO - same CPMM logic for NO pool
+      const k_no = noSharePool * noCollateralPool;
+      
+      // User returns shares to NO pool
+      const newNoSharePool = noSharePool + sharesToSell;
+      
+      // Maintain constant product
+      const newNoCollateralPool = k_no / newNoSharePool;
+      
+      // Payout = reduction in collateral pool
+      const payout = noCollateralPool - newNoCollateralPool;
+      
+      // YES pool unchanged when selling NO
+      const newYesSharePool = yesSharePool;
+      const newYesCollateralPool = yesCollateralPool;
+      
+      return { 
+        payout, 
+        newYesSharePool, 
+        newYesCollateralPool, 
+        newNoSharePool, 
+        newNoCollateralPool 
+      };
     }
-
-    return { payout, newYesSharePool, newYesCollateralPool, newNoSharePool, newNoCollateralPool };
   }
 }
 
