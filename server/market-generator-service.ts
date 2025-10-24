@@ -257,7 +257,7 @@ export class MarketGeneratorService {
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} have higher SOL gains than ${kolB.username} on tomorrow's leaderboard?`,
-      description: `SOL gain comparison: ${kolA.username} (${kolA.solGain}) vs ${kolB.username} (${kolB.solGain})`,
+      description: `SOL gain comparison: ${kolA.solGain} vs ${kolB.solGain}`,
       outcome: 'pending',
       yesSharePool,
       yesCollateralPool,
@@ -785,7 +785,7 @@ export class MarketGeneratorService {
     }
 
     console.log(`\n${'═'.repeat(70)}`);
-    console.log(`PHASE 1 COMPLETE: ${headToHeadCreated} head-to-head markets created`);
+    console.log(`PHASE 1: COMPLETE: ${headToHeadCreated} head-to-head markets created`);
     console.log(`${'═'.repeat(70)}`);
 
     // PHASE 2: Fill remaining markets with mixed strategy
