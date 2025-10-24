@@ -1,0 +1,31 @@
+⏳ Waiting for dynamic content to load...
+❌ Leaderboard scraping failed: TimeoutError: Waiting for selector `tr, div[class*="row"]` failed
+    at Function.waitFor (/home/runner/workspace/node_modules/puppeteer-core/src/common/QueryHandler.ts:213:36)
+    at async CdpFrame.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:743:13)
+    ... 3 lines matching cause stack trace ...
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:357:32) {
+  cause: TimeoutError: Waiting failed: 10000ms exceeded
+      at new WaitTask (/home/runner/workspace/node_modules/puppeteer-core/src/common/WaitTask.ts:77:28)
+      at IsolatedWorld.waitForFunction (/home/runner/workspace/node_modules/puppeteer-core/src/api/Realm.ts:74:22)
+      at Function.waitFor (/home/runner/workspace/node_modules/puppeteer-core/src/common/QueryHandler.ts:171:50)
+      at async CdpFrame.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:743:13)
+      at async CdpPage.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:3039:12)
+      at async KOLScraperV2.scrapeLeaderboard (/home/runner/workspace/server/kol-scraper-v2.ts:63:7)
+      at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:310:34)
+      at async main (/home/runner/workspace/server/kol-scraper-v2.ts:357:32)
+}
+❌ Fatal error during scrapeAndSave: TimeoutError: Waiting for selector `tr, div[class*="row"]` failed
+    at Function.waitFor (/home/runner/workspace/node_modules/puppeteer-core/src/common/QueryHandler.ts:213:36)
+    at async CdpFrame.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:743:13)
+    ... 3 lines matching cause stack trace ...
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:357:32) {
+  cause: TimeoutError: Waiting failed: 10000ms exceeded
+      at new WaitTask (/home/runner/workspace/node_modules/puppeteer-core/src/common/WaitTask.ts:77:28)
+      at IsolatedWorld.waitForFunction (/home/runner/workspace/node_modules/puppeteer-core/src/api/Realm.ts:74:22)
+      at Function.waitFor (/home/runner/workspace/node_modules/puppeteer-core/src/common/QueryHandler.ts:171:50)
+      at async CdpFrame.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:743:13)
+      at async CdpPage.waitForSelector (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:3039:12)
+      at async KOLScraperV2.scrapeLeaderboard (/home/runner/workspace/server/kol-scraper-v2.ts:63:7)
+      at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:310:34)
+      at async main (/home/runner/workspace/server/kol-scraper-v2.ts:357:32)
+}
