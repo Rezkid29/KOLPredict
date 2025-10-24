@@ -209,52 +209,77 @@ export class DbStorage implements IStorage {
       const allBets = await tx
         .select()
         .from(bets)
-        .where(eq(bets.marketId, marketId));
+        .where(eq(bets.marketId, marketId))
+        .for('update');
       
       const pendingBets = allBets.filter(bet => bet.status === "pending" || bet.status === "open");
       
       if (pendingBets.length === 0) {
+        console.log(`No bets to refund for market ${marketId}`);
         return 0;
       }
 
+      let refundedCount = 0;
+      let failedCount = 0;
+
       for (const bet of pendingBets) {
-        const [user] = await tx
-          .select()
-          .from(users)
-          .where(eq(users.id, bet.userId))
-          .for('update')
-          .limit(1);
-        
-        if (!user) {
-          console.error(`User ${bet.userId} not found for refund`);
-          continue;
+        try {
+          const [user] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.id, bet.userId))
+            .for('update')
+            .limit(1);
+          
+          if (!user) {
+            console.error(`User ${bet.userId} not found for refund - skipping bet ${bet.id}`);
+            failedCount++;
+            continue;
+          }
+
+          const betAmount = parseFloat(bet.amount);
+          if (isNaN(betAmount) || betAmount < 0) {
+            console.error(`Invalid bet amount ${bet.amount} for bet ${bet.id} - skipping`);
+            failedCount++;
+            continue;
+          }
+
+          const currentBalance = parseFloat(user.balance);
+          const newBalance = (currentBalance + betAmount).toFixed(2);
+          
+          if (parseFloat(newBalance) < 0) {
+            console.error(`Refund would result in negative balance for user ${bet.userId} - skipping`);
+            failedCount++;
+            continue;
+          }
+          
+          await tx
+            .update(users)
+            .set({ balance: newBalance })
+            .where(eq(users.id, bet.userId));
+          
+          await tx
+            .update(bets)
+            .set({ status: "refunded", profit: "0.00" })
+            .where(eq(bets.id, bet.id));
+
+          await tx.insert(transactions).values({
+            userId: bet.userId,
+            type: "refund",
+            amount: bet.amount,
+            balanceAfter: newBalance,
+            description: `Refund for cancelled market`
+          });
+
+          refundedCount++;
+        } catch (error) {
+          console.error(`Error refunding bet ${bet.id}:`, error);
+          failedCount++;
         }
-
-        const betAmount = parseFloat(bet.amount);
-        const currentBalance = parseFloat(user.balance);
-        const newBalance = (currentBalance + betAmount).toFixed(2);
-        
-        await tx
-          .update(users)
-          .set({ balance: newBalance })
-          .where(eq(users.id, bet.userId));
-        
-        await tx
-          .update(bets)
-          .set({ status: "refunded", profit: "0.00" })
-          .where(eq(bets.id, bet.id));
-
-        await tx.insert(transactions).values({
-          userId: bet.userId,
-          type: "refund",
-          amount: bet.amount,
-          balanceAfter: newBalance,
-          description: `Refund for cancelled market`
-        });
       }
 
-      console.log(`✅ Refunded ${pendingBets.length} bets for market ${marketId}`);
-      return pendingBets.length;
+      console.log(`✅ Refunded ${refundedCount} bets for market ${marketId}${failedCount > 0 ? ` (${failedCount} failed)` : ''}`);
+      return refundedCount;
     });
   }
 
@@ -408,107 +433,7 @@ export class DbStorage implements IStorage {
     }
   }
 
-  // Legacy transactional bet placement - DEPRECATED - use placeBetWithLocking instead
-  async placeBetTransaction(params: {
-    bet: InsertBet;
-    userId: string;
-    marketId: string;
-    position: string;
-    shares: number;
-    action: string;
-    newBalance: string;
-    totalBets: number;
-    totalWins: number;
-    totalProfit: string;
-    yesPool: string;
-    noPool: string;
-    yesPrice: string;
-    noPrice: string;
-    newVolume: string;
-  }): Promise<Bet> {
-    return await db.transaction(async (tx) => {
-      // 1. Create the bet
-      const [createdBet] = await tx.insert(bets).values(params.bet).returning();
-
-      // 2. Update user position
-      const existingPosition = await tx
-        .select()
-        .from(positions)
-        .where(
-          sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
-        )
-        .limit(1);
-
-      if (existingPosition.length > 0) {
-        const pos = existingPosition[0];
-        const currentShares = parseFloat(pos.shares);
-        const currentAvgPrice = parseFloat(pos.averagePrice);
-        
-        if (params.action === "buy") {
-          const newShares = currentShares + params.shares;
-          const newAvgPrice = ((currentShares * currentAvgPrice) + (params.shares * parseFloat(params.bet.price))) / newShares;
-          
-          await tx
-            .update(positions)
-            .set({
-              shares: newShares.toFixed(2),
-              averagePrice: newAvgPrice.toFixed(4),
-              updatedAt: new Date(),
-            })
-            .where(eq(positions.id, pos.id));
-        } else {
-          await tx
-            .update(positions)
-            .set({
-              shares: Math.max(0, currentShares - params.shares).toFixed(2),
-              updatedAt: new Date(),
-            })
-            .where(eq(positions.id, pos.id));
-        }
-      } else if (params.action === "buy") {
-        // Create new position
-        await tx.insert(positions).values({
-          userId: params.userId,
-          marketId: params.marketId,
-          position: params.position,
-          shares: params.shares.toFixed(2),
-          averagePrice: params.bet.price,
-        });
-      }
-
-      // 3. Update user balance
-      await tx
-        .update(users)
-        .set({ balance: params.newBalance })
-        .where(eq(users.id, params.userId));
-
-      // 4. Update user stats
-      await tx
-        .update(users)
-        .set({
-          totalBets: params.totalBets,
-          totalWins: params.totalWins,
-          totalProfit: params.totalProfit,
-        })
-        .where(eq(users.id, params.userId));
-
-      // 5. Update market pools and prices
-      await tx
-        .update(markets)
-        .set({
-          yesPool: params.yesPool,
-          noPool: params.noPool,
-          yesPrice: params.yesPrice,
-          noPrice: params.noPrice,
-          totalVolume: params.newVolume,
-        })
-        .where(eq(markets.id, params.marketId));
-
-      return createdBet;
-    });
-  }
-
-  // NEW: Robust transactional bet placement with row-level locking and internal calculations
+  // Robust transactional bet placement with row-level locking and internal calculations
   // This eliminates race conditions by performing all reads, calculations, and writes atomically
   async placeBetWithLocking(params: {
     userId: string;
@@ -876,7 +801,8 @@ export class DbStorage implements IStorage {
     });
   }
 
-  // Leaderboard
+  // Leaderboard with proper tie handling
+  // Users with same totalProfit get same rank; wins/bets only used for ordering within profit tier
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
     const result = await db
       .select({
@@ -888,13 +814,28 @@ export class DbStorage implements IStorage {
       })
       .from(users)
       .where(sql`${users.totalBets} > 0`)
-      .orderBy(desc(users.totalProfit));
+      .orderBy(desc(users.totalProfit), desc(users.totalWins), desc(users.totalBets));
 
-    return result.map((user, index) => ({
-      ...user,
-      winRate: user.totalBets > 0 ? (user.totalWins / user.totalBets) * 100 : 0,
-      rank: index + 1,
-    }));
+    if (result.length === 0) {
+      return [];
+    }
+
+    let currentRank = 1;
+    let previousProfit: string = result[0].totalProfit;
+
+    return result.map((user, index) => {
+      if (index > 0 && user.totalProfit !== previousProfit) {
+        currentRank = index + 1;
+      }
+
+      previousProfit = user.totalProfit;
+
+      return {
+        ...user,
+        winRate: user.totalBets > 0 ? (user.totalWins / user.totalBets) * 100 : 0,
+        rank: currentRank,
+      };
+    });
   }
 
   // Position methods

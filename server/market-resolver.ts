@@ -169,6 +169,14 @@ export class MarketResolver {
           return null;
         }
 
+        const freshnessCheck = await this.validateDataFreshness(marketType, metadata);
+        if (!freshnessCheck.valid) {
+          console.warn(`Market ${market.id} cancelled due to stale data: ${freshnessCheck.reason}`);
+          await storage.cancelMarket(market.id, `Data too old: ${freshnessCheck.reason}`);
+          await storage.refundMarket(market.id);
+          return null;
+        }
+
         if (marketType === 'rank_flippening') {
           const result = await this.resolveRankFlippeningMarket(metadata);
           outcome = result.outcome;
@@ -479,6 +487,47 @@ export class MarketResolver {
     }
     
     return null;
+  }
+
+  private async validateDataFreshness(marketType: string, metadata?: any): Promise<{ valid: boolean; reason?: string }> {
+    const MAX_KOLSCAN_AGE_HOURS = 2;
+    const MAX_FOLLOWER_CACHE_AGE_HOURS = 24;
+
+    if (marketType.includes('rank_flippening') || marketType.includes('sol_gain') || 
+        marketType.includes('usd_gain') || marketType.includes('winrate') || 
+        marketType.includes('winloss_ratio') || marketType.includes('top_rank') || 
+        marketType.includes('streak') || marketType.includes('profit_streak')) {
+      
+      const latestKols = await storage.getLatestScrapedKols(20);
+      if (latestKols.length === 0) {
+        return { valid: false, reason: "No scraped KOL data available" };
+      }
+
+      const mostRecentScrape = latestKols[0].scrapedAt;
+      const ageHours = (new Date().getTime() - new Date(mostRecentScrape).getTime()) / (1000 * 60 * 60);
+
+      if (ageHours > MAX_KOLSCAN_AGE_HOURS) {
+        return { 
+          valid: false, 
+          reason: `Kolscan data is ${ageHours.toFixed(1)} hours old (max ${MAX_KOLSCAN_AGE_HOURS}h allowed)` 
+        };
+      }
+    }
+
+    if (marketType === 'follower_growth' && metadata?.xHandle) {
+      const cachedFollowers = await storage.getFollowerCache(metadata.xHandle);
+      if (cachedFollowers) {
+        const cacheAgeHours = (new Date().getTime() - new Date(cachedFollowers.cachedAt).getTime()) / (1000 * 60 * 60);
+        if (cacheAgeHours > MAX_FOLLOWER_CACHE_AGE_HOURS) {
+          return { 
+            valid: false, 
+            reason: `Follower cache for @${metadata.xHandle} is ${cacheAgeHours.toFixed(1)}h old (max ${MAX_FOLLOWER_CACHE_AGE_HOURS}h allowed)` 
+          };
+        }
+      }
+    }
+
+    return { valid: true };
   }
 
   private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {

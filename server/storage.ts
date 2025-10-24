@@ -56,25 +56,6 @@ export interface IStorage {
   getMarketBets(marketId: string): Promise<Bet[]>;
   createBet(bet: InsertBet): Promise<Bet>;
   updateBetStatus(id: string, status: string, profit?: string): Promise<void>;
-  
-  // Transactional bet placement - atomically executes all bet-related updates
-  placeBetTransaction(params: {
-    bet: InsertBet;
-    userId: string;
-    marketId: string;
-    position: string;
-    shares: number;
-    action: string;
-    newBalance: string;
-    totalBets: number;
-    totalWins: number;
-    totalProfit: string;
-    yesPool: string;
-    noPool: string;
-    yesPrice: string;
-    noPrice: string;
-    newVolume: string;
-  }): Promise<Bet>;
 
   // Enhanced transactional bet placement with row-level locking and slippage protection
   placeBetWithLocking(params: {
@@ -617,32 +598,73 @@ export class MemStorage implements IStorage {
     }
   }
 
-  // Transaction-like bet placement for MemStorage (not truly atomic but maintains order)
-  async placeBetTransaction(params: {
-    bet: InsertBet;
+  // Simplified placeBetWithLocking for MemStorage (not truly atomic but functional for dev/test)
+  async placeBetWithLocking(params: {
     userId: string;
     marketId: string;
-    position: string;
-    shares: number;
-    action: string;
-    newBalance: string;
-    totalBets: number;
-    totalWins: number;
-    totalProfit: string;
-    yesPool: string;
-    noPool: string;
-    yesPrice: string;
-    noPrice: string;
-    newVolume: string;
-  }): Promise<Bet> {
-    // Note: MemStorage doesn't support true transactions, but we execute in order
-    const createdBet = await this.createBet(params.bet);
-    await this.updateUserPosition(params.userId, params.marketId, params.position, params.shares, params.action);
-    await this.updateUserBalance(params.userId, params.newBalance);
-    await this.updateUserStats(params.userId, params.totalBets, params.totalWins, params.totalProfit);
-    await this.updateMarketPools(params.marketId, params.yesPool, params.noPool, params.yesPrice, params.noPrice);
-    await this.updateMarketVolume(params.marketId, params.newVolume);
-    return createdBet;
+    position: "YES" | "NO";
+    amount: number;
+    action: "buy" | "sell";
+    slippageTolerance?: number;
+  }): Promise<{
+    bet: Bet;
+    priceImpact: number;
+    platformFee?: number;
+  }> {
+    const PLATFORM_FEE_PERCENTAGE = 0.02;
+    const market = this.markets.get(params.marketId);
+    const user = this.users.get(params.userId);
+
+    if (!market) {
+      throw new Error(`Market ${params.marketId} not found`);
+    }
+    if (!user) {
+      throw new Error(`User ${params.userId} not found`);
+    }
+    if (!market.isLive) {
+      throw new Error("Market is not live");
+    }
+
+    const userBalance = parseFloat(user.balance);
+    const betAmount = params.amount;
+
+    if (params.action === "buy" && userBalance < betAmount) {
+      throw new Error("Insufficient balance");
+    }
+
+    const platformFee = params.action === "buy" ? betAmount * PLATFORM_FEE_PERCENTAGE : 0;
+    const amountAfterFee = betAmount - platformFee;
+    
+    const currentPrice = parseFloat(params.position === "YES" ? market.yesPrice : market.noPrice);
+    const shares = amountAfterFee / currentPrice;
+
+    const bet: Bet = {
+      id: randomUUID(),
+      userId: params.userId,
+      marketId: params.marketId,
+      position: params.position,
+      amount: betAmount.toFixed(2),
+      price: currentPrice.toFixed(4),
+      shares: shares.toFixed(2),
+      status: "pending",
+      profit: null,
+      createdAt: new Date(),
+    };
+
+    this.bets.set(bet.id, bet);
+
+    const newBalance = params.action === "buy" 
+      ? (userBalance - betAmount).toFixed(2)
+      : (userBalance + betAmount).toFixed(2);
+    user.balance = newBalance;
+    user.totalBets += 1;
+    this.users.set(user.id, user);
+
+    return {
+      bet,
+      priceImpact: 0.01,
+      platformFee: platformFee > 0 ? platformFee : undefined,
+    };
   }
 
   // Position methods
@@ -835,7 +857,8 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       scrapedAt: kol.scrapedAt ?? defaultScrapedAt,
       xHandle: kol.xHandle ?? null,
-      winsLosses: kol.winsLosses ?? null,
+      wins: kol.wins ?? null,
+      losses: kol.losses ?? null,
       solGain: kol.solGain ?? null,
       usdGain: kol.usdGain ?? null,
     }));
