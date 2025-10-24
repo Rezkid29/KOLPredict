@@ -244,7 +244,7 @@ export class KOLScraperV2 {
         timeout: 30000
       });
 
-      // Wait for page to load, but don't fail if specific selectors aren't found
+      // Wait for page to load
       await new Promise(resolve => setTimeout(resolve, 5000));
       
       try {
@@ -255,21 +255,22 @@ export class KOLScraperV2 {
 
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
-      const detailedData = await profilePage.evaluate((): KOLDetailedData => {
+      // Extract data using plain JavaScript (no TypeScript types in evaluate context)
+      const detailedData = await profilePage.evaluate(() => {
         
-        const findStatByLabel = (labelRegex: RegExp): string | null => {
+        const findStatByLabel = (labelRegex) => {
           try {
             const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
             const labelNode = allTextNodes.find(el => labelRegex.test(el.textContent || ''));
             if (!labelNode) return null;
             
             const parent = labelNode.parentElement;
-            let valueNode = labelNode.nextElementSibling || parent?.querySelector('[class*="value"], [class*="stat"]');
+            let valueNode = labelNode.nextElementSibling || (parent ? parent.querySelector('[class*="value"], [class*="stat"]') : null);
             
-            if (valueNode) return valueNode.textContent?.trim() || null;
+            if (valueNode && valueNode.textContent) return valueNode.textContent.trim();
 
-            if(parent) {
-                const parentText = parent.textContent || '';
+            if (parent && parent.textContent) {
+                const parentText = parent.textContent;
                 const labelText = labelNode.textContent || '';
                 const value = parentText.replace(labelText, '').trim();
                 if (value.length > 0 && value.length < 20) return value;
@@ -285,7 +286,7 @@ export class KOLScraperV2 {
         const totalTrades = findStatByLabel(/Total Trades/i);
         const winRatePercent = findStatByLabel(/Win Rate/i);
 
-        const holdings: any[] = [];
+        const holdings = [];
         const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
         if (portfolioSection) {
           const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
@@ -297,53 +298,66 @@ export class KOLScraperV2 {
               const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
               const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
               
-              const tokenName = nameEl?.textContent?.trim() || 'Unknown';
-              const tokenSymbol = symbolEl?.textContent?.trim() || nameEl?.textContent?.split('(')[1]?.replace(')','').trim() || '???';
+              const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
+              const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
+                                  (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
+                                  nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
               
               if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
 
               holdings.push({
-                tokenName,
-                tokenSymbol,
-                valueUsd: valueEl?.textContent?.trim() || null,
-                amount: amountEl?.textContent?.trim() || null
+                tokenName: tokenName,
+                tokenSymbol: tokenSymbol,
+                valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
               });
-            } catch (e) { continue; }
+            } catch (e) { 
+              continue; 
+            }
           }
         }
 
-        const tradeHistory: any[] = [];
+        const tradeHistory = [];
         const historySection = document.querySelector('[class*="trades"], [class*="history"]');
         if (historySection) {
           const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
           
           for (const row of tradeRows) {
             try {
-              const text = row.textContent?.toLowerCase() || '';
-              const type: 'buy' | 'sell' = text.includes('buy') ? 'buy' : 'sell';
+              const text = (row.textContent || '').toLowerCase();
+              const type = text.includes('buy') ? 'buy' : 'sell';
 
               const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
               const amountEl = row.querySelector('[class*="amount"]');
               const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
               const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
 
-              if (/amount/i.test(nameEl?.textContent || '')) continue;
+              if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
               
               tradeHistory.push({
-                type,
-                tokenName: nameEl?.textContent?.trim() || 'Unknown',
-                amount: amountEl?.textContent?.trim() || null,
-                valueUsd: valueEl?.textContent?.trim() || null,
-                timestamp: timeEl?.textContent?.trim() || null,
+                type: type,
+                tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
+                amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
+                valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
               });
-            } catch (e) { continue; }
+            } catch (e) { 
+              continue; 
+            }
           }
         }
 
-        return { pnl7d, pnl30d, totalTrades, winRatePercent, holdings, tradeHistory };
+        return { 
+          pnl7d: pnl7d, 
+          pnl30d: pnl30d, 
+          totalTrades: totalTrades, 
+          winRatePercent: winRatePercent, 
+          holdings: holdings, 
+          tradeHistory: tradeHistory 
+        };
       });
 
-      return detailedData;
+      return detailedData as KOLDetailedData;
 
     } catch (error) {
       console.error(`❌ Failed to scrape profile ${fullUrl}:`, error);
