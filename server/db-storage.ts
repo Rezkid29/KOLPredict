@@ -211,9 +211,9 @@ export class DbStorage implements IStorage {
         .from(bets)
         .where(eq(bets.marketId, marketId))
         .for('update');
-      
+
       const pendingBets = allBets.filter(bet => bet.status === "pending" || bet.status === "open");
-      
+
       if (pendingBets.length === 0) {
         console.log(`No bets to refund for market ${marketId}`);
         return 0;
@@ -230,7 +230,7 @@ export class DbStorage implements IStorage {
             .where(eq(users.id, bet.userId))
             .for('update')
             .limit(1);
-          
+
           if (!user) {
             console.error(`User ${bet.userId} not found for refund - skipping bet ${bet.id}`);
             failedCount++;
@@ -246,18 +246,18 @@ export class DbStorage implements IStorage {
 
           const currentBalance = parseFloat(user.balance);
           const newBalance = (currentBalance + betAmount).toFixed(2);
-          
+
           if (parseFloat(newBalance) < 0) {
             console.error(`Refund would result in negative balance for user ${bet.userId} - skipping`);
             failedCount++;
             continue;
           }
-          
+
           await tx
             .update(users)
             .set({ balance: newBalance })
             .where(eq(users.id, bet.userId));
-          
+
           await tx
             .update(bets)
             .set({ status: "refunded", profit: "0.00" })
@@ -290,9 +290,9 @@ export class DbStorage implements IStorage {
         .from(bets)
         .where(eq(bets.marketId, marketId))
         .for('update');
-      
+
       const pendingBets = allBets.filter(bet => bet.status === "pending" || bet.status === "open");
-      
+
       if (pendingBets.length === 0) {
         return 0;
       }
@@ -301,11 +301,11 @@ export class DbStorage implements IStorage {
         const shares = parseFloat(bet.shares);
         const won = shares > 0 && bet.position.toLowerCase() === outcome;
         const betAmount = parseFloat(bet.amount);
-        
+
         let profit: number;
         let payout: number;
         let newStatus: string;
-        
+
         if (won) {
           // Payout is the value of the shares (shares * $1 per share in winning pool)
           payout = shares;
@@ -330,7 +330,7 @@ export class DbStorage implements IStorage {
           .where(eq(users.id, bet.userId))
           .for('update')
           .limit(1);
-        
+
         if (!user) {
           console.error(`User ${bet.userId} not found during settlement`);
           continue;
@@ -500,16 +500,16 @@ export class DbStorage implements IStorage {
       const MAX_PRICE = 0.99;  // Maximum price to prevent prices from going to 1
       const MAX_TRADE_PERCENTAGE = 0.40; // Maximum 40% of pool size per trade
       const MAX_PRICE_IMPACT = 0.25; // Hard cap: 25% maximum price movement per trade
-      
+
       // Slippage tolerance protects users from unexpected price movements
       // With $20,000 pools, small trades ($10-50) typically have <0.5% impact
       // Medium trades ($100-500) typically have 1-3% impact  
       // Large trades ($1000-5000) can have 5-15% impact
       const DEFAULT_SLIPPAGE_TOLERANCE = 0.10; // Default 10% slippage tolerance (user-friendly)
-      
+
       // Use provided slippage tolerance or default
       const slippageTolerance = params.slippageTolerance ?? DEFAULT_SLIPPAGE_TOLERANCE;
-      
+
       // Validate slippage tolerance
       if (slippageTolerance < 0 || slippageTolerance > 1) {
         throw new ValidationError("Slippage tolerance must be between 0 and 1");
@@ -558,7 +558,7 @@ export class DbStorage implements IStorage {
 
       // Platform fee configuration (2% by default, can be set via environment)
       const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || "0.02");
-      
+
       let betAmount: number;
       let sharesAmount: number;
       let newYesPool: number;
@@ -643,7 +643,7 @@ export class DbStorage implements IStorage {
         // Total investment = shares sold × average cost per share
         const totalInvestment = params.amount * averageCost;
         profit = betAmount - totalInvestment;
-        
+
         console.log(`\n💰 SELL P&L CALCULATION:`);
         console.log(`   Shares sold: ${params.amount}`);
         console.log(`   Average cost per share: ${averageCost.toFixed(4)}`);
@@ -702,7 +702,7 @@ export class DbStorage implements IStorage {
       const currentPrice = params.position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
       const newPrice = params.position === "YES" ? yesPrice : noPrice;
       const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
-      
+
       // ⚠️ PRICE IMPACT VALIDATION TEMPORARILY DISABLED FOR POINTS-ONLY MODE
       // With small $200 pools, nearly all trades trigger slippage protection
       // This will be re-enabled when Solana integration is complete with larger pools
@@ -749,7 +749,9 @@ export class DbStorage implements IStorage {
 
         if (params.action === "buy") {
           const newShares = currentShares + sharesAmount;
-          const newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * currentPrice)) / newShares;
+          // Use actual cost per share (total paid / shares received)
+          const costPerShare = params.amount / sharesAmount;
+          newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * costPerShare)) / newShares;
 
           await tx
             .update(positions)
@@ -769,12 +771,14 @@ export class DbStorage implements IStorage {
             .where(eq(positions.id, pos.id));
         }
       } else if (params.action === "buy") {
+        // For new positions, use actual cost per share
+        const costPerShare = params.amount / sharesAmount;
         await tx.insert(positions).values({
-          userId: params.userId,
-          marketId: params.marketId,
-          position: params.position,
+          userId,
+          marketId,
+          position,
           shares: sharesAmount.toFixed(2),
-          averagePrice: currentPrice.toFixed(4),
+          averagePrice: costPerShare.toFixed(4),
         });
       }
 
@@ -909,14 +913,14 @@ export class DbStorage implements IStorage {
 
   async updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void> {
     const existing = await this.getUserPosition(userId, marketId, position);
-    
+
     if (existing) {
       const currentShares = parseFloat(existing.shares);
       const currentAvgPrice = parseFloat(existing.averagePrice);
-      
+
       let newShares: number;
       let newAvgPrice: number;
-      
+
       if (action === "buy") {
         newShares = currentShares + shares;
         const market = await this.getMarket(marketId);
@@ -926,7 +930,7 @@ export class DbStorage implements IStorage {
         newShares = Math.max(0, currentShares - shares);
         newAvgPrice = currentAvgPrice;
       }
-      
+
       await db.update(positions)
         .set({ 
           shares: newShares.toFixed(2), 
@@ -1051,7 +1055,7 @@ export class DbStorage implements IStorage {
 
   async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
     console.error('🔍 DEBUG: Getting latest scraped KOLs...');
-    
+
     // Use a more robust query with subquery to avoid timestamp precision issues
     const results = await db
       .select()
@@ -1172,11 +1176,11 @@ export class DbStorage implements IStorage {
       status,
       confirmations,
     };
-    
+
     if (status === "confirmed") {
       updates.confirmedAt = new Date();
     }
-    
+
     await db.update(solanaDeposits).set(updates).where(eq(solanaDeposits.id, id));
   }
 
@@ -1207,19 +1211,19 @@ export class DbStorage implements IStorage {
     const updates: { status: string; processedAt?: Date; signature?: string; error?: string } = {
       status,
     };
-    
+
     if (status === "completed" || status === "failed") {
       updates.processedAt = new Date();
     }
-    
+
     if (signature !== undefined) {
       updates.signature = signature;
     }
-    
+
     if (error !== undefined) {
       updates.error = error;
     }
-    
+
     await db.update(solanaWithdrawals).set(updates).where(eq(solanaWithdrawals.id, id));
   }
 
@@ -1235,7 +1239,7 @@ export class DbStorage implements IStorage {
         total: sql`COALESCE(SUM(CAST(${platformFees.amount} AS DECIMAL)), 0)`,
       })
       .from(platformFees);
-    
+
     return result[0]?.total?.toString() || "0";
   }
 
