@@ -2,6 +2,7 @@ import { dbStorage as storage } from "./db-storage";
 import { socialMediaClient } from "./social-api-client";
 import { xApiClient } from "./x-api-client";
 import { KOLScraper } from "./kol-scraper";
+import { KOLDataParser } from "./kol-data-parser";
 import type { Market, Bet, Kol, ScrapedKol } from "@shared/schema";
 
 export interface MarketResolution {
@@ -17,37 +18,6 @@ export class MarketResolver {
   private consecutiveFailures = 0;
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
-  private parseRank(rankStr: string): number {
-    const match = rankStr.replace(/[^\d]/g, '');
-    return match ? parseInt(match, 10) : 999;
-  }
-
-  private parseWinsLosses(winsLossesStr: string | null): { wins: number | null; losses: number | null } {
-    if (!winsLossesStr) return { wins: null, losses: null };
-    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
-    if (!match) return { wins: null, losses: null };
-    return {
-      wins: parseInt(match[1], 10),
-      losses: parseInt(match[2], 10),
-    };
-  }
-
-  private parseSolGainStr(solGainStr: string | null): string | null {
-    if (!solGainStr) return null;
-    const cleaned = solGainStr.replace(/[^0-9.+-]/g, '');
-    const match = cleaned.match(/[+-]?[\d,.]+/);
-    if (!match) return null;
-    return match[0].replace(/,/g, '');
-  }
-
-  private parseUsdGainStr(usdGainStr: string | null): string | null {
-    if (!usdGainStr) return null;
-    const cleaned = usdGainStr.replace(/[^0-9.+-]/g, '');
-    const match = cleaned.match(/[+-]?[\d,.]+/);
-    if (!match) return null;
-    return match[0].replace(/,/g, '');
-  }
-
   private async getFreshKolData(limit: number = 20): Promise<ScrapedKol[]> {
     const dedicatedScraper = new KOLScraper();
     try {
@@ -56,16 +26,10 @@ export class MarketResolver {
       const freshData = await dedicatedScraper.scrapeLeaderboard();
       console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
       return freshData.slice(0, limit).map(kol => {
-        const { wins, losses } = this.parseWinsLosses(kol.winsLosses);
+        const parsed = KOLDataParser.parseRawKOLData(kol);
         return {
           id: '',
-          rank: this.parseRank(kol.rank),
-          username: kol.username.toLowerCase(),
-          xHandle: kol.xHandle || null,
-          wins,
-          losses,
-          solGain: this.parseSolGainStr(kol.solGain),
-          usdGain: this.parseUsdGainStr(kol.usdGain),
+          ...parsed,
           scrapedAt: new Date(),
         };
       });
@@ -529,9 +493,10 @@ export class MarketResolver {
       };
     }
     
-    const hasPositiveGain = kolData.usdGain.includes('+') && kolData.usdGain.includes('$');
+    const usdGainValue = this.parseUsdGain(kolData.usdGain);
+    const hasPositiveGain = usdGainValue > 0;
     const outcome = hasPositiveGain ? "yes" : "no";
-    const reason = `${metadata.kolA} current USD gain: ${kolData.usdGain}. Previously: ${metadata.currentUsd}`;
+    const reason = `${metadata.kolA} current USD gain: $${kolData.usdGain || '0'}. Previously: ${metadata.currentUsd}`;
     
     return { outcome, reason };
   }

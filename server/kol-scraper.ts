@@ -1,15 +1,9 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { dbStorage } from "./db-storage";
 import type { InsertScrapedKol } from "@shared/schema";
+import { KOLDataParser, type RawKOLData } from './kol-data-parser';
 
-interface KOLData {
-  rank: string;
-  username: string;
-  xHandle: string;
-  winsLosses: string;
-  solGain: string;
-  usdGain: string;
-}
+type KOLData = RawKOLData;
 
 export class KOLScraper {
   private browser?: Browser;
@@ -209,52 +203,10 @@ export class KOLScraper {
     return /^[A-Za-z0-9_]{3,15}$/.test(text);
   }
 
-  private parseRank(rankStr: string): number {
-    const match = rankStr.replace(/[^\d]/g, '');
-    return match ? parseInt(match, 10) : 999;
-  }
-
-  private parseWinsLosses(winsLossesStr: string): { wins: number | null; losses: number | null } {
-    if (!winsLossesStr) return { wins: null, losses: null };
-    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
-    if (!match) return { wins: null, losses: null };
-    return {
-      wins: parseInt(match[1], 10),
-      losses: parseInt(match[2], 10),
-    };
-  }
-
-  private parseSolGain(solGainStr: string): string | null {
-    if (!solGainStr) return null;
-    const cleaned = solGainStr.replace(/[^0-9.+-]/g, '');
-    const match = cleaned.match(/[+-]?[\d,.]+/);
-    if (!match) return null;
-    return match[0].replace(/,/g, '');
-  }
-
-  private parseUsdGain(usdGainStr: string): string | null {
-    if (!usdGainStr) return null;
-    const cleaned = usdGainStr.replace(/[^0-9.+-]/g, '');
-    const match = cleaned.match(/[+-]?[\d,.]+/);
-    if (!match) return null;
-    return match[0].replace(/,/g, '');
-  }
-
   async saveToDatabase(data: KOLData[]): Promise<number> {
     console.log(`💾 Saving ${data.length} KOL entries to database...`);
     
-    const scrapedKols: InsertScrapedKol[] = data.map(entry => {
-      const { wins, losses } = this.parseWinsLosses(entry.winsLosses);
-      return {
-        rank: this.parseRank(entry.rank),
-        username: entry.username.toLowerCase(),
-        xHandle: entry.xHandle || null,
-        wins,
-        losses,
-        solGain: this.parseSolGain(entry.solGain),
-        usdGain: this.parseUsdGain(entry.usdGain),
-      };
-    });
+    const scrapedKols: InsertScrapedKol[] = KOLDataParser.parseRawKOLDataBatch(data);
     
     try {
       const saved = await dbStorage.createScrapedKols(scrapedKols);
