@@ -256,12 +256,12 @@ export class KOLScraperV2 {
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       // Extract data using plain JavaScript (no TypeScript types in evaluate context)
-      const detailedData = await profilePage.evaluate(() => {
+      const detailedData = await profilePage.evaluate(function() {
         
-        const findStatByLabel = (labelRegex) => {
+        const findStatByLabel = function(labelRegex) {
           try {
             const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
-            const labelNode = allTextNodes.find(el => labelRegex.test(el.textContent || ''));
+            const labelNode = allTextNodes.find(function(el) { return labelRegex.test(el.textContent || ''); });
             if (!labelNode) return null;
             
             const parent = labelNode.parentElement;
@@ -291,8 +291,9 @@ export class KOLScraperV2 {
         if (portfolioSection) {
           const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
           
-          for (const row of holdingRows) {
+          for (var i = 0; i < holdingRows.length; i++) {
             try {
+              const row = holdingRows[i];
               const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
               const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
               const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
@@ -322,8 +323,9 @@ export class KOLScraperV2 {
         if (historySection) {
           const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
           
-          for (const row of tradeRows) {
+          for (var j = 0; j < tradeRows.length; j++) {
             try {
+              const row = tradeRows[j];
               const text = (row.textContent || '').toLowerCase();
               const type = text.includes('buy') ? 'buy' : 'sell';
 
