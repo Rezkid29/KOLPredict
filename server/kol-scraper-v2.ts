@@ -80,110 +80,125 @@ export class KOLScraperV2 {
       const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
         const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
         
-        // Try multiple selector strategies
-        let rows: Element[] = [];
+        // The page uses a specific structure - look for the main container first
+        // Based on the screenshot, rows are in a flex/grid layout
+        const possibleContainers = [
+          'div[class*="leaderboard"]',
+          'div[class*="list"]',
+          'main',
+          '[role="main"]',
+          'body'
+        ];
         
-        // Strategy 1: Table rows
-        const tableRows = Array.from(document.querySelectorAll('tr'));
-        if (tableRows.length > 5) {
-          rows = tableRows;
-        }
-        
-        // Strategy 2: Divs with common class patterns
-        if (rows.length === 0) {
-          const divRows = Array.from(document.querySelectorAll('div[class*="row"], div[class*="item"], div[class*="entry"], div[class*="card"]'));
-          if (divRows.length > 5) {
-            rows = divRows;
+        let mainContainer: Element | null = null;
+        for (const selector of possibleContainers) {
+          const el = document.querySelector(selector);
+          if (el) {
+            mainContainer = el;
+            break;
           }
         }
         
-        // Strategy 3: Find all links and their parent containers
-        if (rows.length === 0) {
-          const links = Array.from(document.querySelectorAll('a[href*="/profile/"], a[href*="/kol/"], a[href*="twitter"], a[href*="x.com"]'));
-          const containers = new Set<Element>();
-          links.forEach(link => {
-            let parent = link.parentElement;
-            let depth = 0;
-            while (parent && depth < 5) {
-              if (parent.textContent && parent.textContent.length > 20) {
-                containers.add(parent);
-                break;
-              }
-              parent = parent.parentElement;
-              depth++;
-            }
-          });
-          rows = Array.from(containers);
+        if (!mainContainer) {
+          console.log('No main container found');
+          return [];
         }
         
-        console.log(`Found ${rows.length} potential KOL entries`);
+        // Find all clickable row elements - they likely wrap each leaderboard entry
+        // Look for divs that contain both an avatar image AND text content AND a rank number
+        const allDivs = Array.from(mainContainer.querySelectorAll('div'));
+        const rows: Element[] = [];
         
-        let rank = 1;
-        for (const row of rows) {
+        for (const div of allDivs) {
+          const hasImage = div.querySelector('img') !== null;
+          const hasText = (div.textContent || '').trim().length > 10;
+          const hasLinks = div.querySelectorAll('a').length > 0;
+          
+          // Check if this div looks like a leaderboard row
+          if (hasImage && hasText && hasLinks) {
+            // Make sure it's not a nested child of another row we already found
+            const isNested = rows.some(existingRow => existingRow.contains(div));
+            if (!isNested && div.textContent!.match(/\d+\/\d+/)) {
+              rows.push(div);
+            }
+          }
+        }
+        
+        console.log(`Found ${rows.length} potential KOL entry rows`);
+        
+        for (let i = 0; i < rows.length && extractedEntries.length < 20; i++) {
+          const row = rows[i];
           try {
             const text = row.textContent || '';
             
-            // Find username - try multiple strategies
+            // Extract rank - look for standalone number at start
+            const rank = (i + 1).toString();
+            
+            // Find username - it's usually in a link or next to the avatar
             let username: string | null = null;
-            const usernameEl = row.querySelector('[class*="name"], [class*="username"], [class*="kol"], [class*="user"]');
-            if (usernameEl) {
-              username = usernameEl.textContent?.trim() || null;
-            }
+            const allLinks = Array.from(row.querySelectorAll('a'));
             
-            // If no username element found, try to extract from links
-            if (!username) {
-              const nameLink = row.querySelector('a');
-              if (nameLink && !nameLink.href.includes('twitter') && !nameLink.href.includes('x.com')) {
-                username = nameLink.textContent?.trim() || null;
+            // First link that's not twitter/x is usually the username
+            for (const link of allLinks) {
+              const href = link.getAttribute('href') || '';
+              if (!href.includes('twitter') && !href.includes('x.com') && link.textContent) {
+                const potentialName = link.textContent.trim();
+                if (potentialName.length >= 2 && potentialName.length <= 50 && !potentialName.match(/^\d+$/)) {
+                  username = potentialName;
+                  break;
+                }
               }
             }
             
-            if (!username || username.length < 2 || username.length > 50) continue;
-            if (username.includes('Leaderboard') || username.includes('Daily') || username.includes('Weekly')) continue;
-            if (/^\d+$/.test(username)) continue; // Skip pure numbers
-
+            if (!username) continue;
+            
+            // Extract profile URL
             let profileUrl: string | null = null;
-            const profileLinkEl = row.querySelector('a[href*="/profile/"], a[href*="/kol/"]');
-            if (profileLinkEl) {
-              profileUrl = profileLinkEl.getAttribute('href');
+            for (const link of allLinks) {
+              const href = link.getAttribute('href') || '';
+              if (href.includes('/profile/') || href.startsWith('/kol/') || (href.startsWith('/') && !href.includes('twitter'))) {
+                profileUrl = href;
+                break;
+              }
             }
             
+            // Extract X handle from twitter/x.com link
             let xHandle: string | null = null;
-            const handleEl = row.querySelector('a[href*="twitter"], a[href*="x.com"]');
-            if (handleEl) {
-              const href = handleEl.getAttribute('href') || '';
-              const handleText = href.replace('https://twitter.com/', '').replace('https://x.com/', '').replace('@', '').split('/')[0] || '';
-              if (/^[A-Za-z0-9_]{1,15}$/.test(handleText)) {
-                xHandle = handleText;
+            for (const link of allLinks) {
+              const href = link.getAttribute('href') || '';
+              if (href.includes('twitter.com/') || href.includes('x.com/')) {
+                const match = href.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]+)/);
+                if (match && match[1]) {
+                  xHandle = match[1];
+                  break;
+                }
               }
             }
             
+            // Extract wins/losses - format: "1/0" or "12/4"
             let winsLosses: string | null = null;
-            const statsText = text.match(/(\d+)\s*\/\s*(\d+)/);
-            if (statsText) {
-              winsLosses = `${statsText[1]}/${statsText[2]}`;
+            const wlMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+            if (wlMatch) {
+              winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
             }
             
+            // Extract SOL gain - look for "+XX.XX Sol" or green text with "Sol"
             let solGain: string | null = null;
-            const solMatch = text.match(/([+-]?[\d,.]+)\s*(?:Sol|SOL)/i);
+            const solMatch = text.match(/\+?([\d,]+\.?\d*)\s*Sol/i);
             if (solMatch) {
-              solGain = solMatch[1];
+              solGain = '+' + solMatch[1] + ' Sol';
             }
             
+            // Extract USD gain - format: "($XX,XXX.XX)" or "$XX,XXX"
             let usdGain: string | null = null;
-            const usdMatch = text.match(/(?:PnL|Gain|Profit):\s*\$\s*([+-]?[\d,.]+)/i) || text.match(/\$\s*([+-]?[\d,.]+)\s*USD/i);
+            const usdMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
             if (usdMatch) {
-              usdGain = usdMatch[1];
-            } else {
-              const usdFallback = text.match(/\$\s*([+-]?[\d,.]+)/);
-              if (usdFallback) {
-                usdGain = usdFallback[1];
-              }
+              usdGain = '$' + usdMatch[1];
             }
 
             extractedEntries.push({
               summary: {
-                rank: rank.toString(),
+                rank,
                 username,
                 xHandle,
                 winsLosses,
@@ -193,10 +208,8 @@ export class KOLScraperV2 {
               profileUrl
             });
             
-            rank++;
-            
-            if (extractedEntries.length >= 20) break;
           } catch (err) {
+            console.error('Error processing row:', err);
             continue;
           }
         }
