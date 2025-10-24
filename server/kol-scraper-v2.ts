@@ -347,5 +347,25 @@ export class KOLScraperV2 {
     }
   }
 }
+async function main() {
+  const scraper = new KOLScraperV2();
+  try {
+    await scraper.init();
+    const { scraped, saved } = await scraper.scrapeAndSave();
+
+    console.log(`✅ Scraped ${scraped} entries and saved ${saved} to the database.`);
+
+    // Optionally, fetch and display the saved KOL data in structured format
+    const savedData = await dbStorage.getAllKols(); // Add this method if it doesn't exist
+    console.log(JSON.stringify(savedData, null, 2)); // Pretty print the saved data in JSON format
+  } catch (error) {
+    console.error('💥 Scraping failed:', error);
+  } finally {
+    await scraper.close();
+  }
+}
+if (require.main === module) {
+  main();
+}
 
 export const kolScraperV2 = new KOLScraperV2();
