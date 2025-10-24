@@ -1,0 +1,41 @@
+📋 Complete File Inventory
+Market Creation (9 files)
+1. server/market-generator-service.ts - Main market creation logic
+2. server/kolscan-scraper-service.ts - Scrapes kolscan.io data
+3. server/scheduler.ts - Automated scheduling
+4. server/routes.ts - Admin API endpoints
+5. server/seed.ts - Database seeding
+6. server/metrics-updater.ts - Updates KOL metrics
+7. server/social-api-client.ts - Twitter API integration
+8. server/x-api-client.ts - X API follower counts
+9. server/db-storage.ts - Database operations
+Market Resolution (3 files)
+1. server/market-resolver.ts - PRIMARY (859 lines, 12+ resolution methods)
+2. server/db-storage.ts - Database queries
+3. shared/schema.ts - Database schemas
+
+🚨 Top 10 Critical Bottlenecks
+🔴 HIGH PRIORITY
+1. String-Based KOL Matching - Exact username matching fails with case/whitespace differences
+2. Stale Scraped Data - Markets resolve using outdated data (up to 24h old)
+3. Fragile String Parsing - 59 regex operations that break if format changes
+4. Questionable Market Logic - top_rank_maintain and rank_flippening show incorrect outcomes
+🟠 MEDIUM PRIORITY
+5. Database Type Coercion - Decimal fields require manual parseFloat() conversion (already fixed threshold bug)
+6. Missing Metadata Handling - Markets fail silently if metadata is missing
+7. External API Dependencies - Twitter API required for follower growth markets
+8. Puppeteer Scraping Reliability - Web scraping breaks when kolscan.io changes
+🟡 LOW PRIORITY
+9. Bet Settlement Race Conditions - No database transactions (partial settlements possible)
+10. Silent Error Handling - Errors logged but default to "no" outcome
+
+🎯 Root Cause of Your Current Issue
+Your scraped KOL data is not fully accurate right now because:
+1. Timing Gap: Scraper runs at 2 AM daily, but markets can resolve anytime (up to 22-hour stale data)
+2. Manual Test Data: You manually inserted test data which doesn't reflect real kolscan.io
+3. No Real-Time Validation: System doesn't verify data freshness before resolution
+4. Username Matching Issues: Even with correct data, case/whitespace mismatches cause failures
+Evidence:
+* We manually inserted: 'Sheep', '1', '42/8'
+* Real kolscan.io may have: 'sheep', '#1', '42 / 8'
+* These won't match → Market resolves incorrectly

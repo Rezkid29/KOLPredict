@@ -1,0 +1,67 @@
+Phase 2: Build Robustness & Error Handling (Medium-Priority)
+
+With data integrity fixed, the next step is to make the system resilient to failures.
+
+1. Implement Graceful Error States
+
+Silent Error Handling and Missing Metadata Handling are dangerous. A system error should not result in a "NO" outcome, as this costs users money.
+* Action: Modify server/market-resolver.ts and your markets table schema.
+* Logic:
+    1. Add a new status to your markets table: status: 'OPEN' | 'RESOLVED' | 'CANCELLED'.
+    2. In the resolver, wrap each market's resolution in a try...catch block.
+    3. If an error occurs (e.g., metadata is missing, the on-demand scrape fails, X API is down), do not resolve to "NO".
+    4. Instead, log the error and set the market's status to CANCELLED.
+* Benefit: This triggers a refund process for all bets on that market, which is the fair and safe outcome when the system fails.
+
+2. Decouple External API Dependencies
+
+Follower markets should not rely on the X API being 100% available.
+* Action: Update the resolution logic for Follower Growth markets.
+* Logic: When resolving, if the X API (x-api-client.ts) fails to return data and the cached data in followerCache is older than the market's start time, the market should be CANCELLED (per the step above), not resolved with stale data.
+* Benefit: Prevents markets from resolving on bad data during an API outage.
+
+
+Phase 3: Ensure Atomicity & Polish (Low-Priority)
+
+This phase addresses the Bet Settlement Race Conditions and cleans up the system. Your analysis shows a contradiction: the bottleneck list mentions "No database transactions," but the db-storage.ts analysis describes a "NEW: Atomic Bet Placement" system. This plan assumes the bottleneck list is correct and settlement is not transactional.
+
+1. Critical Audit: Implement Transactional Settlements
+
+This is listed as "Low Priority" but is critical for financial integrity. Partial settlements can corrupt user balances.
+* Action: Audit and refactor MarketResolver.settleBets (server/market-resolver.ts).
+* Logic: The current description of settleBets (Section 2.C) lists sequential updates (Update bet, Update user balance, Update user stats). This is unsafe.
+* Refactor: Wrap the entire settlement process for a single market (calculating profits and updating all user balances and bet statuses) inside a single database transaction. Use the same locking pattern you developed for placeBetWithLocking.
+* Benefit: Guarantees that all bets on a market are settled, or none are. This completely prevents race conditions and partial settlement failures.
+
+2. Code Cleanup: Remove Deprecated Code
+
+* Action: Search the codebase for all uses of the old placeBetTransaction (mentioned in your technical debt) and refactor them to use the new placeBetWithLocking.
+* Logic: Once all references are gone, delete the deprecated placeBetTransaction function from db-storage.ts.
+* Benefit: Reduces technical debt and ensures all new bets use the safer, atomic method.
+
+
+Summary: Action Plan Timeline
+
+1. Sprint 1 (Core Fixes):
+    * Implement on-demand scraping for the resolver.
+    * Migrate scraped_kols schema to numeric/normalized types.
+    * Move all parsing logic into the scraper.
+    * Rewrite scraper to use DOM selectors.
+2. Sprint 2 (Reliability):
+    * Audit and fix flawed market resolution logic.
+    * Implement the CANCELLED market state for all resolution errors.
+    * Add transactional logic to the settleBets function.
+3. Sprint 3 (Cleanup):
+    * Add API/cache-staleness checks to follower markets.
+    * Remove deprecated placeBetTransaction code.
+This plan directly tackles your high-impact bottlenecks first, fixing the data integrity, which will cascade improvements throughout the entire system.
+
+Handle errors by cancelling markets
+
+Refund bets when markets are cancelled
+
+Cancel markets if data is old
+
+Secure bet settlements with transactions
+
+Remove old code for placing bets
