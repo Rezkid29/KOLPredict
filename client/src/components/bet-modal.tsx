@@ -43,8 +43,35 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
   const platformFee = action === "buy" ? betAmount * PLATFORM_FEE_RATE : 0;
   const amountAfterFee = betAmount - platformFee;
 
-  // Calculate shares (simplified for UI - server will use AMM formula)
-  const estimatedShares = amountAfterFee > 0 ? amountAfterFee / currentPrice : 0;
+  // Calculate shares using the same AMM formula as the server
+  const calculateAMMShares = (
+    amount: number,
+    pos: "YES" | "NO",
+    yesPool: number,
+    noPool: number
+  ): number => {
+    if (amount <= 0) return 0;
+    const k = yesPool * noPool;
+    
+    if (pos === "YES") {
+      // Add collateral to YES pool, receive shares from YES pool
+      const newYesCollateral = yesPool + amount;
+      const newYesShares = k / newYesCollateral;
+      return yesPool - newYesShares;
+    } else {
+      // Add collateral to NO pool, receive shares from NO pool
+      const newNoCollateral = noPool + amount;
+      const newNoShares = k / newNoCollateral;
+      return noPool - newNoShares;
+    }
+  };
+
+  const yesPool = parseFloat(market.yesCollateralPool);
+  const noPool = parseFloat(market.noCollateralPool);
+  
+  const estimatedShares = action === "buy" 
+    ? calculateAMMShares(amountAfterFee, position, yesPool, noPool)
+    : betAmount;
   
   // Potential payout if position wins (each share pays $1.00)
   const potentialPayout = action === "buy" ? estimatedShares * 1.0 : betAmount;
