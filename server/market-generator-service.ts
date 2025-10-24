@@ -55,9 +55,9 @@ export class MarketGeneratorService {
 
   private async resolveKolId(scrapedKol: ScrapedKol): Promise<string | null> {
     const handle = scrapedKol.xHandle || scrapedKol.username.toLowerCase().replace(/\s+/g, '');
-    
+
     let kol = await dbStorage.getKolByHandle(handle);
-    
+
     if (!kol) {
       console.log(`  → Creating KOL record for ${scrapedKol.username} (@${handle})`);
       try {
@@ -84,7 +84,7 @@ export class MarketGeneratorService {
         return null;
       }
     }
-    
+
     return kol.id;
   }
 
@@ -94,19 +94,29 @@ export class MarketGeneratorService {
     // Sample from the provided kolData (which may be filtered to available KOLs)
     const [kolA, kolB] = this.sampleKOLs(kolData, 2);
     const kolIdA = await this.resolveKolId(kolA);
-    
+
     if (!kolIdA) {
       console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
       return null;
     }
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} rank higher than ${kolB.username} on tomorrow's kolscan.io leaderboard?`,
       description: `Prediction market comparing ranks of ${kolA.username} (currently #${kolA.rank}) vs ${kolB.username} (currently #${kolB.rank})`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'rank_flippening',
       marketCategory: 'ranking',
@@ -136,13 +146,23 @@ export class MarketGeneratorService {
       return null;
     }
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} have a positive USD Gain on tomorrow's leaderboard?`,
       description: `Prediction market for ${kol.username}'s profitability streak. Currently: ${kol.usdGain}`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'profit_streak',
       marketCategory: 'performance',
@@ -180,13 +200,23 @@ export class MarketGeneratorService {
     const threshold = this.randomChoice([200, 500, 1000]);
     const days = 1;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} (@${xHandle}) gain ${threshold.toLocaleString()}+ X followers by tomorrow?`,
       description: `Follower growth prediction for ${kol.username}. Current: ${currentFollowers.toLocaleString()} followers`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), days),
       marketType: 'follower_growth',
       marketCategory: 'social',
@@ -212,19 +242,29 @@ export class MarketGeneratorService {
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
     const kolIdA = await this.resolveKolId(kolA);
-    
+
     if (!kolIdA) {
       console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
       return null;
     }
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} have higher SOL gains than ${kolB.username} on tomorrow's leaderboard?`,
       description: `SOL gain comparison: ${kolA.username} (${kolA.solGain}) vs ${kolB.username} (${kolB.solGain})`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'sol_gain_flippening',
       marketCategory: 'performance',
@@ -249,19 +289,29 @@ export class MarketGeneratorService {
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
     const kolIdA = await this.resolveKolId(kolA);
-    
+
     if (!kolIdA) {
       console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
       return null;
     }
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} have higher USD gains than ${kolB.username} on tomorrow's leaderboard?`,
       description: `USD gain comparison: ${kolA.username} (${kolA.usdGain}) vs ${kolB.username} (${kolB.usdGain})`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'usd_gain_flippening',
       marketCategory: 'performance',
@@ -286,19 +336,29 @@ export class MarketGeneratorService {
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
     const kolIdA = await this.resolveKolId(kolA);
-    
+
     if (!kolIdA) {
       console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
       return null;
     }
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} have a better win rate than ${kolB.username} on tomorrow's leaderboard?`,
       description: `Win rate comparison: ${kolA.username} (${kolA.winsLosses}) vs ${kolB.username} (${kolB.winsLosses})`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winrate_flippening',
       marketCategory: 'performance',
@@ -324,12 +384,12 @@ export class MarketGeneratorService {
       const losses = parseInt(lossesStr);
       return !isNaN(wins) && !isNaN(losses) && losses > 0;
     });
-    
+
     if (validKOLs.length < 2) return null;
 
     const [kolA, kolB] = this.sampleKOLs(validKOLs, 2);
     const kolIdA = await this.resolveKolId(kolA);
-    
+
     if (!kolIdA) {
       console.log(`  ✗ Skipping market: Could not resolve KOL ${kolA.username}`);
       return null;
@@ -341,17 +401,27 @@ export class MarketGeneratorService {
     const lossesA = parseInt(lossesAStr);
     const winsB = parseInt(winsBStr);
     const lossesB = parseInt(lossesBStr);
-    
+
     const ratioA = (winsA / lossesA).toFixed(2);
     const ratioB = (winsB / lossesB).toFixed(2);
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId: kolIdA,
       title: `Will ${kolA.username} have a higher win/loss ratio than ${kolB.username} on tomorrow's leaderboard?`,
       description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${kolA.winsLosses}) vs ${kolB.username} with ${ratioB} (${kolB.winsLosses})`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winloss_ratio_flippening',
       marketCategory: 'performance',
@@ -374,9 +444,9 @@ export class MarketGeneratorService {
       const rankNum = parseInt(k.rank);
       return !isNaN(rankNum) && rankNum <= 10;
     });
-    
+
     if (topKOLs.length === 0) return null;
-    
+
     const kol = this.sampleKOLs(topKOLs, 1)[0];
     const currentRankNum = parseInt(kol.rank);
 
@@ -386,13 +456,23 @@ export class MarketGeneratorService {
       return null;
     }
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} stay in the top ${currentRankNum <= 5 ? '5' : '10'} on tomorrow's leaderboard?`,
       description: `${kol.username} is currently ranked #${kol.rank}. Will they maintain their elite position?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'top_rank_maintain',
       marketCategory: 'ranking',
@@ -421,13 +501,23 @@ export class MarketGeneratorService {
       return null;
     }
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} improve their win rate by tomorrow?`,
       description: `${kol.username} currently has a ${kol.winsLosses} record. Will they add more wins tomorrow?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'streak_continuation',
       marketCategory: 'performance',
@@ -448,9 +538,9 @@ export class MarketGeneratorService {
       const rankNum = parseInt(k.rank);
       return !isNaN(rankNum) && rankNum > 3;
     });
-    
+
     if (validKOLs.length === 0) return null;
-    
+
     const kol = this.sampleKOLs(validKOLs, 1)[0];
     const currentRankNum = parseInt(kol.rank);
     const targetRank = Math.max(1, currentRankNum - this.randomChoice([1, 2, 3, 5]));
@@ -461,13 +551,23 @@ export class MarketGeneratorService {
       return null;
     }
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} reach rank #${targetRank} or better by tomorrow?`,
       description: `${kol.username} is currently #${kol.rank}. Can they climb to #${targetRank} or higher?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'rank_improvement',
       marketCategory: 'ranking',
@@ -489,21 +589,21 @@ export class MarketGeneratorService {
     if (validKOLs.length === 0) return null;
 
     const kol = this.sampleKOLs(validKOLs, 1)[0];
-    
+
     const [winsStr, lossesStr] = kol.winsLosses!.split('/');
     const wins = parseInt(winsStr);
     const losses = parseInt(lossesStr);
-    
+
     if (isNaN(wins) || isNaN(losses) || losses === 0) return null;
-    
+
     const currentRatio = wins / losses;
     if (currentRatio < 1.0) return null;
-    
+
     const thresholds = [1.5, 1.75, 2.0, 2.5];
     const suitableThresholds = thresholds.filter(t => currentRatio >= t - 0.3 && currentRatio <= t + 0.5);
-    
+
     if (suitableThresholds.length === 0) return null;
-    
+
     const threshold = this.randomChoice(suitableThresholds);
 
     const kolId = await this.resolveKolId(kol);
@@ -512,13 +612,23 @@ export class MarketGeneratorService {
       return null;
     }
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} maintain a win/loss ratio above ${threshold.toFixed(2)} on tomorrow's leaderboard?`,
       description: `${kol.username} currently has a ${currentRatio.toFixed(2)} W/L ratio (${kol.winsLosses}). Can they stay above ${threshold.toFixed(2)}?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winloss_ratio_maintain',
       marketCategory: 'performance',
@@ -545,10 +655,10 @@ export class MarketGeneratorService {
     console.log(`📊 Processing ${kolData.length} KOLs for market generation`);
 
     const createdMarkets: { marketId: string; title: string; type: string }[] = [];
-    
+
     // Track which KOLs have been used in THIS generation cycle
     const usedKolsThisCycle = new Set<string>();
-    
+
     // Track market type distribution for variety
     const marketTypeCount = new Map<string, number>();
     let solGainThresholdCount = 0;
@@ -557,7 +667,7 @@ export class MarketGeneratorService {
 
     const rateLimitStatus = xApiClient.getRateLimitStatus();
     console.log(`📊 X API Rate limit status: ${rateLimitStatus.remaining} lookups available, configured: ${rateLimitStatus.isConfigured}`);
-    
+
     // Define solo and head-to-head generators
     const soloGenerators = [
       { type: 'sol_gain_threshold', fn: (kol: ScrapedKol) => this.generateSolGainThresholdMarketForKol(kol) },
@@ -606,11 +716,11 @@ export class MarketGeneratorService {
 
       // Shuffle head-to-head generators for variety
       const shuffledH2HGenerators = this.fisherYatesShuffle(headToHeadGenerators);
-      
+
       for (const generator of shuffledH2HGenerators) {
         console.log(`  Trying ${generator.type}...`);
         generatedMarket = await generator.fn(availableKols);
-        
+
         if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
           // Mark both KOLs as used
           usedKolsThisCycle.add(generatedMarket.metadata.kolA);
@@ -697,7 +807,7 @@ export class MarketGeneratorService {
 
       // Get KOLs that haven't been used yet in this cycle
       const availableKols = kolData.filter(k => !usedKolsThisCycle.has(k.username));
-      
+
       console.log(`  Available KOLs: ${availableKols.length}/${kolData.length}`);
 
       if (availableKols.length === 0) {
@@ -709,7 +819,7 @@ export class MarketGeneratorService {
       if (availableKols.length > 0) {
         // Shuffle to ensure variety
         const shuffledKols = this.fisherYatesShuffle(availableKols);
-        
+
         for (const kol of shuffledKols) {
           // Filter generators based on limits and variety
           const availableGenerators = soloGenerators.filter(g => {
@@ -723,41 +833,41 @@ export class MarketGeneratorService {
             return true;
           });
 
-          // Sort generators to prioritize less-used types, then shuffle within priority groups
+          // Sort generators to prioritize less-used types, then shuffle within prior1ity groups
           const sortedByUsage = [...availableGenerators].sort((a, b) => {
             const countA = marketTypeCount.get(a.type) || 0;
             const countB = marketTypeCount.get(b.type) || 0;
             return countA - countB;
           });
-          
+
           // Take top 3 least-used types and shuffle them for variety
           const leastUsedCount = marketTypeCount.get(sortedByUsage[0]?.type) || 0;
-          const leastUsed = sortedByUsage.filter(g => 
+          const leastUsed = sortedByUsage.filter(g =>
             (marketTypeCount.get(g.type) || 0) === leastUsedCount
           );
           const shuffledGenerators = this.fisherYatesShuffle(leastUsed.length > 0 ? leastUsed : sortedByUsage);
-          
+
           for (const generator of shuffledGenerators) {
             console.log(`  Trying ${generator.type} for ${kol.username}...`);
             generatedMarket = await generator.fn(kol);
-            
+
             if (generatedMarket) {
               // Mark this KOL as used
               usedKolsThisCycle.add(kol.username);
-              
+
               // Track market type usage for variety
               const currentCount = marketTypeCount.get(generator.type) || 0;
               marketTypeCount.set(generator.type, currentCount + 1);
-              
+
               // Track sol_gain_threshold count
               if (generator.type === 'sol_gain_threshold') {
                 solGainThresholdCount++;
               }
-              
+
               break;
             }
           }
-          
+
           if (generatedMarket) break;
         }
       }
@@ -765,11 +875,11 @@ export class MarketGeneratorService {
       // If no solo market created and we have at least 2 unused KOLs, try head-to-head
       if (!generatedMarket && availableKols.length >= 2) {
         console.log('  Trying head-to-head markets...');
-        
+
         for (const generator of headToHeadGenerators) {
           console.log(`  Trying ${generator.type}...`);
           generatedMarket = await generator.fn(availableKols);
-          
+
           if (generatedMarket && generatedMarket.metadata.kolA && generatedMarket.metadata.kolB) {
             // Mark both KOLs as used
             usedKolsThisCycle.add(generatedMarket.metadata.kolA);
@@ -856,13 +966,23 @@ export class MarketGeneratorService {
     const kolId = await this.resolveKolId(kol);
     if (!kolId) return null;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} have a positive USD Gain on tomorrow's leaderboard?`,
       description: `Prediction market for ${kol.username}'s profitability streak. Currently: ${kol.usdGain}`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'profit_streak',
       marketCategory: 'performance',
@@ -886,13 +1006,23 @@ export class MarketGeneratorService {
     const kolId = await this.resolveKolId(kol);
     if (!kolId) return null;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} maintain a top 10 rank on tomorrow's leaderboard?`,
       description: `${kol.username} is currently #${kol.rank}. Can they stay in the top 10?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'top_rank_maintain',
       marketCategory: 'ranking',
@@ -920,13 +1050,23 @@ export class MarketGeneratorService {
     const kolId = await this.resolveKolId(kol);
     if (!kolId) return null;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} record a win on tomorrow's leaderboard?`,
       description: `${kol.username} has ${wins} wins. Can they add another?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'streak_continuation',
       marketCategory: 'performance',
@@ -957,13 +1097,23 @@ export class MarketGeneratorService {
     const improvement = this.randomChoice(suitableImprovements);
     const targetRank = currentRank - improvement;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} reach rank #${targetRank} or better by tomorrow?`,
       description: `${kol.username} is currently #${kol.rank}. Can they climb to #${targetRank} or higher?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'rank_improvement',
       marketCategory: 'ranking',
@@ -987,29 +1137,39 @@ export class MarketGeneratorService {
     const [winsStr, lossesStr] = kol.winsLosses.split('/');
     const wins = parseInt(winsStr);
     const losses = parseInt(lossesStr);
-    
+
     if (isNaN(wins) || isNaN(losses) || losses === 0) return null;
-    
+
     const currentRatio = wins / losses;
     if (currentRatio < 1.0) return null;
-    
+
     const thresholds = [1.5, 1.75, 2.0, 2.5];
     const suitableThresholds = thresholds.filter(t => currentRatio >= t - 0.3 && currentRatio <= t + 0.5);
-    
+
     if (suitableThresholds.length === 0) return null;
-    
+
     const threshold = this.randomChoice(suitableThresholds);
 
     const kolId = await this.resolveKolId(kol);
     if (!kolId) return null;
+
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
 
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} maintain a win/loss ratio above ${threshold.toFixed(2)} on tomorrow's leaderboard?`,
       description: `${kol.username} currently has a ${currentRatio.toFixed(2)} W/L ratio (${kol.winsLosses}). Can they stay above ${threshold.toFixed(2)}?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winloss_ratio_maintain',
       marketCategory: 'performance',
@@ -1038,13 +1198,23 @@ export class MarketGeneratorService {
 
     const threshold = this.randomChoice([200, 500, 1000]);
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} (@${kol.xHandle}) gain ${threshold.toLocaleString()}+ X followers by tomorrow?`,
       description: `Follower growth prediction for ${kol.username}. Current: ${currentFollowers.toLocaleString()} followers`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'follower_growth',
       marketCategory: 'social',
@@ -1068,7 +1238,7 @@ export class MarketGeneratorService {
     const cleaned = solGain.replace(/[^0-9.+-]/g, '');
     const match = cleaned.match(/[+-]?[\d,.]+/);
     if (!match) return 0;
-    
+
     const numStr = match[0].replace(/,/g, '');
     return parseFloat(numStr) || 0;
   }
@@ -1077,20 +1247,30 @@ export class MarketGeneratorService {
     if (!kol.solGain) return null;
 
     const currentSolGain = this.parseSolGain(kol.solGain);
-    
+
     const solGainThresholds = [50, 100, 250, 500];
     const threshold = solGainThresholds.find(t => t > currentSolGain) || 1000;
 
     const kolId = await this.resolveKolId(kol);
     if (!kolId) return null;
 
+    // Initialize pools for 50/50 odds (price = 0.5)
+    const yesSharePool = 20000;
+    const yesCollateralPool = 10000;
+    const noSharePool = 20000;
+    const noCollateralPool = 10000;
+
     const market: InsertMarket = {
       kolId,
       title: `Will ${kol.username} gain +${threshold} SOL or more by tomorrow?`,
       description: `${kol.username} currently has ${kol.solGain} SOL gain. Can they reach +${threshold} SOL or higher?`,
       outcome: 'pending',
-      yesPool: "10000.00",
-      noPool: "10000.00",
+      yesSharePool,
+      yesCollateralPool,
+      noSharePool,
+      noCollateralPool,
+      currentYesPrice: yesCollateralPool / yesSharePool,
+      currentNoPrice: noCollateralPool / noSharePool,
       resolvesAt: addDays(new Date(), 1),
       marketType: 'sol_gain_threshold',
       marketCategory: 'performance',

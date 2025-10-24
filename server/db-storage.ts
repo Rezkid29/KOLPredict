@@ -449,12 +449,11 @@ export class DbStorage implements IStorage {
   }> {
     return await db.transaction(async (tx) => {
       // STEP 1: Lock and read market data (prevents concurrent modifications)
-      const [market] = await tx
-        .select()
-        .from(markets)
-        .where(eq(markets.id, params.marketId))
-        .for('update')
-        .limit(1);
+      const market = await tx.query.markets.findFirst({
+        where: eq(markets.id, params.marketId),
+        // Lock the row for update
+        lock: sql`FOR UPDATE`,
+      });
 
       if (!market) {
         throw new NotFoundError("Market not found");
@@ -482,16 +481,19 @@ export class DbStorage implements IStorage {
       }
 
       // Parse pool values inside transaction (fresh data)
-      const yesPool = parseFloat(market.yesPool);
-      const noPool = parseFloat(market.noPool);
+      const yesSharePool = parseFloat(market.yesSharePool);
+      const yesCollateralPool = parseFloat(market.yesCollateralPool);
+      const noSharePool = parseFloat(market.noSharePool);
+      const noCollateralPool = parseFloat(market.noCollateralPool);
       const userBalance = parseFloat(user.balance);
 
       // Validate pool values
-      if (isNaN(yesPool) || isNaN(noPool) || !isFinite(yesPool) || !isFinite(noPool)) {
+      if (isNaN(yesSharePool) || isNaN(yesCollateralPool) || isNaN(noSharePool) || isNaN(noCollateralPool) ||
+          !isFinite(yesSharePool) || !isFinite(yesCollateralPool) || !isFinite(noSharePool) || !isFinite(noCollateralPool)) {
         throw new ValidationError("Market has invalid pool values");
       }
 
-      if (yesPool <= 0 || noPool <= 0) {
+      if (yesSharePool <= 0 || yesCollateralPool <= 0 || noSharePool <= 0 || noCollateralPool <= 0) {
         throw new ValidationError("Market pools are depleted");
       }
 
@@ -502,10 +504,7 @@ export class DbStorage implements IStorage {
       const MAX_PRICE_IMPACT = 0.25; // Hard cap: 25% maximum price movement per trade
 
       // Slippage tolerance protects users from unexpected price movements
-      // With $20,000 pools, small trades ($10-50) typically have <0.5% impact
-      // Medium trades ($100-500) typically have 1-3% impact  
-      // Large trades ($1000-5000) can have 5-15% impact
-      const DEFAULT_SLIPPAGE_TOLERANCE = 0.10; // Default 10% slippage tolerance (user-friendly)
+      const DEFAULT_SLIPPAGE_TOLERANCE = 0.10; // Default 10% slippage tolerance
 
       // Use provided slippage tolerance or default
       const slippageTolerance = params.slippageTolerance ?? DEFAULT_SLIPPAGE_TOLERANCE;
@@ -518,58 +517,12 @@ export class DbStorage implements IStorage {
       // STEP 3: Perform AMM calculations inside transaction
       // Pools represent share inventory (not dollars)
       // Price formula ensures Price(YES) + Price(NO) = 1.0
-      const calculateAMMPrices = (yesP: number, noP: number) => {
-        const totalPool = yesP + noP;
-        return {
-          yesPrice: noP / totalPool,  // YES price = opposite pool ratio
-          noPrice: yesP / totalPool,   // NO price = opposite pool ratio
-        };
-      };
-
-      // Calculate shares received when buying with a given amount (dollars)
-      // User spends 'amt' dollars → receives shares from the target position
-      // Pools represent share inventory: buying removes shares from inventory
-      const calculateSharesForBuy = (
-        amt: number,
-        pos: "YES" | "NO",
-        yesP: number,
-        noP: number
-      ): number => {
-        const k = yesP * noP;
-        if (pos === "YES") {
-          // Buying YES: add to noPool (deposit liquidity), remove from yesPool (get shares)
-          // amt = newNoPool - noP, solve for shares removed from yesP
-          const newNoPool = noP + amt;
-          const newYesPool = k / newNoPool;
-          return yesP - newYesPool;  // Shares withdrawn from YES inventory
-        } else {
-          // Buying NO: add to yesPool (deposit liquidity), remove from noPool (get shares)
-          const newYesPool = yesP + amt;
-          const newNoPool = k / newYesPool;
-          return noP - newNoPool;  // Shares withdrawn from NO inventory
-        }
-      };
-
-      // Calculate payout (dollars) when selling shares
-      // User returns 'shares' to inventory → receives payout
-      const calculatePayoutForSell = (
-        shares: number,
-        pos: "YES" | "NO",
-        yesP: number,
-        noP: number
-      ): number => {
-        const k = yesP * noP;
-        if (pos === "YES") {
-          // Selling YES: add to yesPool (return shares), remove from noPool (get payout)
-          const newYesPool = yesP + shares;
-          const newNoPool = k / newYesPool;
-          return noP - newNoPool;  // Payout withdrawn from NO pool
-        } else {
-          // Selling NO: add to noPool (return shares), remove from yesPool (get payout)
-          const newNoPool = noP + shares;
-          const newYesPool = k / newNoPool;
-          return yesP - newYesPool;  // Payout withdrawn from YES pool
-        }
+      const calculateAMMPrices = (yesSP: number, yesCP: number, noSP: number, noCP: number) => {
+        // Price of YES = collateral in YES pool / shares in YES pool
+        const yesPrice = yesCP / yesSP;
+        // Price of NO = collateral in NO pool / shares in NO pool
+        const noPrice = noCP / noSP;
+        return { yesPrice, noPrice };
       };
 
       // Platform fee configuration (2% by default, can be set via environment)
@@ -577,8 +530,10 @@ export class DbStorage implements IStorage {
 
       let betAmount: number;
       let sharesAmount: number;
-      let newYesPool: number;
-      let newNoPool: number;
+      let newYesSharePool: number;
+      let newYesCollateralPool: number;
+      let newNoSharePool: number;
+      let newNoCollateralPool: number;
       let platformFee: number = 0;
       let netBetAmount: number;
 
@@ -598,7 +553,7 @@ export class DbStorage implements IStorage {
         netBetAmount = params.amount - platformFee;
 
         // Validate trade size relative to pool (max 40% of available liquidity)
-        const totalLiquidity = yesPool + noPool;
+        const totalLiquidity = yesCollateralPool + noCollateralPool; // Total collateral in the market
         const maxTradeSize = totalLiquidity * MAX_TRADE_PERCENTAGE;
         if (netBetAmount > maxTradeSize) {
           throw new ValidationError(
@@ -606,28 +561,34 @@ export class DbStorage implements IStorage {
           );
         }
 
-        betAmount = params.amount; // Total amount user pays
-        sharesAmount = calculateSharesForBuy(netBetAmount, params.position, yesPool, noPool);
+        betAmount = params.amount; // Total amount user pays (including fee)
+
+        // Calculate shares based on net amount (excluding fee)
+        const buyResult = this.calculateAmmTrade(
+          params.position === "YES" ? 'yes' : 'no',
+          netBetAmount,
+          yesSharePool,
+          yesCollateralPool,
+          noSharePool,
+          noCollateralPool
+        );
+        sharesAmount = buyResult.shares;
+        newYesSharePool = buyResult.newYesSharePool;
+        newYesCollateralPool = buyResult.newYesCollateralPool;
+        newNoSharePool = buyResult.newNoSharePool;
+        newNoCollateralPool = buyResult.newNoCollateralPool;
+        averageCost = buyResult.avgPrice; // Avg cost per share
 
         // Validate calculation
         if (isNaN(sharesAmount) || !isFinite(sharesAmount) || sharesAmount < 0) {
           throw new ValidationError("Invalid share calculation - trade too large for pool liquidity");
         }
 
-        // Calculate new pools based on share inventory semantics
-        // Buying: deposit to opposite pool, withdraw from target pool
-        if (params.position === "YES") {
-          newYesPool = yesPool - sharesAmount;    // Remove shares from YES inventory
-          newNoPool = noPool + netBetAmount;       // Add liquidity to NO pool
-        } else {
-          newNoPool = noPool - sharesAmount;       // Remove shares from NO inventory
-          newYesPool = yesPool + netBetAmount;     // Add liquidity to YES pool
-        }
-
         // Validate new pools
-        if (newYesPool <= 0 || newNoPool <= 0) {
+        if (newYesSharePool <= 0 || newYesCollateralPool <= 0 || newNoSharePool <= 0 || newNoCollateralPool <= 0) {
           throw new ValidationError("Trade amount too large - would deplete market pools");
         }
+
       } else {
         // Selling - lock and read user position
         const [userPosition] = await tx
@@ -650,15 +611,27 @@ export class DbStorage implements IStorage {
         }
 
         // Calculate payout first to validate pool capacity
-        sharesAmount = params.amount;
-        betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);
-        
+        sharesAmount = params.amount; // Shares user is selling
+
+        const sellResult = this.calculatePayoutForSell(
+          sharesAmount,
+          params.position === "YES" ? 'yes' : 'no',
+          yesSharePool,
+          yesCollateralPool,
+          noSharePool,
+          noCollateralPool
+        );
+        betAmount = sellResult.payout; // Payout received by user
+        newYesSharePool = sellResult.newYesSharePool;
+        newYesCollateralPool = sellResult.newYesCollateralPool;
+        newNoSharePool = sellResult.newNoSharePool;
+        newNoCollateralPool = sellResult.newNoCollateralPool;
+
         // Validate that opposite pool has enough liquidity for payout
-        // When selling YES, payout comes from NO pool (and vice versa)
-        const oppositePool = params.position === "YES" ? noPool : yesPool;
-        if (betAmount > oppositePool) {
+        const oppositeCollateralPool = params.position === "YES" ? newNoCollateralPool : newYesCollateralPool;
+        if (betAmount > oppositeCollateralPool) {
           throw new ValidationError(
-            `Insufficient pool liquidity. Sell would require ${betAmount.toFixed(2)} from ${params.position === "YES" ? "NO" : "YES"} pool, but only ${oppositePool.toFixed(2)} available`
+            `Insufficient pool liquidity. Sell would require ${betAmount.toFixed(2)} from ${params.position === "YES" ? "NO" : "YES"} collateral pool, but only ${oppositeCollateralPool.toFixed(2)} available`
           );
         }
 
@@ -679,26 +652,19 @@ export class DbStorage implements IStorage {
           throw new ValidationError("Invalid payout calculation");
         }
 
-        // Calculate new pools based on share inventory semantics
-        // Selling: return shares to target pool, withdraw payout from opposite pool
-        if (params.position === "YES") {
-          newYesPool = yesPool + params.amount;    // Return shares to YES inventory
-          newNoPool = noPool - betAmount;           // Withdraw payout from NO pool
-        } else {
-          newNoPool = noPool + params.amount;       // Return shares to NO inventory
-          newYesPool = yesPool - betAmount;         // Withdraw payout from YES pool
-        }
-
         // Sanity check
-        if (newYesPool < 0 || newNoPool < 0) {
+        if (newYesSharePool < 0 || newYesCollateralPool < 0 || newNoSharePool < 0 || newNoCollateralPool < 0) {
           throw new ValidationError("Invalid trade - would result in negative pool values");
         }
       }
 
       // Calculate new prices
-      const prices = calculateAMMPrices(newYesPool, newNoPool);
-      const yesPrice = prices.yesPrice;
-      const noPrice = prices.noPrice;
+      const { yesPrice, noPrice } = calculateAMMPrices(
+        newYesSharePool,
+        newYesCollateralPool,
+        newNoSharePool,
+        newNoCollateralPool
+      );
 
       // Validate prices
       if (isNaN(yesPrice) || isNaN(noPrice) || !isFinite(yesPrice) || !isFinite(noPrice)) {
@@ -712,25 +678,22 @@ export class DbStorage implements IStorage {
       // Enforce price bounds to prevent extreme prices (prevents math instability)
       if (yesPrice < MIN_PRICE || yesPrice > MAX_PRICE) {
         throw new ValidationError(
-          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting price: ${yesPrice.toFixed(4)}. Reduce trade size.`
+          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting YES price: ${yesPrice.toFixed(4)}. Reduce trade size.`
         );
       }
 
       if (noPrice < MIN_PRICE || noPrice > MAX_PRICE) {
         throw new ValidationError(
-          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting price: ${noPrice.toFixed(4)}. Reduce trade size.`
+          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting NO price: ${noPrice.toFixed(4)}. Reduce trade size.`
         );
       }
 
       // Calculate price impact for return value (informational only in points mode)
-      const currentPrice = params.position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
+      const currentYesPrice = parseFloat(market.currentYesPrice);
+      const currentNoPrice = parseFloat(market.currentNoPrice);
       const newPrice = params.position === "YES" ? yesPrice : noPrice;
-      const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
-
-      // ⚠️ PRICE IMPACT VALIDATION TEMPORARILY DISABLED FOR POINTS-ONLY MODE
-      // With small $200 pools, nearly all trades trigger slippage protection
-      // This will be re-enabled when Solana integration is complete with larger pools
-      // See PRICE_IMPACT_BACKUP.md for restoration code
+      const currentPrice = params.position === "YES" ? currentYesPrice : currentNoPrice;
+      const priceImpact = currentPrice > 0 ? Math.abs(newPrice - currentPrice) / currentPrice : 0;
 
       // STEP 4: Create bet record
       const [createdBet] = await tx
@@ -740,10 +703,11 @@ export class DbStorage implements IStorage {
           marketId: params.marketId,
           position: params.position,
           amount: betAmount.toFixed(2),
-          price: currentPrice.toFixed(4),
+          price: currentPrice.toFixed(4), // Record the price at which the bet was placed
           shares: sharesAmount.toFixed(2),
           status: params.action === "sell" ? "settled" : "open",
           profit: params.action === "sell" ? profit.toFixed(2) : undefined,
+          averageCost: params.action === "buy" ? averageCost.toFixed(4) : undefined,
         })
         .returning();
 
@@ -774,7 +738,7 @@ export class DbStorage implements IStorage {
         if (params.action === "buy") {
           const newShares = currentShares + sharesAmount;
           // Use actual cost per share (total paid / shares received)
-          const costPerShare = params.amount / sharesAmount;
+          const costPerShare = netBetAmount / sharesAmount; // Use net amount for cost calculation
           const newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * costPerShare)) / newShares;
 
           await tx
@@ -796,7 +760,7 @@ export class DbStorage implements IStorage {
         }
       } else if (params.action === "buy") {
         // For new positions, use actual cost per share
-        const costPerShare = params.amount / sharesAmount;
+        const costPerShare = netBetAmount / sharesAmount; // Use net amount for cost calculation
         await tx.insert(positions).values({
           userId: params.userId,
           marketId: params.marketId,
@@ -808,8 +772,8 @@ export class DbStorage implements IStorage {
 
       // STEP 6: Update user balance
       const newBalance = params.action === "buy"
-        ? (userBalance - betAmount).toFixed(2)
-        : (userBalance + betAmount).toFixed(2);
+        ? (userBalance - betAmount).toFixed(2) // Deduct total amount paid (including fee)
+        : (userBalance + betAmount).toFixed(2); // Add payout
 
       // Final safety check
       if (parseFloat(newBalance) < 0) {
@@ -830,7 +794,7 @@ export class DbStorage implements IStorage {
         .update(users)
         .set({
           totalBets: user.totalBets + 1,
-          totalWins: user.totalWins,
+          totalWins: user.totalWins, // Wins updated on settlement, not here
           totalProfit: newTotalProfit,
         })
         .where(eq(users.id, params.userId));
@@ -839,11 +803,13 @@ export class DbStorage implements IStorage {
       await tx
         .update(markets)
         .set({
-          yesPool: newYesPool.toFixed(2),
-          noPool: newNoPool.toFixed(2),
-          yesPrice: yesPrice.toFixed(4),
-          noPrice: noPrice.toFixed(4),
+          yesSharePool: newYesSharePool.toFixed(2),
+          yesCollateralPool: newYesCollateralPool.toFixed(2),
+          noSharePool: newNoSharePool.toFixed(2),
+          noCollateralPool: newNoCollateralPool.toFixed(2),
           totalVolume: (parseFloat(market.totalVolume) + betAmount).toFixed(2),
+          currentYesPrice: newYesCollateralPool / newYesSharePool,
+          currentNoPrice: newNoCollateralPool / newNoSharePool,
         })
         .where(eq(markets.id, params.marketId));
 
@@ -948,7 +914,7 @@ export class DbStorage implements IStorage {
       if (action === "buy") {
         newShares = currentShares + shares;
         const market = await this.getMarket(marketId);
-        const currentPrice = parseFloat(position === "YES" ? market!.yesPrice : market!.noPrice);
+        const currentPrice = parseFloat(position === "YES" ? market!.currentYesPrice : market!.currentNoPrice);
         newAvgPrice = ((currentShares * currentAvgPrice) + (shares * currentPrice)) / newShares;
       } else {
         newShares = Math.max(0, currentShares - shares);
@@ -964,7 +930,7 @@ export class DbStorage implements IStorage {
         .where(eq(positions.id, existing.id));
     } else if (action === "buy") {
       const market = await this.getMarket(marketId);
-      const price = position === "YES" ? market?.yesPrice : market?.noPrice;
+      const price = position === "YES" ? market?.currentYesPrice : market?.currentNoPrice;
       await db.insert(positions).values({
         userId,
         marketId,
@@ -980,8 +946,8 @@ export class DbStorage implements IStorage {
     const market = await this.getMarket(marketId);
     if (!market) return [];
 
-    const currentYesPrice = parseFloat(market.yesPrice);
-    const currentNoPrice = parseFloat(market.noPrice);
+    const currentYesPrice = parseFloat(market.currentYesPrice);
+    const currentNoPrice = parseFloat(market.currentNoPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
 
@@ -1273,6 +1239,119 @@ export class DbStorage implements IStorage {
       .from(platformFees)
       .where(eq(platformFees.userId, userId))
       .orderBy(desc(platformFees.createdAt));
+  }
+
+  // AMM calculation methods
+  private calculateAmmTrade(
+    side: 'yes' | 'no',
+    amount: number, // Amount of collateral being added/removed
+    yesSharePool: number,
+    yesCollateralPool: number,
+    noSharePool: number,
+    noCollateralPool: number
+  ): { 
+    shares: number; // Shares received by the user
+    newYesSharePool: number; 
+    newYesCollateralPool: number;
+    newNoSharePool: number;
+    newNoCollateralPool: number;
+    avgPrice: number // Average price per share for this trade
+  } {
+    let shares = 0;
+    let newYesSharePool = yesSharePool;
+    let newYesCollateralPool = yesCollateralPool;
+    let newNoSharePool = noSharePool;
+    let newNoCollateralPool = noCollateralPool;
+    let avgPrice = 0;
+
+    if (side === 'yes') {
+      // Buying YES: User adds collateral (amount) to the YES pool, receives YES shares
+      // The constant product 'k' for the YES pool is yesSharePool * yesCollateralPool
+      const k = yesSharePool * yesCollateralPool;
+
+      // User adds collateral to the pool
+      newYesCollateralPool = yesCollateralPool + amount;
+
+      // Solve for new share pool to maintain k
+      newYesSharePool = k / newYesCollateralPool;
+
+      // Shares given to user = difference in share pool
+      shares = yesSharePool - newYesSharePool;
+      avgPrice = amount / shares; // Avg price = collateral added / shares received
+
+      // NO pool remains unchanged
+    } else {
+      // Buying NO: User adds collateral (amount) to the NO pool, receives NO shares
+      // The constant product 'k' for the NO pool is noSharePool * noCollateralPool
+      const k = noSharePool * noCollateralPool;
+
+      // User adds collateral to the pool
+      newNoCollateralPool = noCollateralPool + amount;
+
+      // Solve for new share pool to maintain k
+      newNoSharePool = k / newNoCollateralPool;
+
+      // Shares given to user = difference in share pool
+      shares = noSharePool - newNoSharePool;
+      avgPrice = amount / shares; // Avg price = collateral added / shares received
+
+      // YES pool remains unchanged
+    }
+
+    return { 
+      shares, 
+      newYesSharePool, 
+      newYesCollateralPool,
+      newNoSharePool,
+      newNoCollateralPool,
+      avgPrice 
+    };
+  }
+
+  // Selling shares returns collateral from the opposite pool
+  private calculatePayoutForSell(
+    sharesToSell: number,
+    side: 'yes' | 'no',
+    yesSharePool: number,
+    yesCollateralPool: number,
+    noSharePool: number,
+    noCollateralPool: number
+  ): { payout: number; newYesSharePool: number; newYesCollateralPool: number; newNoSharePool: number; newNoCollateralPool: number } {
+    let payout = 0;
+    let newYesSharePool = yesSharePool;
+    let newYesCollateralPool = yesCollateralPool;
+    let newNoSharePool = noSharePool;
+    let newNoCollateralPool = noCollateralPool;
+
+    if (side === 'yes') {
+      // Selling YES: User returns YES shares, receives collateral from NO pool
+      newYesSharePool = yesSharePool + sharesToSell; // Add shares back to YES pool
+      const k = yesSharePool * yesCollateralPool; // Constant product for YES pool
+      newYesCollateralPool = k / newYesSharePool; // Calculate new collateral pool
+
+      // Payout = difference in collateral pool (collateral removed from NO pool)
+      payout = yesCollateralPool - newYesCollateralPool; 
+
+      // Update NO pool collateral
+      newNoCollateralPool = noCollateralPool - payout;
+
+      // NO share pool remains unchanged
+    } else {
+      // Selling NO: User returns NO shares, receives collateral from YES pool
+      newNoSharePool = noSharePool + sharesToSell; // Add shares back to NO pool
+      const k = noSharePool * noCollateralPool; // Constant product for NO pool
+      newNoSharePool = k / newNoSharePool; // Calculate new collateral pool
+
+      // Payout = difference in collateral pool (collateral removed from YES pool)
+      payout = yesCollateralPool - newYesCollateralPool;
+
+      // Update YES pool collateral
+      newYesCollateralPool = yesCollateralPool - payout;
+
+      // YES share pool remains unchanged
+    }
+
+    return { payout, newYesSharePool, newYesCollateralPool, newNoSharePool, newNoCollateralPool };
   }
 }
 

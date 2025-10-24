@@ -114,10 +114,15 @@ async function seed() {
         title: marketTitles[i],
         description: `Prediction market for ${kol.name}'s performance metrics`,
         outcome: "pending",
-        yesPool: "10000.00",
-        noPool: "10000.00",
-        yesPrice: "0.5000",
-        noPrice: "0.5000",
+        // Seed pools to achieve target price
+        // For 50/50 odds: yesPrice = yesCollateral/yesShares = 0.5
+        // Set yesShares = 20000, yesCollateral = 10000
+        yesSharePool: 20000,
+        yesCollateralPool: 10000,
+        noSharePool: 20000,
+        noCollateralPool: 10000,
+        currentYesPrice: 10000 / 20000, // 0.5
+        currentNoPrice: 10000 / 20000, // 0.5
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
