@@ -1,0 +1,64 @@
+Looking at the console logs, I can see a bet was just placed:
+
+12:44:35 PM [express] POST /api/bets 200 in 698ms :: {"bet":{"id":"bc72e48e-1bf0-4e63-a9d9-63a7da642a...
+The issue is with the numeric field overflow error you're seeing. After the schema changes we made (increasing precision to 18, 9), the database schema was updated, but there's a fundamental problem with how the CPMM calculations work with the current dual-pool system.
+
+The Math Problem
+Looking at db-storage.ts, the current implementation uses a dual-pool CPMM where:
+
+YES pool: yesSharePool and yesCollateralPool
+NO pool: noSharePool and noCollateralPool
+When buying YES shares:
+
+k = yesSharePool * yesCollateralPool
+newYesCollateralPool = yesCollateralPool + netBetAmount
+newYesSharePool = k / newYesCollateralPool
+shares = yesSharePool - newYesSharePool
+The problem is that with very small pool sizes (like $100 per pool), even small bets can cause:
+
+Extreme price movements (prices approaching 0.99 or 0.01)
+Very few shares returned (because the pool is nearly depleted)
+Numeric overflow when trying to store prices outside the valid range
+Why Users Get So Few Shares
+Let's trace through an example with current pool values from the markets ($100 initial pools):
+
+Initial State:
+
+yesSharePool = 200
+yesCollateralPool = 100
+noSharePool = 200
+noCollateralPool = 100
+User bets $68 on YES (after 2% fee, net = $66.64):
+
+k = 200 * 100 = 20,000
+newYesCollateralPool = 100 + 66.64 = 166.64
+newYesSharePool = 20,000 / 166.64 = 120.05
+shares = 200 - 120.05 = 79.95 shares
+But wait - the price calculation reveals the issue:
+
+// Before trade
+yesPrice = 100 / (100 + 100) = 0.50
+// After trade
+yesPrice = 166.64 / (166.64 + 100) = 0.625
+// Price impact: 25%!
+The trade moved the price by 25% in one go, and the average cost per share was:
+
+$66.64 / 79.95 shares = $0.833 per share
+This is way higher than the starting price of $0.50 because of massive slippage.
+
+The Real Issue: Pool Sizes Are Too Small
+The pools are currently initialized at $100 each (total $200 per market). This is far too small for the AMM to function properly. Even a $20 bet causes significant price impact.
+
+The solution is to dramatically increase pool sizes when markets are created. Based on the AMM_ANALYSIS.md, pools should be at least $10,000 each for stable pricing.
+
+Let me check the current market initialization and propose a fix:
+server/market-generator-service.ts
+Increase initial pool sizes to $10,000 each for proper AMM function
+Summary
+Why users got few shares:
+
+Tiny pools ($100 each) mean even small bets cause massive price impact
+With a $68 bet on a $100 pool, the price jumped from $0.50 → $0.625 (25% increase)
+Due to the constant product formula, the user paid an average of $0.833 per share instead of the expected $0.50
+This is 66% slippage - completely unacceptable
+The fix: Increase pool sizes from $100 → $10,000 each. With larger pools, a $68 bet would have minimal price impact and users would get close to the expected number of shares.
