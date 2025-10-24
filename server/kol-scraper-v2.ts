@@ -256,12 +256,12 @@ export class KOLScraperV2 {
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       // Extract data using plain JavaScript (no TypeScript types in evaluate context)
-      const detailedData = await profilePage.evaluate(function() {
+      const detailedData = await profilePage.evaluate(() => {
         
-        const findStatByLabel = function(labelRegex) {
+        function findStatByLabel(labelRegex) {
           try {
             const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
-            const labelNode = allTextNodes.find(function(el) { return labelRegex.test(el.textContent || ''); });
+            const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
             if (!labelNode) return null;
             
             const parent = labelNode.parentElement;
@@ -279,7 +279,7 @@ export class KOLScraperV2 {
           } catch (e) {
             return null;
           }
-        };
+        }
 
         const pnl7d = findStatByLabel(/7D PnL/i);
         const pnl30d = findStatByLabel(/30D PnL/i);
@@ -291,7 +291,7 @@ export class KOLScraperV2 {
         if (portfolioSection) {
           const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
           
-          for (var i = 0; i < holdingRows.length; i++) {
+          for (let i = 0; i < holdingRows.length; i++) {
             try {
               const row = holdingRows[i];
               const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
@@ -323,7 +323,7 @@ export class KOLScraperV2 {
         if (historySection) {
           const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
           
-          for (var j = 0; j < tradeRows.length; j++) {
+          for (let j = 0; j < tradeRows.length; j++) {
             try {
               const row = tradeRows[j];
               const text = (row.textContent || '').toLowerCase();
