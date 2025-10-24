@@ -54,9 +54,9 @@ export function LiveFeed({ bets }: LiveFeedProps) {
                 data-testid={`bet-item-${bet.id}`}
               >
                 <div className={`mt-0.5 p-2 rounded-lg ${
-                  bet.type === "buy" ? "bg-success/10 text-success ring-1 ring-success/20" : "bg-destructive/10 text-destructive ring-1 ring-destructive/20"
+                  bet.position === "YES" ? "bg-success/10 text-success ring-1 ring-success/20" : "bg-destructive/10 text-destructive ring-1 ring-destructive/20"
                 }`}>
-                  {bet.type === "buy" ? (
+                  {bet.position === "YES" ? (
                     <TrendingUp className="h-4 w-4" />
                   ) : (
                     <TrendingDown className="h-4 w-4" />
@@ -82,6 +82,14 @@ export function LiveFeed({ bets }: LiveFeedProps) {
                     <span className="font-semibold">{bet.shares} shares</span>
                     <span>•</span>
                     <span className="font-bold tabular-nums">{parseFloat(bet.amount).toFixed(2)} PTS</span>
+                    {bet.profit && bet.status === "settled" && (
+                      <>
+                        <span>•</span>
+                        <span className={`font-bold tabular-nums ${parseFloat(bet.profit) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {parseFloat(bet.profit) >= 0 ? '+' : ''}{parseFloat(bet.profit).toFixed(2)} PTS
+                        </span>
+                      </>
+                    )}
                   </div>
                   
                   <p className="text-xs text-muted-foreground">

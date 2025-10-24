@@ -72,7 +72,7 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
             </div>
           </div>
           
-          {market.isLive && (
+          {market.isLive ? (
             <Badge variant="outline" className="gap-1.5 border-success text-success shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
@@ -80,7 +80,11 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
               </span>
               LIVE
             </Badge>
-          )}
+          ) : market.resolved ? (
+            <Badge variant="outline" className="gap-1.5 border-muted-foreground text-muted-foreground shrink-0">
+              CLOSED
+            </Badge>
+          ) : null}
         </div>
 
         {/* Market title and timer */}

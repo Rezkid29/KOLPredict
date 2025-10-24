@@ -69,7 +69,7 @@ export const bets = pgTable("bets", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   price: decimal("price", { precision: 10, scale: 4 }).notNull(),
   shares: decimal("shares", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").notNull().default("open"),
+  status: text("status").notNull().default("open"), // open, settled, won, lost, refunded
   profit: decimal("profit", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

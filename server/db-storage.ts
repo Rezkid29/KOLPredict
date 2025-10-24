@@ -566,6 +566,9 @@ export class DbStorage implements IStorage {
       let platformFee: number = 0;
       let netBetAmount: number;
 
+      let profit: number = 0;
+      let averageCost: number = 0;
+
       if (params.action === "buy") {
         // Re-validate balance inside transaction
         if (params.amount > userBalance) {
@@ -620,6 +623,7 @@ export class DbStorage implements IStorage {
           .limit(1);
 
         const currentShares = userPosition ? parseFloat(userPosition.shares) : 0;
+        averageCost = userPosition ? parseFloat(userPosition.averagePrice) : 0;
 
         // Re-validate shares inside transaction
         if (params.amount > currentShares) {
@@ -634,6 +638,9 @@ export class DbStorage implements IStorage {
 
         sharesAmount = params.amount;
         betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);
+
+        // Calculate profit: payout - (shares sold * average cost)
+        profit = betAmount - (params.amount * averageCost);
 
         // Validate calculation
         if (isNaN(betAmount) || !isFinite(betAmount) || betAmount < 0) {
@@ -702,6 +709,8 @@ export class DbStorage implements IStorage {
           amount: betAmount.toFixed(2),
           price: currentPrice.toFixed(4),
           shares: sharesAmount.toFixed(2),
+          status: params.action === "sell" ? "settled" : "open",
+          profit: params.action === "sell" ? profit.toFixed(2) : undefined,
         })
         .returning();
 
@@ -776,12 +785,16 @@ export class DbStorage implements IStorage {
         .where(eq(users.id, params.userId));
 
       // STEP 7: Update user stats
+      const newTotalProfit = params.action === "sell" 
+        ? (parseFloat(user.totalProfit) + profit).toFixed(2)
+        : user.totalProfit;
+
       await tx
         .update(users)
         .set({
           totalBets: user.totalBets + 1,
           totalWins: user.totalWins,
-          totalProfit: user.totalProfit,
+          totalProfit: newTotalProfit,
         })
         .where(eq(users.id, params.userId));
 
