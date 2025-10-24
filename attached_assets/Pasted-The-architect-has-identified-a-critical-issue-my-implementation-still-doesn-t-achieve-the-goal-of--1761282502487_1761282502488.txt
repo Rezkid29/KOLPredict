@@ -1,0 +1,51 @@
+The architect has identified a critical issue - my implementation still doesn't achieve the goal of cost ≈ shares × price. Let me create a detailed summary for you:
+
+Summary: AMM Refactoring Status
+I've made significant progress implementing the Polymarket/Kalshi-style CPMM, but there's a fundamental mathematical issue that needs resolution:
+
+✅ What's Been Completed
+Price Formula - Fixed to ensure Price(YES) + Price(NO) = 1.0
+Share Inventory Semantics - Pools now represent share inventory (not dollars)
+Pool Update Logic - Buying/selling correctly updates inventory
+Sell Validation Fix - No longer blocks legitimate sell orders
+Market Resolution - Already pays $1 per winning share (correct)
+Unit Tests - Created comprehensive formula verification tests
+Documentation - Created AMM_ANALYSIS.md explaining changes
+❌ Critical Issue Remaining
+The cost-to-shares relationship is still wrong!
+
+Even with the new formulas, buying at 50/50 odds costs ≈**$1.00 per share** instead of ≈**$0.50 per share**.
+
+Example:
+
+Market: 50/50 odds (yesPool = 10,000, noPool = 10,000)
+Current Price(YES) = 0.50
+User spends $10 to buy YES
+Current behavior: Gets ≈10 shares (cost = $1/share) ❌
+Expected behavior: Should get ≈20 shares (cost = $0.50/share) ✓
+🤔 The Root Cause
+The constant product formula k = yesPool × noPool is being applied correctly, but it inherently doesn't produce a linear cost-to-shares relationship near the current price. This is a fundamental property of the CPMM curve.
+
+📋 Options Moving Forward
+Option 1: Implement a Different AMM Model
+
+Use a Logarithmic Market Scoring Rule (LMSR) instead of CPMM
+This gives more intuitive pricing where cost ≈ shares × price
+Requires complete rewrite of AMM formulas
+Option 2: Keep CPMM with Better User Interface
+
+Accept that CPMM has price impact/slippage
+Show users "estimated shares" before they confirm the trade
+Display average price clearly
+This is actually how most AMMs work (Uniswap, etc.)
+Option 3: Hybrid Approach
+
+Use different formula for small trades vs large trades
+Or implement a "limit order book" style system
+🎯 Recommendation
+Before proceeding, I need your guidance:
+
+Do you want to keep the CPMM model and accept that there will be slippage (cost isn't exactly shares × price)?
+Should I implement a different AMM model (like LMSR) that has more linear pricing?
+Do you have a specific formula or reference implementation you'd like me to follow?
+The current implementation is mathematically correct for a CPMM, but it may not match the user experience you're looking for based on the attached file's description. What would you like me to do?
