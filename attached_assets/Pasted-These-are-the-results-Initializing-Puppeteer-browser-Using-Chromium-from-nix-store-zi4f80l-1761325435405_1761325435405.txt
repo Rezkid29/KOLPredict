@@ -1,0 +1,127 @@
+These are the results, 🚀 Initializing Puppeteer browser...
+
+Using Chromium from: /nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium
+
+✅ Browser initialized successfully
+
+
+
+🎯 Starting KOL scraping process...
+
+
+
+✅ Browser already initialized, reusing instance
+
+🌐 Navigating to https://kolscan.io/leaderboard...
+
+⏳ Waiting for dynamic content to load...
+
+📜 Scrolling to load all content...
+
+📄 Extracting leaderboard data and profile URLs...
+
+✅ Successfully extracted 1 KOL entries from leaderboard
+
+Found 1 KOLs. Now scraping profile pages...
+
+🔎 Navigating to profile page: https://kolscan.io/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1
+
+📄 Extracting detailed data from https://kolscan.io/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1...
+
+💾 Saving 1 full KOL entries to database...
+
+✅ Saved 1/1 KOL entries to database
+
+🔒 Closing browser...
+
+✅ Browser closed
+
+
+
+✅ Scraping Complete: 1 entries scraped, 1 saved to database
+
+
+
+🔍 DEBUG: Getting latest scraped KOLs...
+
+🔍 DEBUG: Found 1 KOLs from latest scrape
+
+📊 LATEST SCRAPED KOL DATA (Structured Format):
+
+
+
+====================================================================================================
+
+
+
+[1] RANK #1 - casino
+
+----------------------------------------------------------------------------------------------------
+
+  Username:     casino
+
+  X Handle:     N/A
+
+  Wins/Losses:  N/A
+
+  SOL Gain:     82.83
+
+  USD Gain:     15745.30
+
+  PNL 7D:       N/A
+
+  PNL 30D:      N/A
+
+  Total Trades: N/A
+
+  Win Rate:     N/A
+
+  Scraped At:   Fri Oct 24 2025 16:18:56 GMT+0000 (Coordinated Universal Time)
+
+
+
+====================================================================================================
+
+
+
+📋 JSON FORMAT (for programmatic use):
+
+
+
+[
+
+  {
+
+    "id": "14fda94a-a171-4bcd-bf66-c4b75eefd8a4",
+
+    "rank": 1,
+
+    "username": "casino",
+
+    "xHandle": null,
+
+    "wins": 32,
+
+    "losses": 35,
+
+    "solGain": "82.83",
+
+    "usdGain": "15745.30",
+
+    "pnl7d": null,
+
+    "pnl30d": null,
+
+    "totalTrades": null,
+
+    "winRatePercent": null,
+
+    "holdings": null,
+
+    "tradeHistory": null,
+
+    "profileUrl": "/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1",
+
+    "scrapedAt": "2025-10-24T16:18:56.982Z"
+
+  }
