@@ -73,9 +73,17 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
     } catch (error: any) {
-      const errorMessage = error?.message || "Failed to place bet. Please try again.";
+      let errorMessage = error?.message || "Failed to place bet. Please try again.";
+      
+      // Provide user-friendly messages for common errors
+      if (errorMessage.includes("not live")) {
+        errorMessage = "This market is no longer accepting bets. It may have expired or been resolved.";
+      } else if (errorMessage.includes("resolved")) {
+        errorMessage = "This market has already been resolved and is closed for trading.";
+      }
+      
       toast({
-        title: "Error",
+        title: "Cannot Place Bet",
         description: errorMessage,
         variant: "destructive",
       });
@@ -107,7 +115,10 @@ export default function Home() {
     const matchesCategory = selectedCategories.length === 0 || 
       (market.marketCategory && selectedCategories.includes(market.marketCategory));
     
-    return matchesSearch && matchesCategory;
+    // Only show live, unresolved markets
+    const isActive = market.isLive && !market.resolved;
+    
+    return matchesSearch && matchesCategory && isActive;
   });
 
   return (
