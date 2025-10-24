@@ -1,7 +1,8 @@
 import { dbStorage as storage } from "./db-storage";
 import { socialMediaClient } from "./social-api-client";
 import { xApiClient } from "./x-api-client";
-import type { Market, Bet, Kol } from "@shared/schema";
+import { KOLScraper } from "./kol-scraper";
+import type { Market, Bet, Kol, ScrapedKol } from "@shared/schema";
 
 export interface MarketResolution {
   marketId: string;
@@ -15,6 +16,31 @@ export class MarketResolver {
   private isResolving = false;
   private consecutiveFailures = 0;
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
+
+  private async getFreshKolData(limit: number = 20): Promise<ScrapedKol[]> {
+    const dedicatedScraper = new KOLScraper();
+    try {
+      console.log('🔄 Performing on-demand scrape for fresh KOL data...');
+      await dedicatedScraper.init();
+      const freshData = await dedicatedScraper.scrapeLeaderboard();
+      console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
+      return freshData.slice(0, limit).map(kol => ({
+        id: '',
+        rank: kol.rank,
+        username: kol.username,
+        xHandle: kol.xHandle || null,
+        winsLosses: kol.winsLosses || null,
+        solGain: kol.solGain || null,
+        usdGain: kol.usdGain || null,
+        scrapedAt: new Date(),
+      }));
+    } catch (error) {
+      console.error('❌ On-demand scraping failed, falling back to cached data:', error);
+      return await storage.getLatestScrapedKols(limit);
+    } finally {
+      await dedicatedScraper.close();
+    }
+  }
 
   async resolveExpiredMarkets(): Promise<MarketResolution[]> {
     if (this.isResolving) {
@@ -433,7 +459,7 @@ export class MarketResolver {
   }
 
   private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
@@ -456,7 +482,7 @@ export class MarketResolver {
   }
 
   private async resolveProfitStreakMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
@@ -547,7 +573,7 @@ export class MarketResolver {
   }
 
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
@@ -570,7 +596,7 @@ export class MarketResolver {
   }
 
   private async resolveUsdGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
@@ -593,7 +619,7 @@ export class MarketResolver {
   }
 
   private async resolveWinRateFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
@@ -616,7 +642,7 @@ export class MarketResolver {
   }
 
   private async resolveWinLossRatioFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
@@ -639,7 +665,7 @@ export class MarketResolver {
   }
 
   private async resolveTopRankMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
     if (!kolData) {
@@ -659,7 +685,7 @@ export class MarketResolver {
   }
 
   private async resolveStreakContinuationMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
     if (!kolData) {
@@ -680,7 +706,7 @@ export class MarketResolver {
   }
 
   private async resolveRankImprovementMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
     if (!kolData) {
@@ -700,7 +726,7 @@ export class MarketResolver {
   }
 
   private async resolveSolGainThresholdMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
     if (!kolData || !kolData.solGain) {
@@ -720,7 +746,7 @@ export class MarketResolver {
   }
 
   private async resolveWinLossRatioMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await storage.getLatestScrapedKols(20);
+    const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
     
     if (!kolData || !kolData.winsLosses) {
