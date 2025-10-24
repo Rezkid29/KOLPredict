@@ -774,9 +774,9 @@ export class DbStorage implements IStorage {
         // For new positions, use actual cost per share
         const costPerShare = params.amount / sharesAmount;
         await tx.insert(positions).values({
-          userId,
-          marketId,
-          position,
+          userId: params.userId,
+          marketId: params.marketId,
+          position: params.position,
           shares: sharesAmount.toFixed(2),
           averagePrice: costPerShare.toFixed(4),
         });
