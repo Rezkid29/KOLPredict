@@ -71,7 +71,7 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
               <p className="text-sm text-muted-foreground">@{market.kol.handle}</p>
             </div>
           </div>
-          
+
           {market.isLive ? (
             <Badge variant="outline" className="gap-1.5 border-success text-success shrink-0">
               <span className="relative flex h-2 w-2">
@@ -150,7 +150,7 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
               <span className="font-medium">{parseFloat(market.kol.engagementRate).toFixed(1)}%</span>
             </div>
           </div>
-          
+
           {market.kol.trending && market.kol.trendingPercent && (
             <div className="flex items-center gap-1 text-success">
               <TrendingUp className="h-4 w-4" />
@@ -161,18 +161,29 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
 
         {/* Action buttons */}
         <div className="grid grid-cols-3 gap-2 pt-2">
-          <Button 
-            onClick={() => onBuy(market)}
-            className="bg-success hover:bg-success border-success-border font-semibold"
-            data-testid={`button-buy-${market.id}`}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBuy(market);
+            }}
+            className="flex-1 font-semibold"
+            disabled={market.resolved === true}
+            data-testid="button-buy-yes"
           >
             Buy
           </Button>
-          <Button 
-            onClick={() => onSell(market)}
+          <Button
             variant="destructive"
-            className="font-semibold"
-            data-testid={`button-sell-${market.id}`}
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSell(market);
+            }}
+            className="flex-1 font-semibold"
+            disabled={market.resolved === true}
+            data-testid="button-sell"
           >
             Sell
           </Button>

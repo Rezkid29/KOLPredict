@@ -115,8 +115,9 @@ export default function Home() {
     const matchesCategory = selectedCategories.length === 0 || 
       (market.marketCategory && selectedCategories.includes(market.marketCategory));
     
-    // Only show live, unresolved markets
-    const isActive = market.isLive && !market.resolved;
+    // Only show live, unresolved markets - check both flags
+    // resolved can be true even if isLive is true (during settlement)
+    const isActive = market.isLive && market.resolved !== true;
     
     return matchesSearch && matchesCategory && isActive;
   });
