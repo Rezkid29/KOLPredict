@@ -197,94 +197,158 @@ export class KOLScraperV2 {
         timeout: 30000
       });
 
-      // Wait for page content to load - use more generic selector
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for page content to load - increased wait time for dynamic content
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Scroll to trigger any lazy loading
+      await profilePage.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       const detailedData = await profilePage.evaluate((pageMode) => {
-        let pnl1d = null;
-        let pnl7d = null;
-        let pnl30d = null;
-        let totalTrades = null;
-        let winRatePercent = null;
-        let holdings = [];
-        let tradeHistory = [];
+        let pnl1d: string | null = null;
+        let pnl7d: string | null = null;
+        let pnl30d: string | null = null;
+        let totalTrades: string | null = null;
+        let winRatePercent: string | null = null;
+        let holdings: Array<{tokenName: string; tokenSymbol: string; valueUsd: string | null; amount: string | null}> = [];
+        let tradeHistory: Array<{type: 'buy' | 'sell'; tokenName: string; amount: string | null; valueUsd: string | null; timestamp: string | null}> = [];
 
         try {
           const url = window.location.href;
           const allText = document.body.innerText;
           const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
           
-          console.log('Extracted lines from profile page:', lines.slice(0, 50).join(' | '));
+          console.log('Extracted lines from profile page:', lines.slice(0, 100).join(' | '));
           
-          // Extract PnL from "Token PnL" header - multiple patterns
+          // Extract PnL - try multiple patterns and locations
+          // Look for "Token PnL" section or similar headers
+          const pnlSectionIndex = lines.findIndex(l => 
+            l.includes('Token PnL') || 
+            l.includes('PnL') || 
+            l.includes('Profit')
+          );
+          
           // Pattern 1: "0/4 +9.00 Sol ($0.0)"
-          const pnlPattern1 = /(\d+\/\d+)\s+([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
-          // Pattern 2: Just "+9.00 Sol ($0.0)" without the fraction
-          const pnlPattern2 = /([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
+          const pnlPattern1 = /(\d+\/\d+)\s+([+-]?[\d,]+\.?\d*)\s*Sol\s*\(\$([+-]?[\d,]+\.?\d*)\)/gi;
+          // Pattern 2: Just "+9.00 Sol ($0.0)" or "9.00 Sol ($0.0)"
+          const pnlPattern2 = /([+-]?[\d,]+\.?\d*)\s*Sol\s*\(\$([+-]?[\d,]+\.?\d*)\)/gi;
+          // Pattern 3: Look in nearby lines after PnL header
+          const pnlPattern3 = /([+-]?[\d,]+\.?\d*)\s*Sol/gi;
           
-          const pnlMatch = allText.match(pnlPattern1) || allText.match(pnlPattern2);
+          let pnlMatch = allText.match(pnlPattern1) || allText.match(pnlPattern2);
           
-          if (pnlMatch) {
-            let solAmount, usdAmount;
-            if (pnlMatch.length === 4) {
-              // Pattern 1 matched (with wins/losses)
-              solAmount = pnlMatch[2];
-              usdAmount = pnlMatch[3];
-            } else {
-              // Pattern 2 matched (without wins/losses)
-              solAmount = pnlMatch[1];
-              usdAmount = pnlMatch[2];
+          if (pnlMatch && pnlMatch.length > 0) {
+            // Use the first match
+            const match = pnlMatch[0];
+            const solMatch = match.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+            const usdMatch = match.match(/\$([+-]?[\d,]+\.?\d*)/i);
+            
+            if (solMatch && usdMatch) {
+              const pnlValue = `${solMatch[1]} Sol ($${usdMatch[1]})`;
+              
+              if (url.includes('timeframe=1')) {
+                pnl1d = pnlValue;
+              } else if (url.includes('timeframe=7')) {
+                pnl7d = pnlValue;
+              } else if (url.includes('timeframe=30')) {
+                pnl30d = pnlValue;
+              }
             }
-            
-            const pnlValue = `${solAmount} Sol (${usdAmount})`;
-            
-            if (url.includes('timeframe=1')) {
-              pnl1d = pnlValue;
-            } else if (url.includes('timeframe=7')) {
-              pnl7d = pnlValue;
-            } else if (url.includes('timeframe=30')) {
-              pnl30d = pnlValue;
+          }
+          
+          // Fallback: search near PnL section
+          if (!pnl1d && !pnl7d && !pnl30d && pnlSectionIndex >= 0) {
+            for (let i = pnlSectionIndex; i < Math.min(pnlSectionIndex + 10, lines.length); i++) {
+              const line = lines[i];
+              const solMatch = line.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+              if (solMatch) {
+                const pnlValue = solMatch[0];
+                if (url.includes('timeframe=1')) {
+                  pnl1d = pnlValue;
+                } else if (url.includes('timeframe=7')) {
+                  pnl7d = pnlValue;
+                } else if (url.includes('timeframe=30')) {
+                  pnl30d = pnlValue;
+                }
+                break;
+              }
             }
           }
           
           if (pageMode === 'full') {
-            // Extract stats from the Stats/Holdings section
+            // Strategy 1: Extract from structured lines
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i];
               const nextLine = lines[i + 1] || '';
+              const prevLine = i > 0 ? lines[i - 1] : '';
               
-              // Win Rate - look for percentage after "Win Rate"
-              if (line === 'Win Rate' || line.includes('Win Rate')) {
-                const percentMatch = nextLine.match(/([\d.]+)%/) || line.match(/([\d.]+)%/);
-                if (percentMatch) {
-                  winRatePercent = percentMatch[1];
+              // Win Rate - multiple detection strategies
+              if (!winRatePercent) {
+                if (line === 'Win Rate' || line.includes('Win Rate')) {
+                  const percentMatch = nextLine.match(/([\d.]+)%/) || line.match(/([\d.]+)%/);
+                  if (percentMatch) {
+                    winRatePercent = percentMatch[1];
+                  }
+                } else if (line.match(/([\d.]+)%/) && (prevLine.includes('Win') || prevLine.includes('Rate'))) {
+                  const percentMatch = line.match(/([\d.]+)%/);
+                  if (percentMatch) {
+                    winRatePercent = percentMatch[1];
+                  }
                 }
               }
               
-              // Total Trades - look for "Total Trades" label specifically
-              if (line === 'Total Trades' || line.includes('Total Trades')) {
-                const numMatch = nextLine.match(/([\d,]+)/);
-                if (numMatch) {
-                  totalTrades = numMatch[1].replace(/,/g, '');
-                }
-              }
-              
-              // Also check for "Volume" which might contain trade count
-              if ((line === 'Volume' || line.includes('Volume')) && !totalTrades) {
-                const numMatch = nextLine.match(/([\d,]+)/);
-                if (numMatch) {
-                  totalTrades = numMatch[1].replace(/,/g, '');
+              // Total Trades - multiple detection strategies
+              if (!totalTrades) {
+                if (line === 'Total Trades' || line.includes('Total Trades')) {
+                  const numMatch = nextLine.match(/([\d,]+)/) || line.match(/([\d,]+)/);
+                  if (numMatch) {
+                    totalTrades = numMatch[1].replace(/,/g, '');
+                  }
+                } else if (line === 'Volume' || line.includes('Volume')) {
+                  const numMatch = nextLine.match(/([\d,]+)/);
+                  if (numMatch) {
+                    totalTrades = numMatch[1].replace(/,/g, '');
+                  }
+                } else if (line.match(/^\d+$/) && (prevLine.includes('Trade') || prevLine.includes('Volume'))) {
+                  totalTrades = line.replace(/,/g, '');
                 }
               }
             }
             
-            // If still no totalTrades, try pattern matching in full text
+            // Strategy 2: Pattern matching in full text
+            if (!winRatePercent) {
+              const wrMatch = allText.match(/Win\s*Rate[:\s]*([\d.]+)%/i) || 
+                             allText.match(/Rate[:\s]*([\d.]+)%/i);
+              if (wrMatch) {
+                winRatePercent = wrMatch[1];
+              }
+            }
+            
             if (!totalTrades) {
-              const tradeMatch = allText.match(/Total Trades[:\s]+([\d,]+)/i);
+              const tradeMatch = allText.match(/Total\s*Trades[:\s]*([\d,]+)/i) || 
+                                allText.match(/Trades[:\s]*([\d,]+)/i) ||
+                                allText.match(/Volume[:\s]*([\d,]+)/i);
               if (tradeMatch) {
                 totalTrades = tradeMatch[1].replace(/,/g, '');
+              }
+            }
+            
+            // Strategy 3: Look for any large numbers that might be trades (fallback)
+            if (!totalTrades) {
+              const statsSection = lines.slice(0, 50); // Focus on top of page
+              for (const line of statsSection) {
+                const numMatch = line.match(/^([\d,]{3,})$/); // 3+ digits
+                if (numMatch) {
+                  const num = parseInt(numMatch[1].replace(/,/g, ''), 10);
+                  if (num > 10 && num < 10000) { // Reasonable trade count range
+                    totalTrades = numMatch[1].replace(/,/g, '');
+                    break;
+                  }
+                }
               }
             }
 
@@ -307,7 +371,16 @@ export class KOLScraperV2 {
             }
           }
           
-          console.log('Extracted data:', { pnl1d, pnl7d, pnl30d, totalTrades, winRatePercent, holdingsCount: holdings.length });
+          console.log('=== EXTRACTION RESULTS ===');
+          console.log('URL:', url);
+          console.log('Mode:', pageMode);
+          console.log('PnL 1D:', pnl1d);
+          console.log('PnL 7D:', pnl7d);
+          console.log('PnL 30D:', pnl30d);
+          console.log('Total Trades:', totalTrades);
+          console.log('Win Rate %:', winRatePercent);
+          console.log('Holdings Count:', holdings.length);
+          console.log('========================');
         } catch (e) {
           console.error('Error during profile scraping:', e);
         }
