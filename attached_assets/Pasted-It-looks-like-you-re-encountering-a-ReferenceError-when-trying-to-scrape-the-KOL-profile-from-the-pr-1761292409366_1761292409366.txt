@@ -1,0 +1,58 @@
+It looks like you're encountering a ReferenceError when trying to scrape the KOL profile from the provided URL (https://kolscan.io/account/CXnf4Tt7qFz3KZNwn3Yve5MKaRyxGoAy2eDX3QT8e99m?timeframe=1). The error message indicates that __name is not defined in the evaluate context.
+
+Potential Causes:
+Variable Scope: The variable __name may not be defined within your page evaluation context. This can happen if you're trying to access external variables or functions that haven't been defined in the page's scope.
+
+Page Structure Changes: The structure of the page may have changed, leading to the evaluation script trying to execute and evaluate code on elements that no longer exist or don't match the expected hierarchy.
+
+Solution:
+To troubleshoot and resolve this error, consider the following steps:
+
+Check Your Evaluations:
+
+Make sure you are not relying on variables like __name in the page evaluation context unless they are defined in the scope you're evaluating.
+Modify Profile Data Extraction:
+
+You might need to catch the error and adjust the scraping logic, or use more robust selectors to ensure you're fetching the correct data.
+Add Detailed Logging:
+
+Add more logging in the profile scraping method (scrapeKOLProfile) to diagnose where it's failing.
+Here's how you might adjust the scrapeKOLProfile method to enhance error handling and logging:
+
+async scrapeKOLProfile(profileUrl: string): Promise<KOLDetailedData> {
+  if (!this.browser) {
+    throw new Error('Browser not initialized');
+  }
+  let profilePage: Page | null = null;
+  const fullUrl = `https://kolscan.io${profileUrl}`;
+  console.log(`🔎 Navigating to profile page: ${fullUrl}`);
+  try {
+    profilePage = await this.browser.newPage();
+    await profilePage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    
+    await profilePage.goto(fullUrl, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    });
+    // Wait for a specific selector to ensure the page has loaded
+    await profilePage.waitForSelector('body', { timeout: 5000 });
+    console.log(`📄 Extracting detailed data from ${fullUrl}...`);
+    
+    const detailedData = await profilePage.evaluate((): KOLDetailedData => {
+      // Your logic to extract data remains here
+      return {}; // Adjust to return actual extracted data
+    });
+    return detailedData;
+  } catch (error) {
+    console.error(`❌ Failed to scrape profile ${fullUrl}:`, error);
+    throw error;
+  } finally {
+    if (profilePage) {
+      await profilePage.close();
+    }
+  }
+}
+Next Steps:
+Implement the changes above and run the scraper again to see if it resolves the issue.
+Further debug by inspecting the page to ensure the expected elements are present.
+Let me know if you need additional help!
