@@ -1,0 +1,42 @@
+📋 Complete File Inventory
+Market Creation (9 files)
+server/market-generator-service.ts - Main market creation logic
+server/kolscan-scraper-service.ts - Scrapes kolscan.io data
+server/scheduler.ts - Automated scheduling
+server/routes.ts - Admin API endpoints
+server/seed.ts - Database seeding
+server/metrics-updater.ts - Updates KOL metrics
+server/social-api-client.ts - Twitter API integration
+server/x-api-client.ts - X API follower counts
+server/db-storage.ts - Database operations
+Market Resolution (3 files)
+server/market-resolver.ts - PRIMARY (859 lines, 12+ resolution methods)
+server/db-storage.ts - Database queries
+shared/schema.ts - Database schemas
+🚨 Top 10 Critical Bottlenecks
+🔴 HIGH PRIORITY
+String-Based KOL Matching - Exact username matching fails with case/whitespace differences
+Stale Scraped Data - Markets resolve using outdated data (up to 24h old)
+Fragile String Parsing - 59 regex operations that break if format changes
+Questionable Market Logic - top_rank_maintain and rank_flippening show incorrect outcomes
+🟠 MEDIUM PRIORITY
+Database Type Coercion - Decimal fields require manual parseFloat() conversion (already fixed threshold bug)
+Missing Metadata Handling - Markets fail silently if metadata is missing
+External API Dependencies - Twitter API required for follower growth markets
+Puppeteer Scraping Reliability - Web scraping breaks when kolscan.io changes
+🟡 LOW PRIORITY
+Bet Settlement Race Conditions - No database transactions (partial settlements possible)
+Silent Error Handling - Errors logged but default to "no" outcome
+🎯 Root Cause of Your Current Issue
+Your scraped KOL data is not fully accurate right now because:
+
+Timing Gap: Scraper runs at 2 AM daily, but markets can resolve anytime (up to 22-hour stale data)
+Manual Test Data: You manually inserted test data which doesn't reflect real kolscan.io
+No Real-Time Validation: System doesn't verify data freshness before resolution
+Username Matching Issues: Even with correct data, case/whitespace mismatches cause failures
+Evidence:
+
+We manually inserted: 'Sheep', '1', '42/8'
+Real kolscan.io may have: 'sheep', '#1', '42 / 8'
+These won't match → Market resolves incorrectly
+The full detailed analysis is available in /tmp/market_system_analysis.md with code examples, recommendations, and the complete data flow diagram. Would you like me to implement any specific fixes for the identified bottlenecks?
