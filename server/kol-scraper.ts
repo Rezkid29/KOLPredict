@@ -76,13 +76,69 @@ export class KOLScraper {
       });
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      console.log('📄 Extracting page content...');
-      const bodyText: string = await this.page.evaluate((): string =>
-        document.body ? document.body.innerText : ''
-      );
-
-      console.log('🔍 Parsing leaderboard data...');
-      const kolData = this.parseLeaderboardData(bodyText);
+      console.log('📄 Extracting leaderboard data using DOM selectors...');
+      const kolData = await this.page.evaluate((): RawKOLData[] => {
+        const extractedData: RawKOLData[] = [];
+        
+        const rows = Array.from(document.querySelectorAll('tr, div[class*="row"], div[class*="item"], div[class*="entry"]'));
+        
+        let rank = 1;
+        for (const row of rows) {
+          try {
+            const text = row.textContent || '';
+            
+            const usernameEl = row.querySelector('[class*="name"], [class*="username"], [class*="kol"]');
+            const username = usernameEl?.textContent?.trim();
+            
+            if (!username || username.length < 2 || username.length > 50) continue;
+            if (username.includes('Leaderboard') || username.includes('Daily') || username.includes('Weekly')) continue;
+            
+            let xHandle: string | null = null;
+            const handleEl = row.querySelector('[class*="handle"], [class*="twitter"], [class*="x-"], a[href*="twitter"], a[href*="x.com"]');
+            if (handleEl) {
+              const handleText = (handleEl.textContent || handleEl.getAttribute('href') || '').trim().replace('@', '').replace('https://twitter.com/', '').replace('https://x.com/', '');
+              if (/^[A-Za-z0-9_]{3,15}$/.test(handleText)) {
+                xHandle = handleText;
+              }
+            }
+            
+            let winsLosses: string | null = null;
+            const statsText = text.match(/(\d+)\s*\/\s*(\d+)/);
+            if (statsText) {
+              winsLosses = `${statsText[1]}/${statsText[2]}`;
+            }
+            
+            let solGain: string | null = null;
+            const solMatch = text.match(/([+-]?[\d,.]+)\s*Sol/i);
+            if (solMatch) {
+              solGain = solMatch[1];
+            }
+            
+            let usdGain: string | null = null;
+            const usdMatch = text.match(/\$\s*([+-]?[\d,.]+)/);
+            if (usdMatch) {
+              usdGain = usdMatch[1];
+            }
+            
+            extractedData.push({
+              rank: rank.toString(),
+              username,
+              xHandle,
+              winsLosses,
+              solGain,
+              usdGain
+            });
+            
+            rank++;
+            
+            if (extractedData.length >= 20) break;
+          } catch (err) {
+            continue;
+          }
+        }
+        
+        return extractedData;
+      });
 
       console.log(`✅ Successfully extracted ${kolData.length} KOL entries`);
       return kolData;
@@ -93,115 +149,6 @@ export class KOLScraper {
     }
   }
 
-  private parseLeaderboardData(bodyText: string): KOLData[] {
-    const lines = bodyText.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-
-    console.log(`📊 Processing ${lines.length} lines of text...`);
-
-    const kolData: KOLData[] = [];
-    let i = 0;
-
-    const leaderboardStart = lines.findIndex(line => line.includes('KOL Leaderboard'));
-    i = Math.max(0, leaderboardStart + 1);
-
-    let rankCounter = 1;
-
-    while (i < lines.length - 6 && kolData.length < 20) {
-      while (i < lines.length && lines[i] && (
-        lines[i].includes('Daily') ||
-        lines[i].includes('Weekly') ||
-        lines[i].includes('Monthly') ||
-        lines[i].includes('Leaderboard') ||
-        lines[i].length < 2 ||
-        /^\d+$/.test(lines[i])
-      )) {
-        i++;
-      }
-
-      if (i >= lines.length - 6) break;
-
-      const potentialUsername = lines[i];
-      if (!potentialUsername) {
-        i++;
-        continue;
-      }
-      if (this.isValidUsername(potentialUsername)) {
-        const entry: KOLData = {
-          rank: rankCounter === 1 ? '🏆 1' : rankCounter.toString(),
-          username: potentialUsername,
-          xHandle: '',
-          winsLosses: '',
-          solGain: '',
-          usdGain: ''
-        };
-
-        console.log(`👤 Found KOL: ${potentialUsername} (Rank ${entry.rank})`);
-
-        i++;
-        if (i < lines.length && lines[i] && this.isValidXHandle(lines[i])) {
-          entry.xHandle = lines[i];
-          console.log(`  🐦 X Handle: @${lines[i]}`);
-          i++;
-        }
-
-        if (i < lines.length - 2 &&
-            lines[i] && /^\d+$/.test(lines[i]) &&
-            lines[i + 1] === '/' &&
-            lines[i + 2] && /^\d+$/.test(lines[i + 2])) {
-          const wins = lines[i]!;
-          const losses = lines[i + 2]!;
-          entry.winsLosses = `${wins}/${losses}`;
-          console.log(`  ⚔️ Wins/Losses: ${wins}/${losses}`);
-          i += 3;
-        } else {
-          while (i < lines.length && lines[i] && (/^\d+$/.test(lines[i]) || lines[i] === '/')) {
-            i++;
-          }
-        }
-
-        if (i < lines.length && lines[i] && lines[i].includes('+') && lines[i].includes('Sol')) {
-          entry.solGain = lines[i];
-          console.log(`  💰 SOL Gain: ${lines[i]}`);
-          i++;
-        }
-
-        if (i < lines.length && lines[i] && lines[i].includes('$') && lines[i].includes('(') && lines[i].includes(')')) {
-          entry.usdGain = lines[i];
-          console.log(`  💵 USD Gain: ${lines[i]}`);
-          i++;
-        }
-
-        kolData.push(entry);
-        rankCounter++;
-
-        console.log(`✅ Entry complete: ${potentialUsername}`);
-
-      } else {
-        i++;
-      }
-    }
-
-    return kolData;
-  }
-
-  private isValidUsername(text: string | undefined): boolean {
-    return text ? (
-      text.length > 1 &&
-      text.length < 50 &&
-      !text.includes('+') &&
-      !text.includes('$') &&
-      !text.includes('/') &&
-      !/^\d+$/.test(text) &&
-      !text.includes('Sol') &&
-      !text.includes('Leaderboard')
-    ) : false;
-  }
-
-  private isValidXHandle(text: string): boolean {
-    return /^[A-Za-z0-9_]{3,15}$/.test(text);
-  }
 
   async saveToDatabase(data: KOLData[]): Promise<number> {
     console.log(`💾 Saving ${data.length} KOL entries to database...`);
