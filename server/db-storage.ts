@@ -188,7 +188,15 @@ export class DbStorage implements IStorage {
   }
 
   async updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void> {
-    await db.update(markets).set({ yesPool, noPool, yesPrice, noPrice }).where(eq(markets.id, id));
+    // This method is deprecated - pools are now updated via placeBetWithLocking
+    // Keep for backwards compatibility but don't use it
+    console.warn('updateMarketPools is deprecated - use placeBetWithLocking instead');
+    await db.update(markets).set({ 
+      yesSharePool: yesPool, 
+      noSharePool: noPool, 
+      currentYesPrice: yesPrice, 
+      currentNoPrice: noPrice 
+    }).where(eq(markets.id, id));
   }
 
   async updateMarketVolume(id: string, volume: string): Promise<void> {
@@ -449,11 +457,12 @@ export class DbStorage implements IStorage {
   }> {
     return await db.transaction(async (tx) => {
       // STEP 1: Lock and read market data (prevents concurrent modifications)
-      const market = await tx.query.markets.findFirst({
-        where: eq(markets.id, params.marketId),
-        // Lock the row for update
-        lock: sql`FOR UPDATE`,
-      });
+      const [market] = await tx
+        .select()
+        .from(markets)
+        .where(eq(markets.id, params.marketId))
+        .for('update')
+        .limit(1);
 
       if (!market) {
         throw new NotFoundError("Market not found");

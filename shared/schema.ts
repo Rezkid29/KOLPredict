@@ -45,10 +45,18 @@ export const markets = pgTable("markets", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   outcome: text("outcome").notNull(),
+  // Legacy pool fields (deprecated but kept for backwards compatibility)
   yesPool: decimal("yes_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
   noPool: decimal("no_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
   yesPrice: decimal("yes_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
   noPrice: decimal("no_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
+  // New CPMM pool fields (share pool and collateral pool)
+  yesSharePool: decimal("yes_share_pool", { precision: 10, scale: 2 }).notNull().default("20000.00"),
+  yesCollateralPool: decimal("yes_collateral_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
+  noSharePool: decimal("no_share_pool", { precision: 10, scale: 2 }).notNull().default("20000.00"),
+  noCollateralPool: decimal("no_collateral_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
+  currentYesPrice: decimal("current_yes_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
+  currentNoPrice: decimal("current_no_price", { precision: 5, scale: 4 }).notNull().default("0.5000"),
   totalVolume: decimal("total_volume", { precision: 10, scale: 2 }).notNull().default("0.00"),
   isLive: boolean("is_live").notNull().default(true),
   resolved: boolean("resolved").notNull().default(false),
