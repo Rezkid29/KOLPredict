@@ -188,13 +188,9 @@ export class KOLScraperV2 {
         timeout: 30000
       });
 
-      // Wait for stats to appear
-      try {
-        await profilePage.waitForSelector('div[class*="border-b"] > div[class*="grid"]', { timeout: 7000 });
-      } catch (e) {
-        console.log('⚠️ Profile page stats container not found. Content may be limited.');
-      }
-
+      // Wait for page content to load - use more generic selector
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       const detailedData = await profilePage.evaluate((pageMode) => {
@@ -210,11 +206,15 @@ export class KOLScraperV2 {
           const url = window.location.href;
           const allText = document.body.innerText;
           
-          // Extract PnL based on current timeframe
-          // Look for patterns like "+123.45 Sol ($12,345.67)" or "-123.45 Sol ($12,345.67)"
-          const pnlMatch = allText.match(/([+-]?[\d,]+\.?\d*)\s*Sol\s*\(\$[\d,]+\.?\d*\)/i);
+          // Extract PnL from the "Token PnL" section
+          // Pattern: "0/# +X.XX Sol ($X.XX)" at the top right of Token PnL header
+          const pnlPattern = /(\d+\/\d+)\s+([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
+          const pnlMatch = allText.match(pnlPattern);
+          
           if (pnlMatch) {
-            const pnlValue = pnlMatch[0]; // Full match with Sol and USD
+            const solAmount = pnlMatch[2]; // e.g., "+9.00"
+            const usdAmount = pnlMatch[3]; // e.g., "$0.0"
+            const pnlValue = `${solAmount} Sol (${usdAmount})`;
             
             if (url.includes('timeframe=1')) {
               pnl1d = pnlValue;
@@ -226,58 +226,58 @@ export class KOLScraperV2 {
           }
           
           if (pageMode === 'full') {
-            // Extract Win Rate - look for percentage pattern
-            const winRateMatch = allText.match(/Win\s*Rate[:\s]*([\d.]+%)/i);
-            if (winRateMatch) {
-              winRatePercent = winRateMatch[1];
-            }
+            // Extract stats from the Stats section (visible in screenshot)
+            // Look for specific stat labels and their values
+            const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
             
-            // Extract Total Trades/Volume - look for number patterns near "Volume" or "Trades"
-            const volumeMatch = allText.match(/(?:Volume|Total\s*Trades)[:\s]*([\d,]+)/i);
-            if (volumeMatch) {
-              totalTrades = volumeMatch[1];
-            }
-            
-            // Alternative: look for "Realized Profits"
-            if (!totalTrades) {
-              const profitsMatch = allText.match(/Realized\s*Profits[:\s]*([\d,]+\.?\d*\s*Sol)/i);
-              if (profitsMatch) {
-                totalTrades = profitsMatch[1];
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              
+              // Win Rate (appears as "Win Rate" followed by percentage on next line or same line)
+              if (line.includes('Win Rate')) {
+                const nextLine = lines[i + 1];
+                const winMatch = nextLine?.match(/([\d.]+%)/);
+                if (winMatch) {
+                  winRatePercent = winMatch[1];
+                }
+              }
+              
+              // Volume (appears as "Volume" followed by "$X" value)
+              if (line.includes('Volume')) {
+                const nextLine = lines[i + 1];
+                const volMatch = nextLine?.match(/\$([\d,]+)/);
+                if (volMatch) {
+                  totalTrades = volMatch[1];
+                }
+              }
+              
+              // Realized Profits (alternative to Volume)
+              if (line.includes('Realized Profits') && !totalTrades) {
+                const nextLine = lines[i + 1];
+                const profitMatch = nextLine?.match(/\$([\d,]+\.?\d*)/);
+                if (profitMatch) {
+                  totalTrades = profitMatch[1];
+                }
               }
             }
 
-            // Try to extract holdings from any table-like structure
-            const rows = Array.from(document.querySelectorAll('tr, div[role="row"]'));
-            for (const row of rows) {
-              const text = row.textContent || '';
-              // Look for token names followed by values
-              const tokenMatch = text.match(/([A-Z]{3,10})\s+.*?\$?([\d,]+\.?\d*)/);
-              if (tokenMatch && holdings.length < 10) {
+            // Extract holdings from table structure
+            // The page shows holdings with token names and values
+            const holdingElements = document.querySelectorAll('a[href*="/token/"]');
+            for (const elem of Array.from(holdingElements).slice(0, 10)) {
+              const tokenName = elem.textContent?.trim();
+              if (tokenName && tokenName.length > 0) {
+                // Try to find associated value in parent or sibling elements
+                const parent = elem.closest('tr, div[class*="flex"], div[class*="grid"]');
+                const parentText = parent?.textContent || '';
+                const valueMatch = parentText.match(/\$([\d,]+\.?\d*)/);
+                
                 holdings.push({
-                  tokenName: tokenMatch[1],
-                  tokenSymbol: tokenMatch[1],
-                  valueUsd: tokenMatch[2],
+                  tokenName: tokenName,
+                  tokenSymbol: tokenName,
+                  valueUsd: valueMatch ? valueMatch[1] : null,
                   amount: null
                 });
-              }
-            }
-
-            // Try to extract trade history
-            const tradeSections = Array.from(document.querySelectorAll('div, section'));
-            for (const section of tradeSections) {
-              const text = (section.textContent || '').toLowerCase();
-              if (text.includes('buy') || text.includes('sell')) {
-                const isBuy = text.includes('buy');
-                const tradeMatch = text.match(/([A-Z]{3,10}).*?([\d,]+\.?\d*)/);
-                if (tradeMatch && tradeHistory.length < 20) {
-                  tradeHistory.push({
-                    type: isBuy ? 'buy' : 'sell',
-                    tokenName: tradeMatch[1],
-                    amount: tradeMatch[2],
-                    valueUsd: null,
-                    timestamp: null
-                  });
-                }
               }
             }
           }
