@@ -29,7 +29,13 @@ export class MarketResolver {
         const parsed = KOLDataParser.parseRawKOLData(kol);
         return {
           id: '',
-          ...parsed,
+          rank: parsed.rank,
+          username: parsed.username,
+          xHandle: parsed.xHandle ?? null,
+          wins: parsed.wins ?? null,
+          losses: parsed.losses ?? null,
+          solGain: parsed.solGain ?? null,
+          usdGain: parsed.usdGain ?? null,
           scrapedAt: new Date(),
         };
       });
@@ -139,7 +145,9 @@ export class MarketResolver {
       }
 
       if (!market.title) {
-        console.error(`Market ${market.id} has no title - cannot determine outcome`);
+        console.error(`Market ${market.id} has no title - cancelling market`);
+        await storage.cancelMarket(market.id, "Missing market title");
+        await storage.refundMarket(market.id);
         return null;
       }
 
@@ -155,7 +163,9 @@ export class MarketResolver {
           marketType === 'sol_gain_threshold' || marketType === 'winloss_ratio_maintain' || marketType === 'winloss_ratio_flippening') {
         const metadata = await storage.getMarketMetadata(market.id);
         if (!metadata) {
-          console.error(`Market ${market.id} metadata not found for special market type`);
+          console.error(`Market ${market.id} metadata not found - cancelling market`);
+          await storage.cancelMarket(market.id, "Missing market metadata");
+          await storage.refundMarket(market.id);
           return null;
         }
 
@@ -275,11 +285,18 @@ export class MarketResolver {
 
       let settledBets = 0;
       try {
-        settledBets = await this.settleBets(market.id, outcome);
+        settledBets = await storage.settleBetsTransactional(market.id, outcome);
       } catch (error) {
         console.error(`Failed to settle bets for market ${market.id}:`, error);
         // Market is marked as resolved but bets failed to settle
-        // Log the error but still return the resolution
+        // Cancel the market and refund all bets to be safe
+        try {
+          await storage.cancelMarket(market.id, "Bet settlement failed");
+          await storage.refundMarket(market.id);
+        } catch (refundError) {
+          console.error(`CRITICAL: Failed to refund market ${market.id} after settlement failure:`, refundError);
+        }
+        return null;
       }
 
       return {
@@ -290,6 +307,13 @@ export class MarketResolver {
       };
     } catch (error) {
       console.error(`Unexpected error resolving market ${market.id}:`, error);
+      // Cancel market and refund on any unexpected error
+      try {
+        await storage.cancelMarket(market.id, `Unexpected error during resolution: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        await storage.refundMarket(market.id);
+      } catch (cancelError) {
+        console.error(`CRITICAL: Failed to cancel/refund market ${market.id} after error:`, cancelError);
+      }
       return null;
     }
   }
@@ -566,6 +590,16 @@ export class MarketResolver {
     const w = wins || 0;
     const l = losses || 0;
     return l > 0 ? w / l : 0;
+  }
+
+  private parseWinsLosses(winsLossesStr: string | null | undefined): { wins: number; losses: number } {
+    if (!winsLossesStr) return { wins: 0, losses: 0 };
+    const match = winsLossesStr.match(/^(\d+)\/(\d+)$/);
+    if (!match) return { wins: 0, losses: 0 };
+    return {
+      wins: parseInt(match[1], 10),
+      losses: parseInt(match[2], 10),
+    };
   }
 
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {

@@ -199,6 +199,148 @@ export class DbStorage implements IStorage {
     await db.update(markets).set({ resolved: true, resolvedValue, isLive: false }).where(eq(markets.id, id));
   }
 
+  async cancelMarket(id: string, reason: string): Promise<void> {
+    await db.update(markets).set({ resolved: true, outcome: 'cancelled', resolvedValue: 'cancelled', isLive: false }).where(eq(markets.id, id));
+    console.log(`❌ Market ${id} cancelled: ${reason}`);
+  }
+
+  async refundMarket(marketId: string): Promise<number> {
+    return await db.transaction(async (tx) => {
+      const allBets = await tx
+        .select()
+        .from(bets)
+        .where(eq(bets.marketId, marketId));
+      
+      const pendingBets = allBets.filter(bet => bet.status === "pending" || bet.status === "open");
+      
+      if (pendingBets.length === 0) {
+        return 0;
+      }
+
+      for (const bet of pendingBets) {
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, bet.userId))
+          .for('update')
+          .limit(1);
+        
+        if (!user) {
+          console.error(`User ${bet.userId} not found for refund`);
+          continue;
+        }
+
+        const betAmount = parseFloat(bet.amount);
+        const currentBalance = parseFloat(user.balance);
+        const newBalance = (currentBalance + betAmount).toFixed(2);
+        
+        await tx
+          .update(users)
+          .set({ balance: newBalance })
+          .where(eq(users.id, bet.userId));
+        
+        await tx
+          .update(bets)
+          .set({ status: "refunded", profit: "0.00" })
+          .where(eq(bets.id, bet.id));
+
+        await tx.insert(transactions).values({
+          userId: bet.userId,
+          type: "refund",
+          amount: bet.amount,
+          balanceAfter: newBalance,
+          description: `Refund for cancelled market`
+        });
+      }
+
+      console.log(`✅ Refunded ${pendingBets.length} bets for market ${marketId}`);
+      return pendingBets.length;
+    });
+  }
+
+  async settleBetsTransactional(marketId: string, outcome: "yes" | "no"): Promise<number> {
+    return await db.transaction(async (tx) => {
+      const allBets = await tx
+        .select()
+        .from(bets)
+        .where(eq(bets.marketId, marketId))
+        .for('update');
+      
+      const pendingBets = allBets.filter(bet => bet.status === "pending" || bet.status === "open");
+      
+      if (pendingBets.length === 0) {
+        return 0;
+      }
+
+      for (const bet of pendingBets) {
+        const shares = parseFloat(bet.shares);
+        const won = shares > 0 && bet.position.toLowerCase() === outcome;
+        const betAmount = parseFloat(bet.amount);
+        
+        let profit: number;
+        let payout: number;
+        let newStatus: string;
+        
+        if (won) {
+          // Payout is the value of the shares (shares * $1 per share in winning pool)
+          payout = shares;
+          // Profit is payout minus original investment
+          profit = payout - betAmount;
+          newStatus = "won";
+        } else {
+          // Loss: no payout, profit is negative bet amount
+          payout = 0;
+          profit = -betAmount;
+          newStatus = "lost";
+        }
+
+        await tx
+          .update(bets)
+          .set({ status: newStatus, profit: profit.toFixed(2) })
+          .where(eq(bets.id, bet.id));
+
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, bet.userId))
+          .for('update')
+          .limit(1);
+        
+        if (!user) {
+          console.error(`User ${bet.userId} not found during settlement`);
+          continue;
+        }
+
+        const currentBalance = parseFloat(user.balance);
+        const newBalance = (currentBalance + payout).toFixed(2);
+        const newTotalProfit = (parseFloat(user.totalProfit) + profit).toFixed(2);
+        const newTotalWins = won ? user.totalWins + 1 : user.totalWins;
+
+        await tx
+          .update(users)
+          .set({ 
+            balance: newBalance,
+            totalProfit: newTotalProfit,
+            totalWins: newTotalWins
+          })
+          .where(eq(users.id, bet.userId));
+
+        if (payout > 0) {
+          await tx.insert(transactions).values({
+            userId: bet.userId,
+            type: "payout",
+            amount: payout.toFixed(2),
+            balanceAfter: newBalance,
+            description: `Payout for winning bet on market`
+          });
+        }
+      }
+
+      console.log(`✅ Settled ${pendingBets.length} bets for market ${marketId} with outcome: ${outcome}`);
+      return pendingBets.length;
+    });
+  }
+
   // Bet methods
   async getBet(id: string): Promise<Bet | undefined> {
     const result = await db.select().from(bets).where(eq(bets.id, id)).limit(1);
