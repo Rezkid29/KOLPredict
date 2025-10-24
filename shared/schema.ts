@@ -55,8 +55,8 @@ export const markets = pgTable("markets", {
   yesCollateralPool: decimal("yes_collateral_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
   noSharePool: decimal("no_share_pool", { precision: 10, scale: 2 }).notNull().default("20000.00"),
   noCollateralPool: decimal("no_collateral_pool", { precision: 10, scale: 2 }).notNull().default("10000.00"),
-  currentYesPrice: decimal("current_yes_price", { precision: 6, scale: 4 }).notNull().default("0.5000"),
-  currentNoPrice: decimal("current_no_price", { precision: 6, scale: 4 }).notNull().default("0.5000"),
+  currentYesPrice: decimal("current_yes_price", { precision: 10, scale: 4 }).notNull().default("0.5000"),
+  currentNoPrice: decimal("current_no_price", { precision: 10, scale: 4 }).notNull().default("0.5000"),
   totalVolume: decimal("total_volume", { precision: 10, scale: 2 }).notNull().default("0.00"),
   isLive: boolean("is_live").notNull().default(true),
   resolved: boolean("resolved").notNull().default(false),
@@ -75,11 +75,11 @@ export const bets = pgTable("bets", {
   marketId: varchar("market_id").notNull().references(() => markets.id),
   position: text("position").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  price: decimal("price", { precision: 10, scale: 4 }).notNull(),
-  shares: decimal("shares", { precision: 10, scale: 2 }).notNull(),
+  price: decimal("price", { precision: 18, scale: 9 }).notNull(),
+  shares: decimal("shares", { precision: 18, scale: 9 }).notNull(),
   status: text("status").notNull().default("open"), // open, settled, won, lost, refunded
-  profit: decimal("profit", { precision: 10, scale: 2 }),
-  averageCost: decimal("average_cost", { precision: 10, scale: 4 }),
+  profit: decimal("profit", { precision: 18, scale: 9 }),
+  averageCost: decimal("average_cost", { precision: 18, scale: 9 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -88,8 +88,8 @@ export const positions = pgTable("positions", {
   userId: varchar("user_id").notNull().references(() => users.id),
   marketId: varchar("market_id").notNull().references(() => markets.id),
   position: text("position").notNull(),
-  shares: decimal("shares", { precision: 10, scale: 2 }).notNull().default("0.00"),
-  averagePrice: decimal("average_price", { precision: 5, scale: 4 }).notNull(),
+  shares: decimal("shares", { precision: 18, scale: 9 }).notNull().default("0.000000000"),
+  averagePrice: decimal("average_price", { precision: 18, scale: 9 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
