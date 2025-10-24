@@ -751,7 +751,7 @@ export class DbStorage implements IStorage {
           const newShares = currentShares + sharesAmount;
           // Use actual cost per share (total paid / shares received)
           const costPerShare = params.amount / sharesAmount;
-          newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * costPerShare)) / newShares;
+          const newAvgPrice = ((currentShares * currentAvgPrice) + (sharesAmount * costPerShare)) / newShares;
 
           await tx
             .update(positions)
