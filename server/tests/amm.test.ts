@@ -204,7 +204,10 @@ describe("AMM (Automated Market Maker) Boundary Tests", () => {
   });
 
   describe("AMM-008: Price Impact Cap Enforcement", () => {
-    it("should reject trades that exceed 25% price impact", async () => {
+    it.skip("TEMPORARILY DISABLED - should reject trades that exceed 25% price impact", async () => {
+      // ⚠️ DISABLED FOR POINTS-ONLY MODE (small $200 pools)
+      // TO BE RE-ENABLED when real Solana trading is implemented with larger pools
+      // See PRICE_IMPACT_BACKUP.md for restoration instructions
       const loginRes = await fetch(`${API_BASE}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -337,7 +340,7 @@ describe("AMM (Automated Market Maker) Boundary Tests", () => {
 
       // Preview a large trade that would exceed limits
       const totalPool = market.yesPool + market.noPool;
-      const largeTradeAmount = totalPool * 0.35;
+      const largeTradeAmount = totalPool * 0.45; // Exceed 40% trade size limit
 
       const previewRes = await fetch(`${API_BASE}/api/bets/preview`, {
         method: "POST",
@@ -353,7 +356,7 @@ describe("AMM (Automated Market Maker) Boundary Tests", () => {
       expect(previewRes.ok).toBe(true);
       const preview = await previewRes.json();
 
-      // Should have error warnings
+      // Should have error warnings for trade size (not price impact in points mode)
       expect(preview.warnings.length).toBeGreaterThan(0);
       const errorWarnings = preview.warnings.filter((w: any) => w.severity === "error");
       expect(errorWarnings.length).toBeGreaterThan(0);

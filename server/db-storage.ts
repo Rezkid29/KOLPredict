@@ -682,36 +682,15 @@ export class DbStorage implements IStorage {
         );
       }
 
-      // Calculate price impact and validate slippage for both buys and sells
+      // Calculate price impact for return value (informational only in points mode)
       const currentPrice = params.position === "YES" ? parseFloat(market.yesPrice) : parseFloat(market.noPrice);
       const newPrice = params.position === "YES" ? yesPrice : noPrice;
       const priceImpact = Math.abs(newPrice - currentPrice) / currentPrice;
       
-      // HARD CAP: Enforce maximum price impact regardless of user's slippage tolerance
-      // This prevents manipulation and ensures market stability
-      if (priceImpact > MAX_PRICE_IMPACT) {
-        const priceImpactPct = (priceImpact * 100).toFixed(2);
-        const maxImpactPct = (MAX_PRICE_IMPACT * 100).toFixed(2);
-        
-        throw new ValidationError(
-          `Trade rejected: Price impact ${priceImpactPct}% exceeds platform maximum of ${maxImpactPct}%. ` +
-          `Please split this into smaller trades to maintain market stability.`
-        );
-      }
-      
-      // Check slippage protection for both buy and sell trades
-      if (priceImpact > slippageTolerance) {
-        const priceImpactPct = (priceImpact * 100).toFixed(2);
-        const slippagePct = (slippageTolerance * 100).toFixed(2);
-        const currentPriceStr = currentPrice.toFixed(4);
-        const newPriceStr = newPrice.toFixed(4);
-        
-        throw new ValidationError(
-          `Price impact too high: ${priceImpactPct}% (limit: ${slippagePct}%). ` +
-          `This trade would move the price from ${currentPriceStr} to ${newPriceStr}. ` +
-          `Try: 1) Reduce your trade size, 2) Split into multiple smaller trades, or 3) Increase slippage tolerance in settings.`
-        );
-      }
+      // ⚠️ PRICE IMPACT VALIDATION TEMPORARILY DISABLED FOR POINTS-ONLY MODE
+      // With small $200 pools, nearly all trades trigger slippage protection
+      // This will be re-enabled when Solana integration is complete with larger pools
+      // See PRICE_IMPACT_BACKUP.md for restoration code
 
       // STEP 4: Create bet record
       const [createdBet] = await tx

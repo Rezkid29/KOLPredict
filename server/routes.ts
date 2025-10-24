@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   wss.on('connection', (ws) => {
     console.log('WebSocket client connected');
-    
+
     ws.on('close', () => {
       console.log('WebSocket client disconnected');
     });
@@ -68,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // In this system: yesPrice + noPrice = 1.00
   // When traders buy YES, yesPool increases, making YES price go up
   // When traders buy NO, noPool increases, making NO price go up
-  
+
   const calculateAMMPrices = (yesPool: number, noPool: number) => {
     const totalPool = yesPool + noPool;
     return {
@@ -85,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ): number => {
     // Constant product formula: k = yesPool * noPool
     const k = yesPool * noPool;
-    
+
     if (position === "YES") {
       // Adding to YES pool, removing from NO pool
       // newNoPool = k / (yesPool + amount)
@@ -107,7 +107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ): number => {
     // Constant product formula: k = yesPool * noPool
     const k = yesPool * noPool;
-    
+
     if (position === "YES") {
       // Removing from YES pool, adding to NO pool
       // newNoPool = k / (yesPool - shares)
@@ -126,25 +126,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (value === undefined || value === null) {
       return { valid: false, error: `${fieldName} is required` };
     }
-    
+
     const num = typeof value === 'number' ? value : parseFloat(value);
-    
+
     if (isNaN(num)) {
       return { valid: false, error: `${fieldName} must be a valid number` };
     }
-    
+
     if (!isFinite(num)) {
       return { valid: false, error: `${fieldName} must be a finite number` };
     }
-    
+
     if (num < min) {
       return { valid: false, error: `${fieldName} must be at least ${min}` };
     }
-    
+
     if (num > max) {
       return { valid: false, error: `${fieldName} must not exceed ${max}` };
     }
-    
+
     return { valid: true };
   };
 
@@ -152,11 +152,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (isNaN(value) || !isFinite(value)) {
       return { valid: false, error: `Invalid AMM calculation result for ${operation}` };
     }
-    
+
     if (value < 0) {
       return { valid: false, error: `${operation} resulted in negative value - trade too large for pool liquidity` };
     }
-    
+
     return { valid: true };
   };
 
@@ -164,7 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", async (req, res) => {
     try {
       const { username } = req.body;
-      
+
       if (!username || username.length < 3) {
         return res.status(400).json({ message: "Username must be at least 3 characters" });
       }
@@ -186,7 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username } = req.body;
-      
+
       if (!username) {
         return res.status(400).json({ message: "Username is required" });
       }
@@ -211,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authProvider: "guest",
         isGuest: true,
       });
-      
+
       res.json({ 
         userId: user.id, 
         username: user.username,
@@ -281,7 +281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/solana/verify", authRateLimiter, async (req, res) => {
     try {
       const { publicKey, signature, message, nonce } = req.body;
-      
+
       if (!publicKey || !signature || !message || !nonce) {
         console.warn("Solana auth attempt with missing fields");
         return res.status(400).json({ 
@@ -327,7 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify Solana signature with comprehensive validation
       const verificationResult = verifySolanaSignature(publicKey, signature, message);
-      
+
       if (!verificationResult.valid) {
         console.warn(`Signature verification failed: ${verificationResult.error}, code: ${verificationResult.errorCode}`);
         return res.status(401).json({ 
@@ -338,7 +338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get or create user
       let user = await storage.getUserByWalletAddress(publicKey);
-      
+
       if (!user) {
         console.log(`Creating new user for wallet: ${publicKey.substring(0, 8)}...`);
         user = await storage.createUser({
@@ -351,7 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         console.log(`Existing user authenticated: ${user.id}, username: ${user.username}`);
       }
-      
+
       res.json({ 
         userId: user.id, 
         username: user.username,
@@ -375,7 +375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/twitter/oauth-url", async (req, res) => {
     try {
       const { callbackUrl } = req.body;
-      
+
       const twitterClientId = process.env.TWITTER_CLIENT_ID;
       if (!twitterClientId) {
         return res.status(503).json({ 
@@ -386,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const state = Buffer.from(JSON.stringify({ timestamp: Date.now() })).toString('base64');
       const codeChallenge = Buffer.from(Math.random().toString()).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-      
+
       const authUrl = new URL('https://twitter.com/i/oauth2/authorize');
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('client_id', twitterClientId);
@@ -395,7 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       authUrl.searchParams.append('state', state);
       authUrl.searchParams.append('code_challenge', codeChallenge);
       authUrl.searchParams.append('code_challenge_method', 'plain');
-      
+
       res.json({ 
         authUrl: authUrl.toString(),
         state,
@@ -411,14 +411,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/twitter/callback", async (req, res) => {
     try {
       const { code, state } = req.body;
-      
+
       if (!code) {
         return res.status(400).json({ message: "Authorization code is required" });
       }
 
       const twitterClientId = process.env.TWITTER_CLIENT_ID;
       const twitterClientSecret = process.env.TWITTER_CLIENT_SECRET;
-      
+
       if (!twitterClientId || !twitterClientSecret) {
         return res.status(503).json({ 
           message: "X (Twitter) authentication is not fully configured. Please add TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET to environment variables."
@@ -439,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/user", async (req, res) => {
     try {
       const userId = req.query.userId as string;
-      
+
       if (!userId) {
         // Return default user as fallback for compatibility
         const user = await storage.getUserByUsername("trader1");
@@ -497,12 +497,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const kolId = req.params.id;
       const days = req.query.days ? parseInt(req.query.days as string) : 30;
-      
+
       // Validate days parameter
       if (Number.isNaN(days)) {
         return res.status(400).json({ message: "Invalid days parameter - must be a number" });
       }
-      
+
       if (days < 1 || days > 365) {
         return res.status(400).json({ message: "Days must be between 1 and 365" });
       }
@@ -513,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const history = await storage.getKolMetricsHistory(kolId, days);
-      
+
       res.json({
         kol: {
           id: kol.id,
@@ -545,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/bets/user", async (req, res) => {
     try {
       const userId = req.query.userId as string;
-      
+
       if (!userId) {
         // Fallback to default user for compatibility
         const user = await storage.getUserByUsername("trader1");
@@ -691,21 +691,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // HARD CAP: Enforce maximum price impact (can't be bypassed by slippage tolerance)
-      if (priceImpact > MAX_PRICE_IMPACT) {
-        warnings.push({
-          severity: "error",
-          message: `Price impact ${(priceImpact * 100).toFixed(2)}% exceeds platform maximum of ${(MAX_PRICE_IMPACT * 100).toFixed(2)}%. Trade will be rejected.`
-        });
-      }
+      // ⚠️ PRICE IMPACT VALIDATION TEMPORARILY DISABLED FOR POINTS-ONLY MODE
+      // See PRICE_IMPACT_BACKUP.md for restoration code
 
-      // Slippage tolerance check (using user-provided or default 10%)
-      if (priceImpact > effectiveSlippageTolerance) {
-        warnings.push({
-          severity: "warning",
-          message: `Price impact ${(priceImpact * 100).toFixed(2)}% exceeds slippage tolerance of ${(effectiveSlippageTolerance * 100).toFixed(2)}%. Increase slippage tolerance or reduce trade size.`
-        });
-      } else if (priceImpact > HIGH_IMPACT_THRESHOLD) {
+      // Show informational warnings only (no rejections)
+      if (priceImpact > HIGH_IMPACT_THRESHOLD) {
         warnings.push({
           severity: "warning",
           message: `High price impact: ${(priceImpact * 100).toFixed(2)}%. Consider splitting into smaller trades.`
@@ -838,20 +828,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error creating bet:", error);
-      
+
       // Return appropriate HTTP status codes based on error type
       if (error instanceof ValidationError) {
         return res.status(400).json({ 
           message: error.message,
         });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ 
           message: error.message,
         });
       }
-      
+
       // Server errors return 500
       res.status(500).json({ 
         message: error instanceof Error ? error.message : "Failed to create bet",
@@ -863,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/positions/user", async (req, res) => {
     try {
       const userId = req.query.userId as string;
-      
+
       if (!userId) {
         const user = await storage.getUserByUsername("trader1");
         if (!user) {
@@ -914,7 +904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (user) {
             const newBalance = (parseFloat(user.balance) + payout).toFixed(2);
             await storage.updateUserBalance(position.userId, newBalance);
-            
+
             const profit = payout - (shares * parseFloat(position.averagePrice));
             await storage.updateUserStats(
               position.userId,
@@ -1123,7 +1113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/resolve-markets", async (req, res) => {
     try {
       const resolutions = await marketResolver.resolveExpiredMarkets();
-      
+
       for (const resolution of resolutions) {
         const market = await storage.getMarketWithKol(resolution.marketId);
         if (market) {
@@ -1177,19 +1167,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (let i = 0; i < 4 && validKOLs.length >= 2; i++) {
         const availableKOLs = validKOLs.filter(k => !usedKOLs.has(k.username));
-        
+
         if (availableKOLs.length < 2) {
           console.error(`⚠️ Not enough available KOLs for market ${i + 1}`);
           break;
         }
 
         const [kolA, kolB] = availableKOLs.slice(0, 2);
-        
+
         const winsA = kolA.wins!;
         const lossesA = kolA.losses!;
         const winsB = kolB.wins!;
         const lossesB = kolB.losses!;
-        
+
         const ratioA = (winsA / lossesA).toFixed(2);
         const ratioB = (winsB / lossesB).toFixed(2);
         const winsLossesA = `${winsA}/${lossesA}`;
@@ -1278,7 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('='.repeat(70));
 
       const resolutions = await marketResolver.resolveAllMarkets();
-      
+
       for (const resolution of resolutions) {
         const market = await storage.getMarketWithKol(resolution.marketId);
         if (market) {
@@ -1549,7 +1539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/scheduler-control", async (req, res) => {
     try {
       const { action, task } = req.body;
-      
+
       if (action === 'start') {
         if (task === 'scraping') {
           scheduler.startScrapingSchedule();
@@ -1567,7 +1557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           scheduler.stopAllSchedules();
         }
       }
-      
+
       res.json({ 
         message: `Scheduler ${action} ${task} completed`,
         status: scheduler.getStatus()
@@ -1587,7 +1577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const change = (Math.random() - 0.5) * 0.01; // Small random change
         const newYesPrice = Math.max(0.01, Math.min(0.99, currentYesPrice + change));
         const newNoPrice = 1.00 - newYesPrice;
-        
+
         storage.updateMarketPools(
           market.id,
           market.yesPool,
@@ -1595,7 +1585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           newYesPrice.toFixed(4),
           newNoPrice.toFixed(4)
         );
-        
+
         // Broadcast price update
         storage.getMarketWithKol(market.id).then((updatedMarket) => {
           if (updatedMarket) {
@@ -1633,7 +1623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const originalResolveExpiredMarkets = marketResolver.resolveExpiredMarkets.bind(marketResolver);
   marketResolver.resolveExpiredMarkets = async function() {
     const resolutions = await originalResolveExpiredMarkets();
-    
+
     for (const resolution of resolutions) {
       const market = await storage.getMarketWithKol(resolution.marketId);
       if (market) {
@@ -1644,7 +1634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     }
-    
+
     return resolutions;
   };
 
