@@ -88,56 +88,65 @@ export class KOLScraperV2 {
         for (let i = 0; i < rows.length && extractedEntries.length < 20; i++) {
           const row = rows[i];
           try {
-            const text = row.textContent || '';
+            // Get full text content for pattern matching
+            const fullText = row.textContent || '';
             
-            // 1. Get Profile URL (easy, it's the row itself)
+            // 1. Get Profile URL
             const profileUrl = row.getAttribute('href');
 
-            // 2. Get Rank
-            const rankEl = row.querySelector('div > span, div > p');
-            const rank = rankEl ? (rankEl.textContent || (i + 1).toString()).trim() : (i + 1).toString();
-
-            // 3. Get Username - finds the most prominent text
-            const usernameEl = row.querySelector('p[class*="font-semibold"], p[class*="font-bold"]');
-            let username = usernameEl ? usernameEl.textContent?.trim() : 'Unknown';
-            
-            // Fallback if the first selector fails
-            if (username === 'Unknown') {
-                const textNodes = Array.from(row.querySelectorAll('p, span'));
-                const nameNode = textNodes.find(n => n.textContent && n.textContent.length > 2 && !n.textContent.match(/[\d\/\$]/));
-                if (nameNode) username = nameNode.textContent.trim();
+            // 2. Get Rank - first number in the row
+            let rank = (i + 1).toString();
+            const rankMatch = fullText.match(/^(\d+)/);
+            if (rankMatch) {
+              rank = rankMatch[1];
             }
 
-            // 4. Get X Handle
-            const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
+            // 3. Get Username - look for text that's NOT a number, $, or /
+            let username = 'Unknown';
+            const allParagraphs = Array.from(row.querySelectorAll('p'));
+            for (const p of allParagraphs) {
+              const pText = p.textContent?.trim() || '';
+              if (pText.length > 1 && 
+                  !pText.match(/^[\d.]+$/) && 
+                  !pText.includes('$') && 
+                  !pText.includes('/') &&
+                  !pText.includes('Sol') &&
+                  !pText.match(/^\d+$/)) {
+                username = pText;
+                break;
+              }
+            }
+            
+            // 4. Get X Handle from nested link
             let xHandle: string | null = null;
-            if (xLinkEl) {
-                const href = xLinkEl.getAttribute('href') || '';
-                const match = href.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]+)/);
-                if (match && match[1]) {
-                  xHandle = match[1];
-                }
+            const xLink = row.querySelector('a[href*="x.com"], a[href*="twitter.com"]');
+            if (xLink) {
+              const href = xLink.getAttribute('href') || '';
+              const match = href.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)/);
+              if (match && match[1]) {
+                xHandle = match[1];
+              }
             }
             
-            // 5. Get Wins/Losses
+            // 5. Get Wins/Losses - pattern: "32/35" or similar
             let winsLosses: string | null = null;
-            const wlMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+            const wlMatch = fullText.match(/(\d{1,4})\s*\/\s*(\d{1,4})/);
             if (wlMatch) {
               winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
             }
             
-            // 6. Get SOL Gain
+            // 6. Get SOL Gain - pattern: "+82.83 Sol" or "82.83 Sol"
             let solGain: string | null = null;
-            const solMatch = text.match(/\+?([\d,]+\.?\d*)\s*Sol/i);
+            const solMatch = fullText.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
             if (solMatch) {
-              solGain = solMatch[1]; // Store just the number
+              solGain = solMatch[1].replace(/,/g, '');
             }
             
-            // 7. Get USD Gain - look for ($X,XXX.XX)
+            // 7. Get USD Gain - pattern: "$15,745.30" or similar
             let usdGain: string | null = null;
-            const usdMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
+            const usdMatch = fullText.match(/\$\s*([+-]?[\d,]+\.?\d*)/);
             if (usdMatch) {
-              usdGain = usdMatch[1].replace(/,/g, ''); // Store just the number
+              usdGain = usdMatch[1].replace(/,/g, '');
             }
 
             extractedEntries.push({
@@ -205,15 +214,28 @@ export class KOLScraperV2 {
         try {
           const url = window.location.href;
           const allText = document.body.innerText;
+          const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
           
-          // Extract PnL from the "Token PnL" section
-          // Pattern: "0/# +X.XX Sol ($X.XX)" at the top right of Token PnL header
-          const pnlPattern = /(\d+\/\d+)\s+([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
-          const pnlMatch = allText.match(pnlPattern);
+          // Extract PnL from "Token PnL" header - multiple patterns
+          // Pattern 1: "0/4 +9.00 Sol ($0.0)"
+          const pnlPattern1 = /(\d+\/\d+)\s+([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
+          // Pattern 2: Just "+9.00 Sol ($0.0)" without the fraction
+          const pnlPattern2 = /([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
+          
+          const pnlMatch = allText.match(pnlPattern1) || allText.match(pnlPattern2);
           
           if (pnlMatch) {
-            const solAmount = pnlMatch[2]; // e.g., "+9.00"
-            const usdAmount = pnlMatch[3]; // e.g., "$0.0"
+            let solAmount, usdAmount;
+            if (pnlMatch.length === 4) {
+              // Pattern 1 matched (with wins/losses)
+              solAmount = pnlMatch[2];
+              usdAmount = pnlMatch[3];
+            } else {
+              // Pattern 2 matched (without wins/losses)
+              solAmount = pnlMatch[1];
+              usdAmount = pnlMatch[2];
+            }
+            
             const pnlValue = `${solAmount} Sol (${usdAmount})`;
             
             if (url.includes('timeframe=1')) {
@@ -226,48 +248,42 @@ export class KOLScraperV2 {
           }
           
           if (pageMode === 'full') {
-            // Extract stats from the Stats section (visible in screenshot)
-            // Look for specific stat labels and their values
-            const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
-            
+            // Extract stats from the Stats/Holdings section
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i];
+              const nextLine = lines[i + 1] || '';
               
-              // Win Rate (appears as "Win Rate" followed by percentage on next line or same line)
-              if (line.includes('Win Rate')) {
-                const nextLine = lines[i + 1];
-                const winMatch = nextLine?.match(/([\d.]+%)/);
-                if (winMatch) {
-                  winRatePercent = winMatch[1];
+              // Win Rate - look for percentage after "Win Rate"
+              if (line === 'Win Rate' || line.includes('Win Rate')) {
+                const percentMatch = nextLine.match(/([\d.]+)%/) || line.match(/([\d.]+)%/);
+                if (percentMatch) {
+                  winRatePercent = percentMatch[1];
                 }
               }
               
-              // Volume (appears as "Volume" followed by "$X" value)
-              if (line.includes('Volume')) {
-                const nextLine = lines[i + 1];
-                const volMatch = nextLine?.match(/\$([\d,]+)/);
-                if (volMatch) {
-                  totalTrades = volMatch[1];
+              // Total Trades - could be labeled as "Volume" or just a number
+              if (line === 'Volume' || line.includes('Volume')) {
+                const numMatch = nextLine.match(/\$?([\d,]+)/);
+                if (numMatch) {
+                  totalTrades = parseInt(numMatch[1].replace(/,/g, ''), 10);
                 }
               }
               
-              // Realized Profits (alternative to Volume)
-              if (line.includes('Realized Profits') && !totalTrades) {
-                const nextLine = lines[i + 1];
-                const profitMatch = nextLine?.match(/\$([\d,]+\.?\d*)/);
-                if (profitMatch) {
-                  totalTrades = profitMatch[1];
+              // Alternative: look for "Avg Duration" and count trades from there
+              if (line === 'Avg Duration' && !totalTrades) {
+                // Sometimes the total trade count appears near this field
+                const tradeMatch = allText.match(/(\d+)\s+trades?/i);
+                if (tradeMatch) {
+                  totalTrades = parseInt(tradeMatch[1], 10);
                 }
               }
             }
 
-            // Extract holdings from table structure
-            // The page shows holdings with token names and values
+            // Extract holdings from token links
             const holdingElements = document.querySelectorAll('a[href*="/token/"]');
             for (const elem of Array.from(holdingElements).slice(0, 10)) {
               const tokenName = elem.textContent?.trim();
               if (tokenName && tokenName.length > 0) {
-                // Try to find associated value in parent or sibling elements
                 const parent = elem.closest('tr, div[class*="flex"], div[class*="grid"]');
                 const parentText = parent?.textContent || '';
                 const valueMatch = parentText.match(/\$([\d,]+\.?\d*)/);
@@ -275,14 +291,14 @@ export class KOLScraperV2 {
                 holdings.push({
                   tokenName: tokenName,
                   tokenSymbol: tokenName,
-                  valueUsd: valueMatch ? valueMatch[1] : null,
+                  valueUsd: valueMatch ? valueMatch[1].replace(/,/g, '') : null,
                   amount: null
                 });
               }
             }
           }
         } catch (e) {
-          console.error('Error during scraping:', e);
+          console.error('Error during profile scraping:', e);
         }
 
         return { 
