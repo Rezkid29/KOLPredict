@@ -216,6 +216,8 @@ export class KOLScraperV2 {
           const allText = document.body.innerText;
           const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
           
+          console.log('Extracted lines from profile page:', lines.slice(0, 50).join(' | '));
+          
           // Extract PnL from "Token PnL" header - multiple patterns
           // Pattern 1: "0/4 +9.00 Sol ($0.0)"
           const pnlPattern1 = /(\d+\/\d+)\s+([+-][\d,]+\.?\d*)\s*Sol\s*\((\$[\d,]+\.?\d*)\)/i;
@@ -261,21 +263,28 @@ export class KOLScraperV2 {
                 }
               }
               
-              // Total Trades - could be labeled as "Volume" or just a number
-              if (line === 'Volume' || line.includes('Volume')) {
-                const numMatch = nextLine.match(/\$?([\d,]+)/);
+              // Total Trades - look for "Total Trades" label specifically
+              if (line === 'Total Trades' || line.includes('Total Trades')) {
+                const numMatch = nextLine.match(/([\d,]+)/);
                 if (numMatch) {
-                  totalTrades = parseInt(numMatch[1].replace(/,/g, ''), 10);
+                  totalTrades = numMatch[1].replace(/,/g, '');
                 }
               }
               
-              // Alternative: look for "Avg Duration" and count trades from there
-              if (line === 'Avg Duration' && !totalTrades) {
-                // Sometimes the total trade count appears near this field
-                const tradeMatch = allText.match(/(\d+)\s+trades?/i);
-                if (tradeMatch) {
-                  totalTrades = parseInt(tradeMatch[1], 10);
+              // Also check for "Volume" which might contain trade count
+              if ((line === 'Volume' || line.includes('Volume')) && !totalTrades) {
+                const numMatch = nextLine.match(/([\d,]+)/);
+                if (numMatch) {
+                  totalTrades = numMatch[1].replace(/,/g, '');
                 }
+              }
+            }
+            
+            // If still no totalTrades, try pattern matching in full text
+            if (!totalTrades) {
+              const tradeMatch = allText.match(/Total Trades[:\s]+([\d,]+)/i);
+              if (tradeMatch) {
+                totalTrades = tradeMatch[1].replace(/,/g, '');
               }
             }
 
@@ -297,6 +306,8 @@ export class KOLScraperV2 {
               }
             }
           }
+          
+          console.log('Extracted data:', { pnl1d, pnl7d, pnl30d, totalTrades, winRatePercent, holdingsCount: holdings.length });
         } catch (e) {
           console.error('Error during profile scraping:', e);
         }

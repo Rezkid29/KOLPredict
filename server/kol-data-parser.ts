@@ -77,8 +77,11 @@ export class KOLDataParser {
     return match[0].replace(/,/g, '');
   }
 
-  static parseIntValue(valueStr: string | null): number | null {
-    if (!valueStr) return null;
+  static parseIntValue(valueStr: string | number | null): number | null {
+    if (!valueStr && valueStr !== 0) return null;
+    // If already a number, return it
+    if (typeof valueStr === 'number') return isNaN(valueStr) ? null : valueStr;
+    // If string, clean and parse
     const cleaned = valueStr.replace(/[^\d]/g, '');
     const parsed = parseInt(cleaned, 10);
     return isNaN(parsed) ? null : parsed;
