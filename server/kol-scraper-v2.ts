@@ -255,109 +255,110 @@ export class KOLScraperV2 {
 
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
-      // Extract data using plain JavaScript (no TypeScript types in evaluate context)
-      const detailedData = await profilePage.evaluate(() => {
-        
-        function findStatByLabel(labelRegex) {
-          try {
-            const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
-            const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
-            if (!labelNode) return null;
-            
-            const parent = labelNode.parentElement;
-            let valueNode = labelNode.nextElementSibling || (parent ? parent.querySelector('[class*="value"], [class*="stat"]') : null);
-            
-            if (valueNode && valueNode.textContent) return valueNode.textContent.trim();
+      // Pass the entire code block as a string to prevent transpiler issues
+      const detailedData = await profilePage.evaluate(`
+        (() => {
+          function findStatByLabel(labelRegex) {
+            try {
+              const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
+              const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
+              if (!labelNode) return null;
+              
+              const parent = labelNode.parentElement;
+              let valueNode = labelNode.nextElementSibling || (parent ? parent.querySelector('[class*="value"], [class*="stat"]') : null);
+              
+              if (valueNode && valueNode.textContent) return valueNode.textContent.trim();
 
-            if (parent && parent.textContent) {
+              if (parent && parent.textContent) {
                 const parentText = parent.textContent;
                 const labelText = labelNode.textContent || '';
                 const value = parentText.replace(labelText, '').trim();
                 if (value.length > 0 && value.length < 20) return value;
-            }
-            return null;
-          } catch (e) {
-            return null;
-          }
-        }
-
-        const pnl7d = findStatByLabel(/7D PnL/i);
-        const pnl30d = findStatByLabel(/30D PnL/i);
-        const totalTrades = findStatByLabel(/Total Trades/i);
-        const winRatePercent = findStatByLabel(/Win Rate/i);
-
-        const holdings = [];
-        const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
-        if (portfolioSection) {
-          const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
-          
-          for (let i = 0; i < holdingRows.length; i++) {
-            try {
-              const row = holdingRows[i];
-              const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-              const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
-              const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-              const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
-              
-              const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
-              const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
-                                  (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
-                                  nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
-              
-              if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
-
-              holdings.push({
-                tokenName: tokenName,
-                tokenSymbol: tokenSymbol,
-                valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
-              });
-            } catch (e) { 
-              continue; 
+              }
+              return null;
+            } catch (e) {
+              return null;
             }
           }
-        }
 
-        const tradeHistory = [];
-        const historySection = document.querySelector('[class*="trades"], [class*="history"]');
-        if (historySection) {
-          const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
-          
-          for (let j = 0; j < tradeRows.length; j++) {
-            try {
-              const row = tradeRows[j];
-              const text = (row.textContent || '').toLowerCase();
-              const type = text.includes('buy') ? 'buy' : 'sell';
+          const pnl7d = findStatByLabel(/7D PnL/i);
+          const pnl30d = findStatByLabel(/30D PnL/i);
+          const totalTrades = findStatByLabel(/Total Trades/i);
+          const winRatePercent = findStatByLabel(/Win Rate/i);
 
-              const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
-              const amountEl = row.querySelector('[class*="amount"]');
-              const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
-              const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
+          const holdings = [];
+          const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
+          if (portfolioSection) {
+            const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
+            
+            for (let i = 0; i < holdingRows.length; i++) {
+              try {
+                const row = holdingRows[i];
+                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
+                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
+                
+                const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
+                const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
+                                    (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
+                                    nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
+                
+                if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
 
-              if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
-              
-              tradeHistory.push({
-                type: type,
-                tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
-                amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
-                valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
-                timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
-              });
-            } catch (e) { 
-              continue; 
+                holdings.push({
+                  tokenName: tokenName,
+                  tokenSymbol: tokenSymbol,
+                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
+                });
+              } catch (e) { 
+                continue; 
+              }
             }
           }
-        }
 
-        return { 
-          pnl7d: pnl7d, 
-          pnl30d: pnl30d, 
-          totalTrades: totalTrades, 
-          winRatePercent: winRatePercent, 
-          holdings: holdings, 
-          tradeHistory: tradeHistory 
-        };
-      });
+          const tradeHistory = [];
+          const historySection = document.querySelector('[class*="trades"], [class*="history"]');
+          if (historySection) {
+            const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
+            
+            for (let j = 0; j < tradeRows.length; j++) {
+              try {
+                const row = tradeRows[j];
+                const text = (row.textContent || '').toLowerCase();
+                const type = text.includes('buy') ? 'buy' : 'sell';
+
+                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                const amountEl = row.querySelector('[class*="amount"]');
+                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
+
+                if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
+                
+                tradeHistory.push({
+                  type: type,
+                  tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
+                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
+                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                  timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
+                });
+              } catch (e) { 
+                continue; 
+              }
+            }
+          }
+
+          return { 
+            pnl7d: pnl7d, 
+            pnl30d: pnl30d, 
+            totalTrades: totalTrades, 
+            winRatePercent: winRatePercent, 
+            holdings: holdings, 
+            tradeHistory: tradeHistory 
+          };
+        })()
+      `);
 
       return detailedData as KOLDetailedData;
 
