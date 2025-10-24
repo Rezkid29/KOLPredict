@@ -1,0 +1,106 @@
+You can safely ignore all of that.
+
+Your system is a prediction market, which functions much more simply. The problem isn't your P&L math; the problem is in your core trade execution and AMM (Automated Market Maker) logic.
+
+Your P&L calculation (Profit/Loss = Payout received - Total investment) is already correct. The numbers just look wrong because your trade logic is creating confusing "Total" costs.
+
+To make your system function like Kalshi or Polymarket, you need to fix your AMM so that the cost of a trade is directly related to the $0-to-$1 price.
+
+The Core "Polymarket/Kalshi" Model
+First, let's establish the simple rules these platforms follow:
+
+Price = Probability: A "YES" share price of $0.60 means a 60% chance of the event happening.
+
+Contracts Resolve to $1 or $0: If the event happens ("YES"), all "YES" shares become worth $1.00. If it doesn't ("NO"), "YES" shares become worth $0.00.
+
+The $1.00 Rule: A complete set of shares (1 "YES" share + 1 "NO" share) is always worth exactly $1.00. This means Price(YES) + Price(NO) = $1.00.
+
+Cost is Clear: Buying 10 "YES" shares at $0.60 costs 10 * 0.60 = $6.00 (plus/minus slippage).
+
+The Problem in Your Code
+Your trade log shows this: OPEN | YES | 39.99 shares @ 0.5108 PTS | Total: 68.00 PTS
+
+This violates Rule #4. In a Polymarket-style system, the cost must be approximately: 39.99 shares * 0.5108 price = 20.43 PTS
+
+Your system, however, calculated a Total: 68.00 PTS. This is why your P&L looks so strange. You aren't buying shares at the price; your AMM is using a different, non-standard formula.
+
+How to Implement the Correct Mathematics
+You need to change your AMM's core logic. You are currently using pools of dollars (from your seed.ts file: yesPool: "10000.00").
+
+To enforce the $1.00 rule, your AMM pools should hold shares (inventory), not dollars. The "dollars" are the liquidity, and the constant product formula k = yesPool * noPool runs on the share quantities.
+
+Step 1: Fix Your AMM Pool Concept (in server/seed.ts)
+Your pools should represent the inventory of shares available to trade. The price is determined by the ratio of these shares.
+
+yesPool = Number of "YES" shares in the AMM.
+
+noPool = Number of "NO" shares in the AMM.
+
+The formulas for price are:
+
+Price(YES) = noPool / (yesPool + noPool)
+
+Price(NO) = yesPool / (yesPool + noPool)
+
+Example Seed File: To start a market at 50/50 ($0.50 price):
+
+TypeScript
+
+// server/seed.ts (Conceptual Fix)
+// These pools now represent SHARE inventory, not dollars.
+// This sets the initial price to 0.50
+const initialYesShares = 10000.00;
+const initialNoShares = 10000.00;
+const price = initialNoShares / (initialYesShares + initialNoShares); // 10000 / 20000 = 0.50
+
+// ... inside your loop ...
+{
+  title: marketTitles[i],
+  // ...
+  yesPool: initialYesShares.toFixed(2), // "10000.00" (shares)
+  noPool: initialNoShares.toFixed(2),  // "10000.00" (shares)
+  yesPrice: price.toFixed(4),          // "0.5000"
+  noPrice: (1.0 - price).toFixed(4),   // "0.5000"
+  // ...
+}
+Step 2: Fix Your Trade Logic (in server/db-storage.ts)
+This is the most important part. You need to rewrite your trade validation/execution logic.
+
+When a user BUYS "YES" shares:
+
+They are removing "YES" shares from the yesPool (inventory decreases).
+
+To keep the k = yesPool * noPool constant, they must add "NO" shares to the noPool (inventory increases).
+
+The cost they pay is the value of the "NO" shares they just added.
+
+Cost = (New noPool - Old noPool) * Price(NO)
+
+...or more simply, you calculate the cost based on the AMM's integral price formula.
+
+When a user SELLS "YES" shares:
+
+They are adding "YES" shares back to the yesPool (inventory increases).
+
+This allows them to remove "NO" shares from the noPool (inventory decreases).
+
+The payout they receive is the value of the "NO" shares they just removed.
+
+This AMM model (based on Uniswap V2) correctly enforces Price(YES) + Price(NO) = $1.00 and ensures the "Cost" is logical.
+
+Step 3: Your P&L Math is Now Simple
+Once your trade logic is fixed, your P&L calculations become intuitive.
+
+Average Cost: When a user buys, you log the actual cost. Average Buy Price = TotalCost / SharesBought (e.g., $20.43 / 39.99 = $0.5110)
+
+Realized P&L (When Selling): Payout = AverageSellPrice * SharesSold Realized P&L = (AverageSellPrice - AverageBuyPrice) * SharesSold
+
+Unrealized P&L (While Holding): Unrealized P&L = (CurrentMarketPrice - AverageBuyPrice) * SharesHeld
+
+After this fix, your trade log will look like this: OPEN | YES | 39.99 shares @ 0.5110 PTS | Total: 20.43 PTS
+
+And your sell trade: SETTLED | YES | 39.99 shares @ 0.4738 PTS | Total: 18.95 PTS
+
+The P&L is then simple: 18.95 (Payout) - 20.43 (Cost) = -1.48 PTS.
+
+This is a fundamental change to your AMM core, but it is the correct way to build the system you're describing. The confusing P&L is just a symptom of the non-standard AMM logic.

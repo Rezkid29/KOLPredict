@@ -516,14 +516,19 @@ export class DbStorage implements IStorage {
       }
 
       // STEP 3: Perform AMM calculations inside transaction
+      // Pools represent share inventory (not dollars)
+      // Price formula ensures Price(YES) + Price(NO) = 1.0
       const calculateAMMPrices = (yesP: number, noP: number) => {
         const totalPool = yesP + noP;
         return {
-          yesPrice: yesP / totalPool,
-          noPrice: noP / totalPool,
+          yesPrice: noP / totalPool,  // YES price = opposite pool ratio
+          noPrice: yesP / totalPool,   // NO price = opposite pool ratio
         };
       };
 
+      // Calculate shares received when buying with a given amount (dollars)
+      // User spends 'amt' dollars → receives shares from the target position
+      // Pools represent share inventory: buying removes shares from inventory
       const calculateSharesForBuy = (
         amt: number,
         pos: "YES" | "NO",
@@ -532,14 +537,21 @@ export class DbStorage implements IStorage {
       ): number => {
         const k = yesP * noP;
         if (pos === "YES") {
-          const newNoPool = k / (yesP + amt);
-          return noP - newNoPool;
+          // Buying YES: add to noPool (deposit liquidity), remove from yesPool (get shares)
+          // amt = newNoPool - noP, solve for shares removed from yesP
+          const newNoPool = noP + amt;
+          const newYesPool = k / newNoPool;
+          return yesP - newYesPool;  // Shares withdrawn from YES inventory
         } else {
-          const newYesPool = k / (noP + amt);
-          return yesP - newYesPool;
+          // Buying NO: add to yesPool (deposit liquidity), remove from noPool (get shares)
+          const newYesPool = yesP + amt;
+          const newNoPool = k / newYesPool;
+          return noP - newNoPool;  // Shares withdrawn from NO inventory
         }
       };
 
+      // Calculate payout (dollars) when selling shares
+      // User returns 'shares' to inventory → receives payout
       const calculatePayoutForSell = (
         shares: number,
         pos: "YES" | "NO",
@@ -548,11 +560,15 @@ export class DbStorage implements IStorage {
       ): number => {
         const k = yesP * noP;
         if (pos === "YES") {
-          const newNoPool = k / (yesP - shares);
-          return newNoPool - noP;
+          // Selling YES: add to yesPool (return shares), remove from noPool (get payout)
+          const newYesPool = yesP + shares;
+          const newNoPool = k / newYesPool;
+          return noP - newNoPool;  // Payout withdrawn from NO pool
         } else {
-          const newYesPool = k / (noP - shares);
-          return newYesPool - yesP;
+          // Selling NO: add to noPool (return shares), remove from yesPool (get payout)
+          const newNoPool = noP + shares;
+          const newYesPool = k / newNoPool;
+          return yesP - newYesPool;  // Payout withdrawn from YES pool
         }
       };
 
@@ -598,13 +614,14 @@ export class DbStorage implements IStorage {
           throw new ValidationError("Invalid share calculation - trade too large for pool liquidity");
         }
 
-        // Calculate new pools (using net amount after fee)
+        // Calculate new pools based on share inventory semantics
+        // Buying: deposit to opposite pool, withdraw from target pool
         if (params.position === "YES") {
-          newYesPool = yesPool + netBetAmount;
-          newNoPool = noPool - sharesAmount;
+          newYesPool = yesPool - sharesAmount;    // Remove shares from YES inventory
+          newNoPool = noPool + netBetAmount;       // Add liquidity to NO pool
         } else {
-          newNoPool = noPool + netBetAmount;
-          newYesPool = yesPool - sharesAmount;
+          newNoPool = noPool - sharesAmount;       // Remove shares from NO inventory
+          newYesPool = yesPool + netBetAmount;     // Add liquidity to YES pool
         }
 
         // Validate new pools
@@ -632,12 +649,18 @@ export class DbStorage implements IStorage {
           );
         }
 
-        if (params.amount > (params.position === "YES" ? yesPool : noPool)) {
-          throw new ValidationError("Cannot sell more shares than available in pool");
-        }
-
+        // Calculate payout first to validate pool capacity
         sharesAmount = params.amount;
         betAmount = calculatePayoutForSell(params.amount, params.position, yesPool, noPool);
+        
+        // Validate that opposite pool has enough liquidity for payout
+        // When selling YES, payout comes from NO pool (and vice versa)
+        const oppositePool = params.position === "YES" ? noPool : yesPool;
+        if (betAmount > oppositePool) {
+          throw new ValidationError(
+            `Insufficient pool liquidity. Sell would require ${betAmount.toFixed(2)} from ${params.position === "YES" ? "NO" : "YES"} pool, but only ${oppositePool.toFixed(2)} available`
+          );
+        }
 
         // Calculate profit: payout - total original investment
         // Total investment = shares sold × average cost per share
@@ -656,13 +679,14 @@ export class DbStorage implements IStorage {
           throw new ValidationError("Invalid payout calculation");
         }
 
-        // Calculate new pools
+        // Calculate new pools based on share inventory semantics
+        // Selling: return shares to target pool, withdraw payout from opposite pool
         if (params.position === "YES") {
-          newYesPool = yesPool - params.amount;
-          newNoPool = noPool + betAmount;
+          newYesPool = yesPool + params.amount;    // Return shares to YES inventory
+          newNoPool = noPool - betAmount;           // Withdraw payout from NO pool
         } else {
-          newNoPool = noPool - params.amount;
-          newYesPool = yesPool + betAmount;
+          newNoPool = noPool + params.amount;       // Return shares to NO inventory
+          newYesPool = yesPool - betAmount;         // Withdraw payout from YES pool
         }
 
         // Sanity check
