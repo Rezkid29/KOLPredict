@@ -25,6 +25,22 @@ export class MarketResolver {
       await dedicatedScraper.init();
       const freshData = await dedicatedScraper.scrapeLeaderboard();
       console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
+
+      // Log the structured data for debugging
+      console.log("Structured KOL Data:", freshData.map(kol => {
+        const parsed = KOLDataParser.parseRawKOLData(kol);
+        return {
+          rank: parsed.rank,
+          username: parsed.username,
+          xHandle: parsed.xHandle ?? null,
+          wins: parsed.wins ?? null,
+          losses: parsed.losses ?? null,
+          solGain: parsed.solGain ?? null,
+          usdGain: parsed.usdGain ?? null,
+          scrapedAt: new Date(),
+        };
+      }));
+
       return freshData.slice(0, limit).map(kol => {
         const parsed = KOLDataParser.parseRawKOLData(kol);
         return {
@@ -84,16 +100,16 @@ export class MarketResolver {
           }
 
           const resolvesAt = new Date(market.resolvesAt);
-          
+
           // Check if date is valid
           if (isNaN(resolvesAt.getTime())) {
             console.error(`Market ${market.id} has invalid resolution date: ${market.resolvesAt}`);
             continue;
           }
-          
+
           if (market.isLive && market.outcome === "pending" && resolvesAt <= now) {
             console.log(`Resolving market: ${market.title} (${market.id})`);
-            
+
             const resolution = await this.resolveMarket(market);
             if (resolution) {
               resolutions.push(resolution);
@@ -157,7 +173,7 @@ export class MarketResolver {
       let outcome: "yes" | "no";
       let reason: string;
 
-      if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' || 
+      if (marketType === 'rank_flippening' || marketType === 'profit_streak' || marketType === 'follower_growth' ||
           marketType === 'sol_gain_flippening' || marketType === 'usd_gain_flippening' || marketType === 'winrate_flippening' ||
           marketType === 'top_rank_maintain' || marketType === 'streak_continuation' || marketType === 'rank_improvement' ||
           marketType === 'sol_gain_threshold' || marketType === 'winloss_ratio_maintain' || marketType === 'winloss_ratio_flippening') {
@@ -243,7 +259,7 @@ export class MarketResolver {
           engagementRate: parseFloat(freshKol.engagementRate),
           trending: freshKol.trending || false,
         };
-        
+
         outcome = this.determineOutcome(market, freshKol, latestMetrics);
         reason = this.generateReason(market, freshKol, latestMetrics, outcome);
       } else {
@@ -279,7 +295,7 @@ export class MarketResolver {
           console.error(`Invalid engagement rate for KOL ${market.kol.name}: ${latestMetrics.engagementRate}`);
           return null;
         }
-        
+
         outcome = this.determineOutcome(market, market.kol, latestMetrics);
         reason = this.generateReason(market, market.kol, latestMetrics, outcome);
       }
@@ -307,6 +323,17 @@ export class MarketResolver {
         return null;
       }
 
+      // Market pools are now updated atomically via placeBetWithLocking
+      // This update is no longer needed as pools update with each bet
+      // await this.storage.updateMarketPools(
+      //   market.id,
+      //   outcome,
+      //   settledBets,
+      //   parseFloat(market.yesBets) || 0,
+      //   parseFloat(market.noBets) || 0
+      // );
+
+
       return {
         marketId: market.id,
         outcome,
@@ -323,6 +350,8 @@ export class MarketResolver {
         console.error(`CRITICAL: Failed to cancel/refund market ${market.id} after error:`, cancelError);
       }
       return null;
+    } finally {
+      this.isResolving = false;
     }
   }
 
@@ -332,14 +361,7 @@ export class MarketResolver {
     currentMetrics: { followers: number; engagementRate: number; trending: boolean }
   ): "yes" | "no" {
     const title = market.title.toLowerCase();
-    
-    if (kol.scrapedFromKolscan) {
-      const kolscanOutcome = this.determineKolscanOutcome(market, kol, title);
-      if (kolscanOutcome !== null) {
-        return kolscanOutcome;
-      }
-    }
-    
+
     if (title.includes("followers")) {
       const targetMatch = title.match(/(\d+)k?\s*followers/i);
       if (targetMatch) {
@@ -347,7 +369,7 @@ export class MarketResolver {
         return currentMetrics.followers >= target ? "yes" : "no";
       }
     }
-    
+
     if (title.includes("engagement")) {
       const targetMatch = title.match(/(\d+(?:\.\d+)?)%/);
       if (targetMatch) {
@@ -355,17 +377,25 @@ export class MarketResolver {
         return currentMetrics.engagementRate >= target ? "yes" : "no";
       }
     }
-    
+
     if (title.includes("trending")) {
       return currentMetrics.trending ? "yes" : "no";
     }
-    
+
     if (title.includes("gain") && title.includes("followers")) {
       const targetMatch = title.match(/(\d+)k?\+?\s*followers/i);
       if (targetMatch) {
         const target = parseInt(targetMatch[1]) * (title.includes("k") ? 1000 : 1);
         const gained = currentMetrics.followers - kol.followers;
         return gained >= target ? "yes" : "no";
+      }
+    }
+
+    // Fallback for KOLScan specific markets if not handled above
+    if (kol.scrapedFromKolscan) {
+      const kolscanOutcome = this.determineKolscanOutcome(market, kol, title);
+      if (kolscanOutcome !== null) {
+        return kolscanOutcome;
       }
     }
 
@@ -379,71 +409,71 @@ export class MarketResolver {
         console.warn(`No SOL gain data for ${kol.name}, cannot resolve`);
         return null;
       }
-      
+
       const solGainMatch = kol.kolscanSolGain.match(/([+-]?[\d,]+\.?\d*)/);
       if (!solGainMatch) {
         console.warn(`Cannot parse SOL gain: ${kol.kolscanSolGain}`);
         return null;
       }
-      
+
       const currentSolGain = parseFloat(solGainMatch[1].replace(/,/g, ''));
       const targetMatch = title.match(/([+-]?[\d,]+\.?\d*)\s*sol/i);
-      
+
       if (!targetMatch) {
         console.warn(`Cannot extract target SOL from title: ${title}`);
         return null;
       }
-      
+
       const targetSol = parseFloat(targetMatch[1].replace(/,/g, ''));
       console.log(`  📊 ${kol.name} SOL gain: ${currentSolGain} vs target: ${targetSol}`);
       return currentSolGain >= targetSol ? "yes" : "no";
     }
-    
+
     if (title.includes("win") && (title.includes("rate") || title.includes("ratio"))) {
       if (!kol.kolscanWins || !kol.kolscanLosses) {
         console.warn(`No win/loss data for ${kol.name}, cannot resolve`);
         return null;
       }
-      
+
       const totalTrades = kol.kolscanWins + kol.kolscanLosses;
       const winRate = totalTrades > 0 ? kol.kolscanWins / totalTrades : 0;
       const targetMatch = title.match(/([\d.]+)%/);
-      
+
       if (!targetMatch) {
         console.warn(`Cannot extract target win rate from title: ${title}`);
         return null;
       }
-      
+
       const targetRate = parseFloat(targetMatch[1]) / 100;
       console.log(`  📊 ${kol.name} win rate: ${(winRate * 100).toFixed(1)}% vs target: ${(targetRate * 100).toFixed(1)}%`);
       return winRate >= targetRate ? "yes" : "no";
     }
-    
+
     if (title.includes("rank") || title.includes("top")) {
       if (!kol.kolscanRank) {
         console.warn(`No rank data for ${kol.name}, cannot resolve`);
         return null;
       }
-      
+
       const rankMatch = kol.kolscanRank.match(/(\d+)/);
       if (!rankMatch) {
         console.warn(`Cannot parse rank: ${kol.kolscanRank}`);
         return null;
       }
-      
+
       const currentRank = parseInt(rankMatch[1], 10);
       const targetMatch = title.match(/top\s+(\d+)/i) || title.match(/rank\s+(\d+)/i) || title.match(/#(\d+)/);
-      
+
       if (!targetMatch) {
         console.warn(`Cannot extract target rank from title: ${title}`);
         return null;
       }
-      
+
       const targetRank = parseInt(targetMatch[1], 10);
       console.log(`  📊 ${kol.name} rank: ${currentRank} vs target: ${targetRank}`);
       return currentRank <= targetRank ? "yes" : "no";
     }
-    
+
     return null;
   }
 
@@ -459,7 +489,7 @@ export class MarketResolver {
         return kolscanReason;
       }
     }
-    
+
     const followerChange = currentMetrics.followers - kol.followers;
     const engagementChange = currentMetrics.engagementRate - parseFloat(kol.engagementRate);
 
@@ -468,24 +498,24 @@ export class MarketResolver {
 
   private generateKolscanReason(market: Market, kol: Kol, outcome: "yes" | "no"): string | null {
     const title = market.title.toLowerCase();
-    
+
     if (title.includes("sol") && (title.includes("gain") || title.includes("profit"))) {
       if (!kol.kolscanSolGain) return null;
       return `Market resolved ${outcome.toUpperCase()}. ${kol.name} has ${kol.kolscanSolGain} SOL gain on kolscan.io (Rank: ${kol.kolscanRank || 'N/A'}, W/L: ${kol.kolscanWins || 0}/${kol.kolscanLosses || 0}).`;
     }
-    
+
     if (title.includes("win") && (title.includes("rate") || title.includes("ratio"))) {
       if (!kol.kolscanWins || !kol.kolscanLosses) return null;
       const totalTrades = kol.kolscanWins + kol.kolscanLosses;
       const winRate = totalTrades > 0 ? ((kol.kolscanWins / totalTrades) * 100).toFixed(1) : '0.0';
       return `Market resolved ${outcome.toUpperCase()}. ${kol.name} has a ${winRate}% win rate (${kol.kolscanWins} wins, ${kol.kolscanLosses} losses) on kolscan.io.`;
     }
-    
+
     if (title.includes("rank") || title.includes("top")) {
       if (!kol.kolscanRank) return null;
       return `Market resolved ${outcome.toUpperCase()}. ${kol.name} is currently ranked ${kol.kolscanRank} on kolscan.io (SOL gain: ${kol.kolscanSolGain || 'N/A'}).`;
     }
-    
+
     return null;
   }
 
@@ -493,11 +523,11 @@ export class MarketResolver {
     const MAX_KOLSCAN_AGE_HOURS = 2;
     const MAX_FOLLOWER_CACHE_AGE_HOURS = 24;
 
-    if (marketType.includes('rank_flippening') || marketType.includes('sol_gain') || 
-        marketType.includes('usd_gain') || marketType.includes('winrate') || 
-        marketType.includes('winloss_ratio') || marketType.includes('top_rank') || 
+    if (marketType.includes('rank_flippening') || marketType.includes('sol_gain') ||
+        marketType.includes('usd_gain') || marketType.includes('winrate') ||
+        marketType.includes('winloss_ratio') || marketType.includes('top_rank') ||
         marketType.includes('streak') || marketType.includes('profit_streak')) {
-      
+
       const latestKols = await storage.getLatestScrapedKols(20);
       if (latestKols.length === 0) {
         return { valid: false, reason: "No scraped KOL data available" };
@@ -507,9 +537,9 @@ export class MarketResolver {
       const ageHours = (new Date().getTime() - new Date(mostRecentScrape).getTime()) / (1000 * 60 * 60);
 
       if (ageHours > MAX_KOLSCAN_AGE_HOURS) {
-        return { 
-          valid: false, 
-          reason: `Kolscan data is ${ageHours.toFixed(1)} hours old (max ${MAX_KOLSCAN_AGE_HOURS}h allowed)` 
+        return {
+          valid: false,
+          reason: `Kolscan data is ${ageHours.toFixed(1)} hours old (max ${MAX_KOLSCAN_AGE_HOURS}h allowed)`
         };
       }
     }
@@ -519,9 +549,9 @@ export class MarketResolver {
       if (cachedFollowers) {
         const cacheAgeHours = (new Date().getTime() - new Date(cachedFollowers.cachedAt).getTime()) / (1000 * 60 * 60);
         if (cacheAgeHours > MAX_FOLLOWER_CACHE_AGE_HOURS) {
-          return { 
-            valid: false, 
-            reason: `Follower cache for @${metadata.xHandle} is ${cacheAgeHours.toFixed(1)}h old (max ${MAX_FOLLOWER_CACHE_AGE_HOURS}h allowed)` 
+          return {
+            valid: false,
+            reason: `Follower cache for @${metadata.xHandle} is ${cacheAgeHours.toFixed(1)}h old (max ${MAX_FOLLOWER_CACHE_AGE_HOURS}h allowed)`
           };
         }
       }
@@ -532,10 +562,10 @@ export class MarketResolver {
 
   private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
-    
+
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for rank flippening market`);
       return {
@@ -543,21 +573,21 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
       };
     }
-    
+
     const rankA = kolAData.rank || 999;
     const rankB = kolBData.rank || 999;
-    
+
     const outcome = rankA < rankB ? "yes" : "no";
     const reason = `${metadata.kolA} is now rank #${rankA} vs ${metadata.kolB} at rank #${rankB}. Previously: ${metadata.kolA} was #${metadata.currentRankA}, ${metadata.kolB} was #${metadata.currentRankB}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveProfitStreakMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData || !kolData.usdGain) {
       console.warn(`Missing KOL data for profit streak market`);
       return {
@@ -565,12 +595,12 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest USD gain data for ${metadata.kolA}`
       };
     }
-    
+
     const usdGainValue = this.parseUsdGain(kolData.usdGain);
     const hasPositiveGain = usdGainValue > 0;
     const outcome = hasPositiveGain ? "yes" : "no";
     const reason = `${metadata.kolA} current USD gain: $${kolData.usdGain || '0'}. Previously: ${metadata.currentUsd}`;
-    
+
     return { outcome, reason };
   }
 
@@ -582,9 +612,9 @@ export class MarketResolver {
         reason: `Market could not be resolved - incomplete metadata`
       };
     }
-    
+
     const currentFollowers = await xApiClient.getFollowerCount(metadata.xHandle);
-    
+
     if (currentFollowers === null) {
       console.warn(`Could not fetch current follower count for @${metadata.xHandle}`);
       const cached = await storage.getFollowerCache(metadata.xHandle);
@@ -594,17 +624,17 @@ export class MarketResolver {
         const reason = `@${metadata.xHandle} follower growth: ${growth.toLocaleString()} (using cached data from ${new Date(cached.cachedAt).toLocaleDateString()}). Target was ${metadata.threshold.toLocaleString()}.`;
         return { outcome, reason };
       }
-      
+
       return {
         outcome: "no",
         reason: `Market could not be resolved - X API unavailable and no cached data`
       };
     }
-    
+
     const growth = currentFollowers - metadata.currentFollowers;
     const outcome = growth >= metadata.threshold ? "yes" : "no";
     const reason = `@${metadata.xHandle} went from ${metadata.currentFollowers.toLocaleString()} to ${currentFollowers.toLocaleString()} followers (${growth > 0 ? '+' : ''}${growth.toLocaleString()}). Target was ${metadata.threshold.toLocaleString()}.`;
-    
+
     return { outcome, reason };
   }
 
@@ -653,10 +683,10 @@ export class MarketResolver {
 
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
-    
+
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for SOL gain flippening market`);
       return {
@@ -664,22 +694,22 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
       };
     }
-    
+
     const solGainA = this.parseSolGain(kolAData.solGain);
     const solGainB = this.parseSolGain(kolBData.solGain);
-    
+
     const outcome = solGainA > solGainB ? "yes" : "no";
     const reason = `${metadata.kolA} has ${kolAData.solGain || '0'} SOL gain vs ${metadata.kolB} with ${kolBData.solGain || '0'} SOL gain. Previously: ${metadata.kolA} had ${metadata.currentSolA || '0'}, ${metadata.kolB} had ${metadata.currentSolB || '0'}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveUsdGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
-    
+
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for USD gain flippening market`);
       return {
@@ -687,22 +717,22 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
       };
     }
-    
+
     const usdGainA = this.parseUsdGain(kolAData.usdGain);
     const usdGainB = this.parseUsdGain(kolBData.usdGain);
-    
+
     const outcome = usdGainA > usdGainB ? "yes" : "no";
     const reason = `${metadata.kolA} has ${kolAData.usdGain || '$0'} USD gain vs ${metadata.kolB} with ${kolBData.usdGain || '$0'} USD gain. Previously: ${metadata.kolA} had ${metadata.currentUsdA || '$0'}, ${metadata.kolB} had ${metadata.currentUsdB || '$0'}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveWinRateFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
-    
+
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for win rate flippening market`);
       return {
@@ -710,24 +740,24 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
       };
     }
-    
+
     const winRateA = this.calculateWinRate(kolAData.wins, kolAData.losses);
     const winRateB = this.calculateWinRate(kolBData.wins, kolBData.losses);
-    
+
     const outcome = winRateA > winRateB ? "yes" : "no";
     const wlA = `${kolAData.wins || 0}/${kolAData.losses || 0}`;
     const wlB = `${kolBData.wins || 0}/${kolBData.losses || 0}`;
     const reason = `${metadata.kolA} has ${(winRateA * 100).toFixed(1)}% win rate (${wlA}) vs ${metadata.kolB} with ${(winRateB * 100).toFixed(1)}% win rate (${wlB}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveWinLossRatioFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
-    
+
     const kolAData = latestKols.find(k => k.username === metadata.kolA);
     const kolBData = latestKols.find(k => k.username === metadata.kolB);
-    
+
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for win/loss ratio flippening market`);
       return {
@@ -735,22 +765,22 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
       };
     }
-    
+
     const ratioA = this.calculateWinLossRatio(kolAData.wins, kolAData.losses);
     const ratioB = this.calculateWinLossRatio(kolBData.wins, kolBData.losses);
-    
+
     const outcome = ratioA > ratioB ? "yes" : "no";
     const wlA = `${kolAData.wins || 0}/${kolAData.losses || 0}`;
     const wlB = `${kolBData.wins || 0}/${kolBData.losses || 0}`;
     const reason = `${metadata.kolA} has ${ratioA.toFixed(2)} W/L ratio (${wlA}) vs ${metadata.kolB} with ${ratioB.toFixed(2)} W/L ratio (${wlB}). Previously: ${metadata.kolA} had ${metadata.currentWinsLossesA || '0/0'}, ${metadata.kolB} had ${metadata.currentWinsLossesB || '0/0'}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveTopRankMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData) {
       console.warn(`Missing KOL data for top rank maintain market`);
       return {
@@ -758,19 +788,19 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
       };
     }
-    
+
     const currentRank = kolData.rank;
     const threshold = metadata.threshold || 10;
     const outcome = currentRank <= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Maintained position in top ${threshold}` : `Dropped below top ${threshold}`}. Previously ranked #${metadata.currentRankA}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveStreakContinuationMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData) {
       console.warn(`Missing KOL data for streak continuation market`);
       return {
@@ -778,22 +808,22 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
       };
     }
-    
+
     const previousWL = this.parseWinsLosses(metadata.currentWinsLossesA);
     const previousWinRate = this.calculateWinRate(previousWL.wins, previousWL.losses);
     const currentWinRate = this.calculateWinRate(kolData.wins, kolData.losses);
-    
+
     const outcome = currentWinRate > previousWinRate ? "yes" : "no";
     const currentWL = `${kolData.wins || 0}/${kolData.losses || 0}`;
     const reason = `${metadata.kolA} ${outcome === 'yes' ? 'improved' : 'did not improve'} their win rate. Current: ${currentWL} (${(currentWinRate * 100).toFixed(1)}%), Previous: ${metadata.currentWinsLossesA || '0/0'} (${(previousWinRate * 100).toFixed(1)}%)`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveRankImprovementMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData) {
       console.warn(`Missing KOL data for rank improvement market`);
       return {
@@ -801,19 +831,19 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest leaderboard data for ${metadata.kolA}`
       };
     }
-    
+
     const currentRank = kolData.rank;
     const targetRank = metadata.threshold || 1;
     const outcome = currentRank <= targetRank ? "yes" : "no";
     const reason = `${metadata.kolA} is now ranked #${kolData.rank}. ${outcome === 'yes' ? `Reached target of #${targetRank} or better` : `Did not reach #${targetRank}`}. Previously ranked #${metadata.currentRankA}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveSolGainThresholdMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData || !kolData.solGain) {
       console.warn(`Missing KOL data for SOL gain threshold market`);
       return {
@@ -821,19 +851,19 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest SOL gain data for ${metadata.kolA}`
       };
     }
-    
+
     const currentSolGain = this.parseSolGain(kolData.solGain);
     const threshold = parseFloat(metadata.threshold) || 50;
     const outcome = currentSolGain >= threshold ? "yes" : "no";
     const reason = `${metadata.kolA} current SOL gain: ${kolData.solGain} (${currentSolGain.toFixed(2)} SOL). ${outcome === 'yes' ? `Reached threshold of +${threshold} SOL` : `Did not reach +${threshold} SOL`}. Previously: ${metadata.currentSolA}`;
-    
+
     return { outcome, reason };
   }
 
   private async resolveWinLossRatioMaintainMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
     const latestKols = await this.getFreshKolData(20);
     const kolData = latestKols.find(k => k.username === metadata.kolA);
-    
+
     if (!kolData || (kolData.wins === null && kolData.losses === null)) {
       console.warn(`Missing KOL data for win/loss ratio maintain market`);
       return {
@@ -841,13 +871,13 @@ export class MarketResolver {
         reason: `Market could not be resolved - missing latest W/L data for ${metadata.kolA}`
       };
     }
-    
+
     const currentRatio = this.calculateWinLossRatio(kolData.wins, kolData.losses);
     const threshold = parseFloat(metadata.threshold) || 1.5;
     const outcome = currentRatio >= threshold ? "yes" : "no";
     const currentWL = `${kolData.wins || 0}/${kolData.losses || 0}`;
     const reason = `${metadata.kolA} current W/L ratio: ${currentRatio.toFixed(2)} (${currentWL}). ${outcome === 'yes' ? `Maintained ratio above ${threshold.toFixed(2)}` : `Did not maintain ${threshold.toFixed(2)}`}. Previously: ${metadata.currentWinsLossesA}`;
-    
+
     return { outcome, reason };
   }
 
@@ -861,10 +891,10 @@ export class MarketResolver {
       const shares = parseFloat(bet.shares);
       const won = shares > 0 && bet.position.toLowerCase() === outcome;
       const betAmount = parseFloat(bet.amount);
-      
+
       let profit: number;
       let newStatus: string;
-      
+
       if (won) {
         profit = betAmount * 1.5;
         newStatus = "won";
@@ -880,7 +910,7 @@ export class MarketResolver {
         const currentBalance = parseFloat(user.balance);
         const payout = won ? betAmount + profit : 0;
         const newBalance = (currentBalance + payout).toFixed(2);
-        
+
         await storage.updateUserBalance(bet.userId, newBalance);
 
         const newTotalProfit = (parseFloat(user.totalProfit) + profit).toFixed(2);
@@ -899,9 +929,9 @@ export class MarketResolver {
     }
 
     console.log(`Starting auto-resolution every ${intervalMinutes} minutes`);
-    
+
     this.resolveExpiredMarkets();
-    
+
     this.resolutionInterval = setInterval(() => {
       this.resolveExpiredMarkets();
     }, intervalMinutes * 60 * 1000);
@@ -941,7 +971,7 @@ export class MarketResolver {
         try {
           if (market.isLive && market.outcome === "pending") {
             console.log(`Force resolving market: ${market.title} (${market.id})`);
-            
+
             const resolution = await this.resolveMarket(market);
             if (resolution) {
               resolutions.push(resolution);

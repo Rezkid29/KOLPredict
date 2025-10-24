@@ -351,13 +351,45 @@ async function main() {
   const scraper = new KOLScraperV2();
   try {
     await scraper.init();
+    
+    console.log('\n🎯 Starting KOL scraping process...\n');
+    
     const { scraped, saved } = await scraper.scrapeAndSave();
 
-    console.log(`✅ Scraped ${scraped} entries and saved ${saved} to the database.`);
+    console.log(`\n✅ Scraping Complete: ${scraped} entries scraped, ${saved} saved to database\n`);
 
-    // Optionally, fetch and display the saved KOL data in structured format
-    const savedData = await dbStorage.getAllKols(); // Add this method if it doesn't exist
-    console.log(JSON.stringify(savedData, null, 2)); // Pretty print the saved data in JSON format
+    // Fetch and display the latest scraped data in structured format
+    const latestScrapedData = await dbStorage.getLatestScrapedKols(20);
+    
+    console.log('📊 LATEST SCRAPED KOL DATA (Structured Format):\n');
+    console.log('='.repeat(100));
+    
+    latestScrapedData.forEach((kol, index) => {
+      console.log(`\n[${index + 1}] RANK #${kol.rank} - ${kol.username}`);
+      console.log('-'.repeat(100));
+      console.log(`  Username:     ${kol.username}`);
+      console.log(`  X Handle:     ${kol.xHandle || 'N/A'}`);
+      console.log(`  Wins/Losses:  ${kol.winsLosses || 'N/A'}`);
+      console.log(`  SOL Gain:     ${kol.solGain || 'N/A'}`);
+      console.log(`  USD Gain:     ${kol.usdGain || 'N/A'}`);
+      console.log(`  PNL 7D:       ${kol.pnl7d || 'N/A'}`);
+      console.log(`  PNL 30D:      ${kol.pnl30d || 'N/A'}`);
+      console.log(`  Total Trades: ${kol.totalTrades || 'N/A'}`);
+      console.log(`  Win Rate:     ${kol.winRatePercent || 'N/A'}`);
+      console.log(`  Scraped At:   ${kol.scrapedAt}`);
+      
+      if (kol.holdings) {
+        console.log(`  Holdings:     ${kol.holdings}`);
+      }
+      if (kol.tradeHistory) {
+        console.log(`  Trade Hist:   ${kol.tradeHistory}`);
+      }
+    });
+    
+    console.log('\n' + '='.repeat(100));
+    console.log('\n📋 JSON FORMAT (for programmatic use):\n');
+    console.log(JSON.stringify(latestScrapedData, null, 2));
+    
   } catch (error) {
     console.error('💥 Scraping failed:', error);
   } finally {
