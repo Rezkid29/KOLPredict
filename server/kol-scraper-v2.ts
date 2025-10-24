@@ -198,84 +198,79 @@ export class KOLScraperV2 {
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       const detailedData = await profilePage.evaluate((pageMode) => {
-        
-        // Robust helper function - finds a label and returns the text of its sibling
-        const findStatValueByLabel = (labelRegex: RegExp): string | null => {
-          try {
-            const allTextNodes = Array.from(document.querySelectorAll('main p, main span'));
-            const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
-            
-            if (!labelNode) return null;
+        let pnl = null;
+        let pnl7d = null;
+        let pnl30d = null;
+        let totalTrades = null;
+        let winRatePercent = null;
+        let holdings = [];
+        let tradeHistory = [];
 
-            // The value is usually in the next element sibling
-            let valueNode = labelNode.nextElementSibling;
-            
-            // Or, they are both wrapped in a div, and the value is the last child
-            if (!valueNode && labelNode.parentElement) {
-                valueNode = labelNode.parentElement.lastElementChild;
-            }
-
-            if (valueNode && valueNode.textContent && valueNode.textContent !== labelNode.textContent) {
-                return valueNode.textContent.trim();
-            }
-            
-            // Fallback: check parent text (e.g., "Win Rate33.4%")
-            if(labelNode.parentElement && labelNode.parentElement.textContent) {
-                const parentText = labelNode.parentElement.textContent;
-                const labelText = labelNode.textContent || '';
-                const value = parentText.replace(labelText, '').trim();
-                if (value.length > 0 && value.length < 20) return value;
-            }
-
-            return null;
-          } catch (e) {
-            return null;
+        try {
+          // Find PnL - look for green/red text with "Sol" and "$"
+          const pnlNodes = Array.from(document.querySelectorAll('div[class*="text-green"], span[class*="text-green"], div[class*="text-red"], span[class*="text-red"]'));
+          const pnlNode = pnlNodes.find(el => el.textContent && el.textContent.includes('Sol') && el.textContent.includes('$'));
+          
+          if (pnlNode) {
+            pnl = pnlNode.textContent.trim();
           }
-        };
-        
-        // Helper finds the main PnL display, which changes per page
-        const findMainPnL = (): string | null => {
-            try {
-                // Find all elements that look like a PnL value (e.g., "+19.90 Sol ($3,784.8)")
-                const pnlNodes = Array.from(document.querySelectorAll('div[class*="text-green"], span[class*="text-green"], div[class*="text-red"], span[class*="text-red"]'));
-                const pnlNode = pnlNodes.find(el => el.textContent && el.textContent.includes('Sol') && el.textContent.includes('$'));
-                
-                if (pnlNode) return pnlNode.textContent.trim();
-                
-                // Fallback for timeframe PnL
-                return findStatValueByLabel(/PnL/i);
-            } catch (e) {
-                return null;
-            }
-        };
-
-        // --- Data Extraction Logic ---
-        
-        let pnl: string | null = null;
-        let pnl7d: string | null = null;
-        let pnl30d: string | null = null;
-        
-        let totalTrades: string | null = null;
-        let winRatePercent: string | null = null;
-        let holdings: any[] = [];
-        let tradeHistory: any[] = [];
-
-        // Find the main PnL for the current page (1d, 7d, or 30d)
-        pnl = findMainPnL();
-        
-        const url = window.location.href;
-        if (url.includes('timeframe=7')) {
+          
+          const url = window.location.href;
+          if (url.includes('timeframe=7')) {
             pnl7d = pnl;
-        } else if (url.includes('timeframe=30')) {
+          } else if (url.includes('timeframe=30')) {
             pnl30d = pnl;
-        }
-        
-        // If we are in 'full' mode, scrape everything else
-        if (pageMode === 'full') {
-            totalTrades = findStatValueByLabel(/Volume/i) || findStatValueByLabel(/Realized Profits/i);
-            winRatePercent = findStatValueByLabel(/Win Rate/i);
+          }
+          
+          if (pageMode === 'full') {
+            // Find stats by looking for label-value pairs
+            const allTextNodes = Array.from(document.querySelectorAll('main p, main span'));
+            
+            // Win Rate
+            const winRateLabel = allTextNodes.find(el => /Win Rate/i.test(el.textContent || ''));
+            if (winRateLabel) {
+              let valueNode = winRateLabel.nextElementSibling;
+              if (!valueNode && winRateLabel.parentElement) {
+                valueNode = winRateLabel.parentElement.lastElementChild;
+              }
+              if (valueNode && valueNode.textContent && valueNode.textContent !== winRateLabel.textContent) {
+                winRatePercent = valueNode.textContent.trim();
+              } else if (winRateLabel.parentElement && winRateLabel.parentElement.textContent) {
+                const parentText = winRateLabel.parentElement.textContent;
+                const labelText = winRateLabel.textContent || '';
+                const value = parentText.replace(labelText, '').trim();
+                if (value.length > 0 && value.length < 20) {
+                  winRatePercent = value;
+                }
+              }
+            }
+            
+            // Total Trades (Volume or Realized Profits)
+            const volumeLabel = allTextNodes.find(el => /Volume/i.test(el.textContent || ''));
+            if (volumeLabel) {
+              let valueNode = volumeLabel.nextElementSibling;
+              if (!valueNode && volumeLabel.parentElement) {
+                valueNode = volumeLabel.parentElement.lastElementChild;
+              }
+              if (valueNode && valueNode.textContent && valueNode.textContent !== volumeLabel.textContent) {
+                totalTrades = valueNode.textContent.trim();
+              }
+            }
+            
+            if (!totalTrades) {
+              const profitsLabel = allTextNodes.find(el => /Realized Profits/i.test(el.textContent || ''));
+              if (profitsLabel) {
+                let valueNode = profitsLabel.nextElementSibling;
+                if (!valueNode && profitsLabel.parentElement) {
+                  valueNode = profitsLabel.parentElement.lastElementChild;
+                }
+                if (valueNode && valueNode.textContent && valueNode.textContent !== profitsLabel.textContent) {
+                  totalTrades = valueNode.textContent.trim();
+                }
+              }
+            }
 
-            // Holdings logic
+            // Holdings
             const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
             if (portfolioSection) {
               const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
@@ -307,7 +302,7 @@ export class KOLScraperV2 {
               }
             }
 
-            // Trade history logic
+            // Trade history
             const historySection = document.querySelector('[class*="trades"], [class*="history"]');
             if (historySection) {
               const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
@@ -337,6 +332,9 @@ export class KOLScraperV2 {
                 }
               }
             }
+          }
+        } catch (e) {
+          console.error('Error during scraping:', e);
         }
 
         return { 
