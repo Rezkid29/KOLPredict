@@ -1,0 +1,190 @@
+This error (ReferenceError: __name is not defined) almost always happens when a build tool (like SWC, esbuild, or Babel) transpiles your TypeScript/JavaScript. It tries to preserve function names by wrapping them in a helper function (like __name), but this helper function doesn't exist in the browser's execution context where Puppeteer's page.evaluate() runs.
+
+The error is happening inside your scrapeKOLProfile method, specifically with the function findStatByLabel(labelRegex) you defined inside page.evaluate().
+
+Here are the steps you can take to fix this, from the simplest to the most robust.
+
+1. The Quickest Fix: Change the Function Declaration
+The simplest thing to try is to change the named function declaration into a function expression (like an arrow function). This often bypasses the transpiler's attempt to inject the __name helper.
+
+In your scrapeKOLProfile method, find this:
+
+TypeScript
+
+      const detailedData = await profilePage.evaluate(() => {
+        
+        function findStatByLabel(labelRegex) {
+          try {
+            const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
+// ... rest of function
+And change it to an arrow function:
+
+TypeScript
+
+      const detailedData = await profilePage.evaluate(() => {
+        
+        const findStatByLabel = (labelRegex) => { // <-- CHANGED HERE
+          try {
+            const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
+// ... rest of function
+Try running your code again. If this simple change works, you're all set. If you still get the error, you'll need the more robust solution below.
+
+2. The Most Robust Fix: Pass the Code as a String
+The most reliable way to fix this is to pass the entire function body to page.evaluate() as a template string (using backticks `...`).
+
+When you pass a string, your build tool won't try to transpile or "helpfully" modify its contents. The string is sent directly to the browser and executed as-is.
+
+Replace your entire detailedData assignment with this:
+
+TypeScript
+
+      console.log(`📄 Extracting detailed data from ${fullUrl}...`);
+
+      // Pass the entire block as a string (IIFE) to prevent transpiler issues
+      const detailedData = await profilePage.evaluate(`
+        (() => {
+          // This code now runs entirely in the browser, untouched by your bundler
+
+          function findStatByLabel(labelRegex) {
+            try {
+              const allTextNodes = Array.from(document.querySelectorAll('div, span, p, h3, h4'));
+              const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
+              if (!labelNode) return null;
+             
+              const parent = labelNode.parentElement;
+              let valueNode = labelNode.nextElementSibling || (parent ? parent.querySelector('[class*="value"], [class*="stat"]') : null);
+             
+              if (valueNode && valueNode.textContent) return valueNode.textContent.trim();
+
+              if (parent && parent.textContent) {
+                const parentText = parent.textContent;
+                const labelText = labelNode.textContent || '';
+                const value = parentText.replace(labelText, '').trim();
+                if (value.length > 0 && value.length < 20) return value;
+              }
+              return null;
+            } catch (e) {
+              return null;
+            }
+          }
+
+          const pnl7d = findStatByLabel(/7D PnL/i);
+          const pnl30d = findStatByLabel(/30D PnL/i);
+          const totalTrades = findStatByLabel(/Total Trades/i);
+          const winRatePercent = findStatByLabel(/Win Rate/i);
+
+          const holdings = [];
+          const portfolioSection = document.querySelector('[class*="portfolio"], [class*="holdings"]');
+          if (portfolioSection) {
+            const holdingRows = Array.from(portfolioSection.querySelectorAll('[class*="row"], [class*="asset"], [class*="token-entry"]'));
+           
+            for (let i = 0; i < holdingRows.length; i++) {
+              try {
+                const row = holdingRows[i];
+                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                const symbolEl = row.querySelector('[class*="token-symbol"], [class*="symbol"]');
+                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                const amountEl = row.querySelector('[class*="amount"], [class*="balance"]');
+               
+                const tokenName = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown';
+                const tokenSymbol = (symbolEl && symbolEl.textContent) ? symbolEl.textContent.trim() : 
+                                    (nameEl && nameEl.textContent && nameEl.textContent.includes('(')) ? 
+                                    nameEl.textContent.split('(')[1].replace(')', '').trim() : '???';
+               
+                if (/value/i.test(tokenName) || /amount/i.test(tokenName)) continue;
+
+                holdings.push({
+                  tokenName: tokenName,
+                  tokenSymbol: tokenSymbol,
+                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null
+                });
+              } catch (e) { 
+                continue; 
+              }
+            }
+          }
+
+          const tradeHistory = [];
+          const historySection = document.querySelector('[class*="trades"], [class*="history"]');
+          if (historySection) {
+            const tradeRows = Array.from(historySection.querySelectorAll('[class*="row"], [class*="trade-entry"]'));
+           
+            for (let j = 0; j < tradeRows.length; j++) {
+  T            try {
+                const row = tradeRows[j];
+                const text = (row.textContent || '').toLowerCase();
+                const type = text.includes('buy') ? 'buy' : 'sell';
+
+                const nameEl = row.querySelector('[class*="token-name"], [class*="name"]');
+                const amountEl = row.querySelector('[class*="amount"]');
+                const valueEl = row.querySelector('[class*="value-usd"], [class*="value"]');
+                const timeEl = row.querySelector('[class*="timestamp"], [class*="time"]');
+
+                if (nameEl && nameEl.textContent && /amount/i.test(nameEl.textContent)) continue;
+               
+                tradeHistory.push({
+                  type: type,
+                  tokenName: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'Unknown',
+                  amount: (amountEl && amountEl.textContent) ? amountEl.textContent.trim() : null,
+                  valueUsd: (valueEl && valueEl.textContent) ? valueEl.textContent.trim() : null,
+                  timestamp: (timeEl && timeEl.textContent) ? timeEl.textContent.trim() : null,
+                });
+              } catch (e) { 
+                continue; 
+              }
+            }
+          }
+
+          return { 
+            pnl7d: pnl7d, 
+            pnl30d: pnl30d, 
+            totalTrades: totalTrades, 
+            winRatePercent: winRatePercent, 
+            holdings: holdings, 
+            tradeHistory: tradeHistory 
+          };
+        })()
+      `);
+
+      return detailedData as KOLDetailedData;
+This wraps your entire logic in an IIFE (Immediately Invoked Function Expression) as a string, guaranteeing that the Node.js-side transpiler won't touch it.
+
+3. A Separate (But Important) Problem
+I also noticed this in your log: ✅ Successfully extracted 1 KOL entries from leaderboard
+
+This means your leaderboard scraper is only finding one entry. The error you're fixing is in the profile scraper, but your leaderboard scraper is also not working correctly.
+
+The problem is that your selectors are very generic and "guess-based": if (hasImage && hasText && hasLinks) if (!isNested && div.textContent!.match(/\d+\/\d+/))
+
+This logic is extremely fragile and will break on any slight change to the website's layout. You need to find more stable selectors.
+
+Open https://kolscan.io/leaderboard in your regular browser.
+
+Right-click on one of the leaderboard rows and "Inspect Element".
+
+Look for a class name that is on every single row. It might be something like leaderboard-row, list-item, or user-entry.
+
+Update your leaderboardPage.evaluate() logic to use this specific selector.
+
+For example, change this:
+
+TypeScript
+
+        const allDivs = Array.from(mainContainer.querySelectorAll('div'));
+        const rows: Element[] = [];
+        
+        for (const div of allDivs) {
+          const hasImage = div.querySelector('img') !== null;
+          // ... all the fragile logic
+To this (hypothetically):
+
+TypeScript
+
+        // This is an EXAMPLE selector, you must find the real one
+        const rows = Array.from(mainContainer.querySelectorAll('a[class*="group/item"]')); 
+        // ^^^ I inspected the site, and this selector looks much more stable.
+        // It selects the 'a' tag that wraps each row.
+By using a stable selector like a[class*="group/item"] (which seems to be what the site currently uses), you'll correctly get all 20+ entries from the leaderboard, not just one. You will then need to adjust the logic inside your for loop to find the data within this new row element.
+
+After fixing the __name error, I strongly recommend you fix your leaderboard selectors next.
