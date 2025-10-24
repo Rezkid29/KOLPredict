@@ -1568,36 +1568,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Simulate market price updates (for demo purposes)
-  setInterval(() => {
-    storage.getAllMarkets().then((markets) => {
-      markets.forEach((market) => {
-        // Randomly update YES/NO prices slightly (maintaining sum = 1.00)
-        const currentYesPrice = parseFloat(market.yesPrice);
-        const change = (Math.random() - 0.5) * 0.01; // Small random change
-        const newYesPrice = Math.max(0.01, Math.min(0.99, currentYesPrice + change));
-        const newNoPrice = 1.00 - newYesPrice;
-
-        storage.updateMarketPools(
-          market.id,
-          market.yesPool,
-          market.noPool,
-          newYesPrice.toFixed(4),
-          newNoPrice.toFixed(4)
-        );
-
-        // Broadcast price update
-        storage.getMarketWithKol(market.id).then((updatedMarket) => {
-          if (updatedMarket) {
-            broadcast({
-              type: 'PRICE_UPDATE',
-              market: updatedMarket,
-            });
-          }
-        });
-      });
-    });
-  }, 5000); // Update every 5 seconds
+  // Market prices now update organically through real bet placements via placeBetWithLocking
+  // No artificial simulation needed
 
   // Start automatic KOL metrics updates every 30 minutes
   console.log("Starting automatic KOL metrics updates...");

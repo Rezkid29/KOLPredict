@@ -323,17 +323,6 @@ export class MarketResolver {
         return null;
       }
 
-      // Market pools are now updated atomically via placeBetWithLocking
-      // This update is no longer needed as pools update with each bet
-      // await this.storage.updateMarketPools(
-      //   market.id,
-      //   outcome,
-      //   settledBets,
-      //   parseFloat(market.yesBets) || 0,
-      //   parseFloat(market.noBets) || 0
-      // );
-
-
       return {
         marketId: market.id,
         outcome,

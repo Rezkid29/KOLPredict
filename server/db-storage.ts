@@ -187,18 +187,6 @@ export class DbStorage implements IStorage {
     await db.update(markets).set(updates).where(eq(markets.id, id));
   }
 
-  async updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void> {
-    // This method is deprecated - pools are now updated via placeBetWithLocking
-    // Keep for backwards compatibility but don't use it
-    console.warn('updateMarketPools is deprecated - use placeBetWithLocking instead');
-    await db.update(markets).set({ 
-      yesSharePool: yesPool, 
-      noSharePool: noPool, 
-      currentYesPrice: yesPrice, 
-      currentNoPrice: noPrice 
-    }).where(eq(markets.id, id));
-  }
-
   async updateMarketVolume(id: string, volume: string): Promise<void> {
     await db.update(markets).set({ totalVolume: volume }).where(eq(markets.id, id));
   }

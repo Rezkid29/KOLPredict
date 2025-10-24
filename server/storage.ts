@@ -44,7 +44,6 @@ export interface IStorage {
   getAllMarketsWithKols(): Promise<MarketWithKol[]>;
   createMarket(market: InsertMarket): Promise<Market>;
   updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void>;
-  updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void>;
   updateMarketVolume(id: string, volume: string): Promise<void>;
   resolveMarket(id: string, resolvedValue: string): Promise<void>;
   
@@ -481,17 +480,6 @@ export class MemStorage implements IStorage {
     if (market) {
       const updatedMarket = { ...market, ...updates };
       this.markets.set(id, updatedMarket);
-    }
-  }
-
-  async updateMarketPools(id: string, yesPool: string, noPool: string, yesPrice: string, noPrice: string): Promise<void> {
-    const market = this.markets.get(id);
-    if (market) {
-      market.yesPool = yesPool;
-      market.noPool = noPool;
-      market.yesPrice = yesPrice;
-      market.noPrice = noPrice;
-      this.markets.set(id, market);
     }
   }
 
