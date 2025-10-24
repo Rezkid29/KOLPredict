@@ -1,0 +1,143 @@
+📋 Complete File Inventory
+Market Creation (9 files)
+1. server/market-generator-service.ts - Main market creation logic
+2. server/kolscan-scraper-service.ts - Scrapes kolscan.io data
+3. server/scheduler.ts - Automated scheduling
+4. server/routes.ts - Admin API endpoints
+5. server/seed.ts - Database seeding
+6. server/metrics-updater.ts - Updates KOL metrics
+7. server/social-api-client.ts - Twitter API integration
+8. server/x-api-client.ts - X API follower counts
+9. server/db-storage.ts - Database operations
+Market Resolution (3 files)
+1. server/market-resolver.ts - PRIMARY (859 lines, 12+ resolution methods)
+2. server/db-storage.ts - Database queries
+3. shared/schema.ts - Database schemas
+
+🚨 Top 10 Critical Bottlenecks
+🔴 HIGH PRIORITY
+1. String-Based KOL Matching - Exact username matching fails with case/whitespace differences
+2. Stale Scraped Data - Markets resolve using outdated data (up to 24h old)
+3. Fragile String Parsing - 59 regex operations that break if format changes
+4. Questionable Market Logic - top_rank_maintain and rank_flippening show incorrect outcomes
+🟠 MEDIUM PRIORITY
+5. Database Type Coercion - Decimal fields require manual parseFloat() conversion (already fixed threshold bug)
+6. Missing Metadata Handling - Markets fail silently if metadata is missing
+7. External API Dependencies - Twitter API required for follower growth markets
+8. Puppeteer Scraping Reliability - Web scraping breaks when kolscan.io changes
+🟡 LOW PRIORITY
+9. Bet Settlement Race Conditions - No database transactions (partial settlements possible)
+10. Silent Error Handling - Errors logged but default to "no" outcome
+
+🎯 Root Cause of Your Current Issue
+Your scraped KOL data is not fully accurate right now because:
+1. Timing Gap: Scraper runs at 2 AM daily, but markets can resolve anytime (up to 22-hour stale data)
+2. Manual Test Data: You manually inserted test data which doesn't reflect real kolscan.io
+3. No Real-Time Validation: System doesn't verify data freshness before resolution
+4. Username Matching Issues: Even with correct data, case/whitespace mismatches cause failures
+Evidence:
+* We manually inserted: 'Sheep', '1', '42/8'
+* Real kolscan.io may have: 'sheep', '#1', '42 / 8'
+* These won't match → Market resolves incorrectly
+
+Based on your detailed analysis, you have a solid grasp of the system's architecture and its critical flaws. The bottlenecks you've identified are spot-on.
+Here is a structured plan to address these issues, prioritized by impact, to improve efficiency and reliability.
+
+Phase 1: Fix Data Integrity & Core Logic (High-Priority)
+
+This phase targets the root cause of your current issues: stale, un-normalized data and flawed resolution logic.
+
+1. Solve Stale Data: On-Demand Resolution Scraping
+
+The core problem is the timing gap. Resolving markets with 22-hour-old data is not viable.
+* Action: Modify the MarketResolver (server/market-resolver.ts).
+* Logic: When a market is triggered for resolution, it should not use the getLatestScrapedKols data from the database.
+* Instead: It should instantiate and call the KOLScraperService directly to perform a fresh, targeted scrape for the specific KOL(s) involved in that single market.
+* Benefit: This provides 100% accurate, real-time data at the exact moment of resolution, completely eliminating the stale data problem. The 2 AM full scrape can remain for market generation, but resolution must use live data.
+
+2. Fix Data Matching & Parsing: Normalize on Ingest
+
+Stop storing fragile strings. This fixes matching, parsing, and type coercion bottlenecks simultaneously.
+* Action: Modify the KOLScraperService (server/kol-scraper-service.ts) and db-storage.ts.
+* Logic:
+    1. Change Schema: Update your scraped_kols table schema.
+        * rank: string -> integer
+        * wins_losses: string -> wins: integer, losses: integer
+        * sol_gain: string -> sol_gain: decimal
+        * usd_gain: string -> usd_gain: decimal
+        * handle: string (ensure it's stored as toLowerCase())
+    2. Normalize in Scraper: Move all 59 regex operations and parsing logic inside kol-scraper-service.ts. When it scrapes, it should parse the raw text ('Sheep', '🏆 1', '42 / 8', '+100 Sol') into clean, numeric data ('sheep', 1, 42, 8, 100.0) before saving to the database.
+* Benefit: Resolution logic becomes simple, fast, and reliable. No more parseFloat(), no more case-mismatch errors, and no more fragile string parsing in the resolver.
+
+3. Harden the Scraper: Use DOM Selectors
+
+The current scraper (kol-scraper-service.ts) parsing innerText from the entire page is extremely fragile.
+* Action: Rewrite the scrapeLeaderboard function.
+* Logic: Instead of parsing raw text, use Puppeteer's page.evaluate() or page.$$eval() to target specific HTML elements by their class, ID, or structure (e.g., '.username-cell', '.rank-column').
+* Benefit: The scraper will only break if kolscan.io completely redesigns its HTML structure, not just changes text formatting. This fixes the Puppeteer Scraping Reliability bottleneck.
+
+4. Correct Market Logic: Audit Resolution Methods
+
+The Questionable Market Logic bottleneck means users are getting incorrect outcomes even with perfect data.
+* Action: Perform a code audit on server/market-resolver.ts.
+* Logic: Specifically review the determineOutcome methods for top_rank_maintain and rank_flippening. Involve someone to review the logic step-by-step to ensure it correctly reflects the market's question.
+* Benefit: Restores trust in the platform by ensuring markets resolve correctly.
+
+
+Phase 2: Build Robustness & Error Handling (Medium-Priority)
+
+With data integrity fixed, the next step is to make the system resilient to failures.
+
+1. Implement Graceful Error States
+
+Silent Error Handling and Missing Metadata Handling are dangerous. A system error should not result in a "NO" outcome, as this costs users money.
+* Action: Modify server/market-resolver.ts and your markets table schema.
+* Logic:
+    1. Add a new status to your markets table: status: 'OPEN' | 'RESOLVED' | 'CANCELLED'.
+    2. In the resolver, wrap each market's resolution in a try...catch block.
+    3. If an error occurs (e.g., metadata is missing, the on-demand scrape fails, X API is down), do not resolve to "NO".
+    4. Instead, log the error and set the market's status to CANCELLED.
+* Benefit: This triggers a refund process for all bets on that market, which is the fair and safe outcome when the system fails.
+
+2. Decouple External API Dependencies
+
+Follower markets should not rely on the X API being 100% available.
+* Action: Update the resolution logic for Follower Growth markets.
+* Logic: When resolving, if the X API (x-api-client.ts) fails to return data and the cached data in followerCache is older than the market's start time, the market should be CANCELLED (per the step above), not resolved with stale data.
+* Benefit: Prevents markets from resolving on bad data during an API outage.
+
+
+Phase 3: Ensure Atomicity & Polish (Low-Priority)
+
+This phase addresses the Bet Settlement Race Conditions and cleans up the system. Your analysis shows a contradiction: the bottleneck list mentions "No database transactions," but the db-storage.ts analysis describes a "NEW: Atomic Bet Placement" system. This plan assumes the bottleneck list is correct and settlement is not transactional.
+
+1. Critical Audit: Implement Transactional Settlements
+
+This is listed as "Low Priority" but is critical for financial integrity. Partial settlements can corrupt user balances.
+* Action: Audit and refactor MarketResolver.settleBets (server/market-resolver.ts).
+* Logic: The current description of settleBets (Section 2.C) lists sequential updates (Update bet, Update user balance, Update user stats). This is unsafe.
+* Refactor: Wrap the entire settlement process for a single market (calculating profits and updating all user balances and bet statuses) inside a single database transaction. Use the same locking pattern you developed for placeBetWithLocking.
+* Benefit: Guarantees that all bets on a market are settled, or none are. This completely prevents race conditions and partial settlement failures.
+
+2. Code Cleanup: Remove Deprecated Code
+
+* Action: Search the codebase for all uses of the old placeBetTransaction (mentioned in your technical debt) and refactor them to use the new placeBetWithLocking.
+* Logic: Once all references are gone, delete the deprecated placeBetTransaction function from db-storage.ts.
+* Benefit: Reduces technical debt and ensures all new bets use the safer, atomic method.
+
+
+Summary: Action Plan Timeline
+
+1. Sprint 1 (Core Fixes):
+    * Implement on-demand scraping for the resolver.
+    * Migrate scraped_kols schema to numeric/normalized types.
+    * Move all parsing logic into the scraper.
+    * Rewrite scraper to use DOM selectors.
+2. Sprint 2 (Reliability):
+    * Audit and fix flawed market resolution logic.
+    * Implement the CANCELLED market state for all resolution errors.
+    * Add transactional logic to the settleBets function.
+3. Sprint 3 (Cleanup):
+    * Add API/cache-staleness checks to follower markets.
+    * Remove deprecated placeBetTransaction code.
+This plan directly tackles your high-impact bottlenecks first, fixing the data integrity, which will cascade improvements throughout the entire system.
