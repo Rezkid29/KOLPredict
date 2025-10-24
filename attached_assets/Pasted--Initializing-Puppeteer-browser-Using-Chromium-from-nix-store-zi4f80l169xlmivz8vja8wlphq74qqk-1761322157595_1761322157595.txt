@@ -1,0 +1,53 @@
+🚀 Initializing Puppeteer browser...
+Using Chromium from: /nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium
+✅ Browser initialized successfully
+
+🎯 Starting KOL scraping process...
+
+✅ Browser already initialized, reusing instance
+🌐 Navigating to https://kolscan.io/leaderboard...
+⏳ Waiting for dynamic content to load...
+📜 Scrolling to load all content...
+📄 Extracting leaderboard data and profile URLs...
+✅ Successfully extracted 1 KOL entries from leaderboard
+Found 1 KOLs. Now scraping profile pages...
+🔎 Navigating to profile page: https://kolscan.io/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1
+📄 Extracting detailed data from https://kolscan.io/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1...
+❌ Failed to scrape profile https://kolscan.io/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1: Error [ReferenceError]: __name is not defined
+    at evaluate (evaluate at KOLScraperV2.scrapeKOLProfile (file:///home/runner/workspace/server/kol-scraper-v2.ts:1:5627), <anonymous>:0:34)
+    at ExecutionContext.#evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:456:13)
+    at async ExecutionContext.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:293:12)
+    at async IsolatedWorld.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/IsolatedWorld.ts:196:12)
+    at async CdpFrame.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:488:12)
+    at async CdpPage.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:2320:12)
+    at async KOLScraperV2.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2.ts:259:28)
+    at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:416:31)
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:450:32)
+❌ Failed to process profile for Casino (/account/8rvAsDKeAcEjEkiZMug9k8v1y8mW6gQQiMobd89Uy7qR?timeframe=1) Error [ReferenceError]: __name is not defined
+    at evaluate (evaluate at KOLScraperV2.scrapeKOLProfile (file:///home/runner/workspace/server/kol-scraper-v2.ts:1:5627), <anonymous>:0:34)
+    at ExecutionContext.#evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:456:13)
+    at async ExecutionContext.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:293:12)
+    at async IsolatedWorld.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/cdp/IsolatedWorld.ts:196:12)
+    at async CdpFrame.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Frame.ts:488:12)
+    at async CdpPage.evaluate (/home/runner/workspace/node_modules/puppeteer-core/src/api/Page.ts:2320:12)
+    at async KOLScraperV2.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2.ts:259:28)
+    at async KOLScraperV2.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2.ts:416:31)
+    at async main (/home/runner/workspace/server/kol-scraper-v2.ts:450:32)
+💾 Saving 0 full KOL entries to database...
+✅ Saved 0/0 KOL entries to database
+🔒 Closing browser...
+✅ Browser closed
+
+✅ Scraping Complete: 0 entries scraped, 0 saved to database
+
+🔍 DEBUG: Getting latest scraped KOLs...
+🔍 DEBUG: Found 0 KOLs from latest scrape
+📊 LATEST SCRAPED KOL DATA (Structured Format):
+
+====================================================================================================
+
+====================================================================================================
+
+📋 JSON FORMAT (for programmatic use):
+
+[]
