@@ -82,7 +82,7 @@ export function LiveFeed({ bets }: LiveFeedProps) {
                     <span className="font-semibold">{bet.shares} shares</span>
                     <span>•</span>
                     <span className="font-bold tabular-nums">{parseFloat(bet.amount).toFixed(2)} PTS</span>
-                    {bet.profit && (bet.status === "settled" || bet.status === "won" || bet.status === "lost") && (
+                    {bet.profit && (
                       <>
                         <span>•</span>
                         <span className={`font-bold tabular-nums ${parseFloat(bet.profit) >= 0 ? 'text-success' : 'text-destructive'}`}>
