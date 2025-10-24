@@ -1,4 +1,3 @@
-
 import type { InsertScrapedKol } from '@shared/schema';
 
 export interface RawKOLData {
@@ -69,21 +68,27 @@ export class KOLDataParser {
     return match[0].replace(/,/g, '');
   }
 
-  static parseDecimalValue(valueStr: string | null): string | null {
+  static parseDecimalValue(valueStr: string | null | undefined): number | null {
     if (!valueStr) return null;
-    const cleaned = valueStr.replace(/[^0-9.+-]/g, '');
-    const match = cleaned.match(/[+-]?[\d,.]+/);
-    if (!match) return null;
-    return match[0].replace(/,/g, '');
+    // Handle case where valueStr might not be a string
+    if (typeof valueStr !== 'string') {
+      if (typeof valueStr === 'number') return valueStr;
+      return null;
+    }
+    const cleanedStr = valueStr.replace(/,/g, '').replace(/[^\d.-]/g, '');
+    const parsed = parseFloat(cleanedStr);
+    return isNaN(parsed) ? null : parsed;
   }
 
-  static parseIntValue(valueStr: string | number | null): number | null {
-    if (!valueStr && valueStr !== 0) return null;
-    // If already a number, return it
-    if (typeof valueStr === 'number') return isNaN(valueStr) ? null : valueStr;
-    // If string, clean and parse
-    const cleaned = valueStr.replace(/[^\d]/g, '');
-    const parsed = parseInt(cleaned, 10);
+  static parseIntValue(valueStr: string | null | undefined): number | null {
+    if (!valueStr) return null;
+    // Handle case where valueStr might not be a string
+    if (typeof valueStr !== 'string') {
+      if (typeof valueStr === 'number') return Math.floor(valueStr);
+      return null;
+    }
+    const cleanedStr = valueStr.replace(/,/g, '').replace(/[^\d.-]/g, '');
+    const parsed = parseInt(cleanedStr, 10);
     return isNaN(parsed) ? null : parsed;
   }
 
@@ -106,7 +111,7 @@ export class KOLDataParser {
 
   static parseFullKOLData(raw: FullKOLData): InsertScrapedKol {
     const { wins, losses } = this.parseWinsLosses(raw.winsLosses);
-    
+
     return {
       rank: this.parseRank(raw.rank),
       username: this.normalizeUsername(raw.username),

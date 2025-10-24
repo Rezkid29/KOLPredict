@@ -359,9 +359,11 @@ try {
 await this.init();
 const leaderboardEntries = await this.scrapeLeaderboard();
 
-console.log(`Found ${leaderboardEntries.length} KOLs. Now scraping profile pages...`);
+// Limit to 3 for testing
+const limitedEntries = leaderboardEntries.slice(0, 3);
+console.log(`Found ${leaderboardEntries.length} KOLs. Processing ${limitedEntries.length} for testing...`);
 
-for (const entry of leaderboardEntries) {
+for (const entry of limitedEntries) {
 if (!entry.profileUrl) {
 console.warn(`⚠️ Skipping ${entry.summary.username} - no profile URL found`);
 continue;
@@ -374,12 +376,46 @@ await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
 // Scrape the profile page. The function will handle 1d, 7d, and 30d.
 const profileData = await this.scrapeKOLProfile(entry.profileUrl);
 
-// Merge leaderboard summary and profile details
-allKOLData.push({
-...entry.summary,
-...profileData, 
+// Parse winsLosses from leaderboard data
+let wins: string | null = null;
+let losses: string | null = null;
+if (entry.summary.winsLosses) {
+const parts = entry.summary.winsLosses.split('/');
+if (parts.length === 2) {
+wins = parts[0].trim();
+losses = parts[1].trim();
+}
+}
+
+// Merge leaderboard summary and profile details with proper field mapping
+const fullKOLData: FullKOLData = {
+rank: entry.summary.rank,
+username: entry.summary.username,
+xHandle: entry.summary.xHandle,
+winsLosses: entry.summary.winsLosses,
+wins: wins,
+losses: losses,
+solGain: entry.summary.solGain,
+usdGain: entry.summary.usdGain,
+pnl1d: profileData.pnl1d || null,
+pnl7d: profileData.pnl7d || null,
+pnl30d: profileData.pnl30d || null,
+totalTrades: profileData.totalTrades || null,
+winRatePercent: profileData.winRatePercent || null,
+holdings: profileData.holdings || null,
+tradeHistory: profileData.tradeHistory || null,
 profileUrl: entry.profileUrl
+};
+
+console.log(`✅ Processed ${fullKOLData.username}:`, {
+wins: fullKOLData.wins,
+losses: fullKOLData.losses,
+solGain: fullKOLData.solGain,
+pnl7d: fullKOLData.pnl7d,
+totalTrades: fullKOLData.totalTrades
 });
+
+allKOLData.push(fullKOLData);
 
 } catch (error) {
 console.error(`❌ Failed to process profile for ${entry.summary.username} (${entry.profileUrl})`, error);
