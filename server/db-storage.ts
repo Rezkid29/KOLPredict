@@ -490,9 +490,10 @@ export class DbStorage implements IStorage {
         throw new ValidationError("Market has invalid pool values");
       }
 
-      if (yesSharePool <= 0 || yesCollateralPool <= 0 || noSharePool <= 0 || noCollateralPool <= 0) {
-        throw new ValidationError("Market pools are depleted");
-      }
+      // Allow pools to be zero initially, price will be 0.5
+      // if (yesSharePool <= 0 || yesCollateralPool <= 0 || noSharePool <= 0 || noCollateralPool <= 0) {
+      //   throw new ValidationError("Market pools are depleted");
+      // }
 
       // AMM Safety Constants
       const MIN_PRICE = 0.01;  // Minimum price to prevent prices from going to 0
@@ -518,6 +519,10 @@ export class DbStorage implements IStorage {
         // For prediction markets with dual pools, price = collateral liquidity ratio
         // This ensures yesPrice + noPrice = 1.0
         const totalLiquidity = yesCP + noCP;
+        // Handle edge case where totalLiquidity is 0 (e.g., market just created with no collateral)
+        if (totalLiquidity === 0) {
+          return { yesPrice: 0.5, noPrice: 0.5 };
+        }
         const yesPrice = yesCP / totalLiquidity;
         const noPrice = noCP / totalLiquidity;
         return { yesPrice, noPrice };
@@ -553,7 +558,7 @@ export class DbStorage implements IStorage {
         // Validate trade size relative to pool (max 40% of available liquidity)
         const totalLiquidity = yesCollateralPool + noCollateralPool; // Total collateral in the market
         const maxTradeSize = totalLiquidity * MAX_TRADE_PERCENTAGE;
-        if (netBetAmount > maxTradeSize) {
+        if (netBetAmount > maxTradeSize && totalLiquidity > 0) { // Only enforce if there is liquidity
           throw new ValidationError(
             `Trade size too large. Maximum allowed is ${maxTradeSize.toFixed(2)} (40% of pool). Your trade: ${netBetAmount.toFixed(2)}`
           );
@@ -582,9 +587,9 @@ export class DbStorage implements IStorage {
           throw new ValidationError("Invalid share calculation - trade too large for pool liquidity");
         }
 
-        // Validate new pools
-        if (newYesSharePool <= 0 || newYesCollateralPool <= 0 || newNoSharePool <= 0 || newNoCollateralPool <= 0) {
-          throw new ValidationError("Trade amount too large - would deplete market pools");
+        // Validate new pools. Allow pools to become 0, but not negative.
+        if (newYesSharePool < 0 || newYesCollateralPool < 0 || newNoSharePool < 0 || newNoCollateralPool < 0) {
+          throw new ValidationError("Trade amount too large - would result in negative pool values");
         }
 
       } else {
@@ -627,7 +632,7 @@ export class DbStorage implements IStorage {
 
         // Validate that opposite pool has enough liquidity for payout
         const oppositeCollateralPool = params.position === "YES" ? newNoCollateralPool : newYesCollateralPool;
-        if (betAmount > oppositeCollateralPool) {
+        if (betAmount > oppositeCollateralPool && oppositeCollateralPool > 0) { // Only enforce if opposite pool has liquidity
           throw new ValidationError(
             `Insufficient pool liquidity. Sell would require ${betAmount.toFixed(2)} from ${params.position === "YES" ? "NO" : "YES"} collateral pool, but only ${oppositeCollateralPool.toFixed(2)} available`
           );
@@ -674,15 +679,15 @@ export class DbStorage implements IStorage {
       }
 
       // Enforce price bounds to prevent extreme prices (prevents math instability)
-      if (yesPrice < MIN_PRICE || yesPrice > MAX_PRICE) {
+      if ((yesPrice < MIN_PRICE && params.position === "YES") || (yesPrice > MAX_PRICE && params.position === "YES")) {
         throw new ValidationError(
-          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting YES price: ${yesPrice.toFixed(4)}. Reduce trade size.`
+          `Trade would push YES price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting YES price: ${yesPrice.toFixed(4)}. Reduce trade size.`
         );
       }
 
-      if (noPrice < MIN_PRICE || noPrice > MAX_PRICE) {
+      if ((noPrice < MIN_PRICE && params.position === "NO") || (noPrice > MAX_PRICE && params.position === "NO")) {
         throw new ValidationError(
-          `Trade would push price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting NO price: ${noPrice.toFixed(4)}. Reduce trade size.`
+          `Trade would push NO price outside safe bounds (${MIN_PRICE}-${MAX_PRICE}). Resulting NO price: ${noPrice.toFixed(4)}. Reduce trade size.`
         );
       }
 
@@ -1259,27 +1264,29 @@ export class DbStorage implements IStorage {
     // Each side maintains: k = sharePool * collateralPool
     // When buying: user adds collateral, receives shares from pool
     // When selling: user returns shares, receives collateral from pool
-    
+
     if (side === 'yes') {
       // Maintain constant product for YES pool: k = yesSharePool * yesCollateralPool
       const k_yes = yesSharePool * yesCollateralPool;
-      
+
       // User adds collateral to YES pool
       const newYesCollateralPool = yesCollateralPool + amount;
-      
+
       // Maintain constant product: newYesSharePool * newYesCollateralPool = k
-      const newYesSharePool = k_yes / newYesCollateralPool;
-      
+      // Avoid division by zero if new pool becomes 0
+      const newYesSharePool = newYesCollateralPool > 0 ? k_yes / newYesCollateralPool : 0;
+
       // Shares given to user = reduction in share pool
       const shares = yesSharePool - newYesSharePool;
-      
+
       // NO pool unchanged when buying YES
       const newNoSharePool = noSharePool;
       const newNoCollateralPool = noCollateralPool;
-      
+
       // Calculate average price (total cost / shares received)
-      const avgPrice = amount / shares;
-      
+      // Avoid division by zero if shares is 0
+      const avgPrice = shares > 0 ? amount / shares : 0;
+
       return { 
         shares, 
         newYesSharePool, 
@@ -1291,23 +1298,23 @@ export class DbStorage implements IStorage {
     } else {
       // Buying NO - same CPMM logic for NO pool
       const k_no = noSharePool * noCollateralPool;
-      
+
       // User adds collateral to NO pool
       const newNoCollateralPool = noCollateralPool + amount;
-      
+
       // Maintain constant product
-      const newNoSharePool = k_no / newNoCollateralPool;
-      
+      const newNoSharePool = newNoCollateralPool > 0 ? k_no / newNoCollateralPool : 0;
+
       // Shares given to user
       const shares = noSharePool - newNoSharePool;
-      
+
       // YES pool unchanged when buying NO
       const newYesSharePool = yesSharePool;
       const newYesCollateralPool = yesCollateralPool;
-      
+
       // Calculate average price
-      const avgPrice = amount / shares;
-      
+      const avgPrice = shares > 0 ? amount / shares : 0;
+
       return { 
         shares, 
         newYesSharePool, 
@@ -1331,24 +1338,25 @@ export class DbStorage implements IStorage {
     // Dual-pool CPMM for selling
     // User returns shares to pool, receives collateral
     // Maintains constant product: k = sharePool * collateralPool
-    
+
     if (side === 'yes') {
       // Maintain constant product for YES pool
       const k_yes = yesSharePool * yesCollateralPool;
-      
+
       // User returns shares to YES pool
       const newYesSharePool = yesSharePool + sharesToSell;
-      
+
       // Maintain constant product: newYesSharePool * newYesCollateralPool = k
-      const newYesCollateralPool = k_yes / newYesSharePool;
-      
+      // Avoid division by zero if new pool becomes 0
+      const newYesCollateralPool = newYesSharePool > 0 ? k_yes / newYesSharePool : 0;
+
       // Payout = reduction in collateral pool
       const payout = yesCollateralPool - newYesCollateralPool;
-      
+
       // NO pool unchanged when selling YES
       const newNoSharePool = noSharePool;
       const newNoCollateralPool = noCollateralPool;
-      
+
       return { 
         payout, 
         newYesSharePool, 
@@ -1359,20 +1367,20 @@ export class DbStorage implements IStorage {
     } else {
       // Selling NO - same CPMM logic for NO pool
       const k_no = noSharePool * noCollateralPool;
-      
+
       // User returns shares to NO pool
       const newNoSharePool = noSharePool + sharesToSell;
-      
+
       // Maintain constant product
-      const newNoCollateralPool = k_no / newNoSharePool;
-      
+      const newNoCollateralPool = newNoSharePool > 0 ? k_no / newNoSharePool : 0;
+
       // Payout = reduction in collateral pool
       const payout = noCollateralPool - newNoCollateralPool;
-      
+
       // YES pool unchanged when selling NO
       const newYesSharePool = yesSharePool;
       const newYesCollateralPool = yesCollateralPool;
-      
+
       return { 
         payout, 
         newYesSharePool, 
