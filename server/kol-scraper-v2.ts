@@ -396,8 +396,10 @@ async function main() {
     await scraper.close();
   }
 }
-if (require.main === module) {
-  main();
+
+// Run main if this file is executed directly (ES module pattern)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => console.error('Error running main:', err));
 }
 
 export const kolScraperV2 = new KOLScraperV2();
