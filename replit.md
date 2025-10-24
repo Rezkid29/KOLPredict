@@ -72,9 +72,42 @@ The platform is built with a focus on real-time data, automated market dynamics,
 - **Puppeteer**: Node.js library for web scraping kolscan.io.
 - **Solana**: Blockchain integration for deposits/withdrawals via @solana/web3.js.
 
-## Recent Changes (October 23, 2025)
+## Recent Changes
 
-### Solana Integration - Backend Complete
+### October 24, 2025 - Market System Robustness Improvements
+Enhanced prediction market system with data validation, improved settlement logic, and better error handling:
+
+**Data Freshness Validation (server/market-resolver.ts)**:
+- Added `validateDataFreshness()` method to auto-cancel markets with stale data
+- Kolscan data validation: Markets cancelled if KOL scraped data is older than 2 hours
+- Follower cache validation: Follower growth markets cancelled if cache is older than 24 hours
+- Automatic refund processing for cancelled markets with stale data
+- Prevents settlement on outdated information
+
+**Enhanced Market Refund System (server/db-storage.ts)**:
+- Improved `refundMarket()` with row-level locking for concurrency safety
+- Added validation for bet amounts and user existence
+- Prevents negative balance scenarios with proper error handling
+- Tracks refund success and failure counts for monitoring
+- Better error messages for debugging
+
+**Fixed Leaderboard Ranking (server/db-storage.ts)**:
+- Users with identical `totalProfit` now share the same rank
+- Secondary sorting by `totalWins` and `totalBets` for deterministic ordering
+- Tiebreakers used only for display order, not rank assignment
+- Example: Two users with $100 profit both get rank #1, next user gets rank #3
+
+**Bet Settlement Verification**:
+- Confirmed shares-based payout logic is correct: `payout = shares × $1.00`
+- Atomic transactions with row-level locking prevent race conditions
+- Proper profit calculation: `profit = payout - bet_amount`
+
+**Code Cleanup**:
+- Removed deprecated `placeBetTransaction` function from storage interfaces
+- Fixed `MemStorage.placeBetWithLocking` to support local development and testing
+- Simplified implementation maintains feature parity with PostgreSQL version
+
+### October 23, 2025 - Solana Integration - Backend Complete
 Added complete Solana blockchain integration for cryptocurrency deposits and withdrawals:
 
 **Database Schema (shared/schema.ts)**:
