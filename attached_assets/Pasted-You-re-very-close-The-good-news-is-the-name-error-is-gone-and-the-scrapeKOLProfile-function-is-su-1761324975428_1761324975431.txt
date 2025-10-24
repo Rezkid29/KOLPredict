@@ -1,0 +1,318 @@
+You're very close! The good news is the __name error is gone and the scrapeKOLProfile function is successfully running.
+
+You have two new, distinct problems:
+
+Leaderboard Scraping: You're only extracting 1 KOL instead of the top 20.
+
+Profile Scraping: You're getting null for most values (PnL, Win Rate, etc.).
+
+I'll walk you through fixing both.
+
+1. How to Scrape All 20+ KOLs (Leaderboard)
+Your leaderboard scraper is only finding one entry because its logic for finding "rows" is too fragile and based on guesswork (e.g., hasImage && hasText).
+
+Based on the screenshot and the site's structure, every KOL row is a clickable link (<a> tag) that leads to an account page (/account/...). We can use this as a much more reliable selector.
+
+Solution
+Replace the entire leaderboardPage.evaluate() function in scrapeLeaderboard with this more robust version. It specifically targets the correct links and then extracts data from within each link.
+
+TypeScript
+
+      console.log('📄 Extracting leaderboard data and profile URLs...');
+      const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
+        const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
+        
+        // This is the new, stable selector. 
+        // It finds all <a> tags whose href starts with "/account/".
+        const rows = Array.from(document.querySelectorAll('a[href^="/account/"]'));
+        
+        console.log(`Found ${rows.length} potential KOL entry rows`);
+        
+        for (let i = 0; i < rows.length && extractedEntries.length < 20; i++) {
+          const row = rows[i];
+          try {
+            const text = row.textContent || '';
+            
+            // 1. Get Profile URL (easy, it's the row itself)
+            const profileUrl = row.getAttribute('href');
+
+            // 2. Get Rank
+            const rankEl = row.querySelector('div > span, div > p'); // Often the first text element
+            const rank = rankEl ? (rankEl.textContent || (i + 1).toString()).trim() : (i + 1).toString();
+
+            // 3. Get Username
+            // Finds the most prominent text, which is usually the username
+            const usernameEl = row.querySelector('p[class*="font-semibold"], p[class*="font-bold"]');
+            let username = usernameEl ? usernameEl.textContent?.trim() : 'Unknown';
+            
+            // Fallback if the first selector fails
+            if (username === 'Unknown') {
+                const textNodes = Array.from(row.querySelectorAll('p, span'));
+                const nameNode = textNodes.find(n => n.textContent && n.textContent.length > 2 && !n.textContent.match(/[\d\/\$]/));
+                if (nameNode) username = nameNode.textContent.trim();
+            }
+
+            // 4. Get X Handle
+            const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
+            let xHandle: string | null = null;
+            if (xLinkEl) {
+                const href = xLinkEl.getAttribute('href') || '';
+                const match = href.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]+)/);
+                if (match && match[1]) {
+                  xHandle = match[1];
+                }
+            }
+            
+            // 5. Get Wins/Losses
+            let winsLosses: string | null = null;
+            const wlMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+            if (wlMatch) {
+              winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
+            }
+            
+            // 6. Get SOL Gain
+            let solGain: string | null = null;
+            const solMatch = text.match(/\+?([\d,]+\.?\d*)\s*Sol/i);
+            if (solMatch) {
+              solGain = solMatch[1]; // Store just the number
+            }
+            
+            // 7. Get USD Gain
+            let usdGain: string | null = null;
+            // Look for ($X,XXX.XX)
+            const usdMatch = text.match(/\$\s*([\d,]+\.?\d*)/);
+            if (usdMatch) {
+              usdGain = usdMatch[1].replace(/,/g, ''); // Store just the number
+            }
+
+            extractedEntries.push({
+              summary: {
+                rank,
+                username,
+                xHandle,
+                winsLosses,
+                solGain,
+                usdGain
+              },
+              profileUrl
+            });
+            
+          } catch (err) {
+            console.error('Error processing row:', err);
+            continue;
+  _}
+        }
+        
+        return extractedEntries;
+      });
+
+      console.log(`✅ Successfully extracted ${kolEntries.length} KOL entries from leaderboard`);
+      return kolEntries;
+2. How to Fix the null Values (Profile)
+This is happening for two reasons:
+
+Wrong Page: The URL you're scraping is ...timeframe=1. This is the 1-day view. The data for "7D PnL" and "30D PnL" is not on this page, so it correctly returns null.
+
+Wrong Labels: Your findStatByLabel helper is looking for text labels that don't exist (like Total Trades) or it's failing to find the value next to a label that does exist (like Win Rate).
+
+Solution
+We'll fix this by scraping the correct data from the correct pages and using more specific selectors.
+
+Step 1: Modify scrapeAndSave to Scrape 7D/30D PnL
+
+Instead of just scraping one profile page, we'll tell the scraper to get the main data from the 1d page, then visit the 7d and 30d pages just to get the PnL.
+
+In your scrapeAndSave method, modify the loop:
+
+TypeScript
+
+      for (const entry of leaderboardEntries) {
+        // ... (skip if no profileUrl) ...
+
+        try {
+          await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+            
+            // --- NEW LOGIC ---
+            // Ensure the base URL is set to timeframe=1 for 1d stats
+            const baseUrl = entry.profileUrl.includes('?') 
+                ? entry.profileUrl.split('?')[0]
+                : entry.profileUrl;
+            
+            const url1d = `${baseUrl}?timeframe=1`;
+            const url7d = `${baseUrl}?timeframe=7`;
+            const url30d = `${baseUrl}?timeframe=30`;
+
+          // Scrape the main 1d page for Win Rate, Trades, etc.
+          const profileData = await this.scrapeKOLProfile(url1d);
+            
+            // Scrape the 7d and 30d pages just for PnL
+            // We pass 'pnlOnly' to tell the scraper to do a quick job
+            const pnlData7d = await this.scrapeKOLProfile(url7d, 'pnlOnly');
+            await new Promise(resolve => setTimeout(resolve, 500)); // small delay
+            const pnlData30d = await this.scrapeKOLProfile(url30d, 'pnlOnly');
+            // --- END NEW LOGIC ---
+
+          allKOLData.push({
+            ...entry.summary,
+            ...profileData, // Base data from 1d page
+            pnl7d: pnlData7d.pnl7d,     // Overwrite with 7d data
+            pnl30d: pnlData30d.pnl30d, // Overwrite with 30d data
+            profileUrl: entry.profileUrl
+          });
+
+        } catch (error) {
+          // ... (error handling) ...
+        }
+      }
+Step 2: Update scrapeKOLProfile to Handle This
+
+Now, update scrapeKOLProfile to accept the new mode and use better selectors. We'll replace the fragile findStatByLabel with direct queries.
+
+TypeScript
+
+  // Add a 'mode' parameter
+  async scrapeKOLProfile(profileUrl: string, mode: 'full' | 'pnlOnly' = 'full'): Promise<KOLDetailedData> {
+    if (!this.browser) {
+      throw new Error('Browser not initialized');
+    }
+
+    let profilePage: Page | null = null;
+    // The profileUrl already contains the correct timeframe (1, 7, or 30)
+    const fullUrl = `https://kolscan.io${profileUrl}`;
+    console.log(`🔎 Navigating to profile page: ${fullUrl} (Mode: ${mode})`);
+
+    try {
+      profilePage = await this.browser.newPage();
+      // ... (setUserAgent, etc.) ...
+      
+      await profilePage.goto(fullUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      });
+
+      // Wait for stats to appear
+      try {
+        // Wait for the stats box, which contains Win Rate, Volume, etc.
+        await profilePage.waitForSelector('div[class*="border-b"] > div[class*="grid"]', { timeout: 7000 });
+      } catch (e) {
+        console.log('⚠️ Profile page stats container not found. Content may be limited.');
+      }
+
+      const detailedData = await profilePage.evaluate((pageMode) => {
+        
+        // This is a much more robust helper function.
+        // It finds a label and returns the text of its *sibling*.
+        const findStatValueByLabel = (labelRegex) => {
+          try {
+            // Look for all 'p' or 'span' tags inside the main content
+            const allTextNodes = Array.from(document.querySelectorAll('main p, main span'));
+            const labelNode = allTextNodes.find((el) => labelRegex.test(el.textContent || ''));
+            
+            if (!labelNode) return null;
+
+            // The value is usually in the *next* element sibling
+            let valueNode = labelNode.nextElementSibling;
+            
+            // Or, they are both wrapped in a div, and the value is the last child
+            if (!valueNode && labelNode.parentElement) {
+                valueNode = labelNode.parentElement.lastElementChild;
+            }
+
+            if (valueNode && valueNode.textContent && valueNode.textContent !== labelNode.textContent) {
+                return valueNode.textContent.trim();
+            }
+            
+            // Fallback: check parent text (e.g., "Win Rate33.4%")
+            if(labelNode.parentElement && labelNode.parentElement.textContent) {
+                const parentText = labelNode.parentElement.textContent;
+                const labelText = labelNode.textContent || '';
+                const value = parentText.replace(labelText, '').trim();
+                if (value.length > 0 && value.length < 20) return value;
+            }
+
+            return null;
+          } catch (e) {
+            return null;
+          }
+        };
+        
+        // This helper finds the main PnL display, which changes per page
+        const findMainPnL = () => {
+            try {
+                // Find all elements that look like a PnL value (e.g., "+19.90 Sol ($3,784.8)")
+                const pnlNodes = Array.from(document.querySelectorAll('div[class*="text-green"], span[class*="text-green"], div[class*="text-red"], span[class*="text-red"]'));
+                const pnlNode = pnlNodes.find(el => el.textContent && el.textContent.includes('Sol') && el.textContent.includes('$'));
+                
+                if (pnlNode) return pnlNode.textContent.trim();
+                
+                // Fallback for timeframe PnL
+                return findStatValueByLabel(/PnL/i);
+            } catch (e) {
+                return null;
+            }
+        };
+
+        // --- Data Extraction Logic ---
+        
+        let pnl: string | null = null;
+        let pnl7d: string | null = null;
+        let pnl30d: string | null = null;
+        
+        let totalTrades: string | null = null;
+        let winRatePercent: string | null = null;
+        let holdings = [];
+        let tradeHistory = [];
+
+        // Find the main PnL for the *current* page (1d, 7d, or 30d)
+        pnl = findMainPnL();
+        
+        const url = window.location.href;
+        if (url.includes('timeframe=7')) {
+            pnl7d = pnl;
+        } else if (url.includes('timeframe=30')) {
+            pnl30d = pnl;
+        }
+        
+        // If we are in 'full' mode, scrape everything else
+        if (pageMode === 'full') {
+            // Use the labels from your screenshot
+            totalTrades = findStatValueByLabel(/Volume/i) || findStatValueByLabel(/Realized Profits/i);
+            winRatePercent = findStatValueByLabel(/Win Rate/i);
+
+            // Your holdings and trade history logic was fine, no changes needed
+            // ... (keep your existing logic for holdings) ...
+            // ... (keep your existing logic for tradeHistory) ...
+        }
+
+        return { 
+          pnl7d: pnl7d, 
+          pnl30d: pnl30d, 
+          totalTrades: totalTrades, 
+          winRatePercent: winRatePercent, 
+          holdings: holdings, 
+          tradeHistory: tradeHistory 
+        };
+      // Pass the 'mode' variable from Node.js into the browser context
+      }, mode); 
+
+      return detailedData as KOLDetailedData;
+
+    } catch (error) {
+      // ... (error handling) ...
+    } finally {
+      // ... (page close) ...
+    }
+  }
+By making these changes, your scraper will:
+
+Leaderboard: Correctly find all <a> tags for profiles and extract the top 20.
+
+Profiles:
+
+Visit the 1d page to get Win Rate and Volume (which you're calling totalTrades).
+
+Visit the 7d page to get the pnl7d value.
+
+Visit the 30d page to get the pnl30d value.
+
+Combine all this data into one object.
