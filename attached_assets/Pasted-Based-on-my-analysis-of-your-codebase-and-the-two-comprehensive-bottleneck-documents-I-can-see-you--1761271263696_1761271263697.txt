@@ -1,0 +1,89 @@
+Based on my analysis of your codebase and the two comprehensive bottleneck documents, I can see you have a well-structured prediction market system with some critical data integrity and reliability issues. Let me create a multi-layered execution plan that addresses these systematically.
+
+Strategic Overview
+Your system has 3 major problem layers that need to be fixed in sequence:
+
+Layer 1: Data Foundation - The root cause is that your market resolution relies on string parsing and stale scraped data. This creates cascading failures.
+
+Layer 2: Safety & Reliability - Without proper error handling and cancellation states, system failures unfairly penalize users.
+
+Layer 3: Financial Integrity - Non-transactional bet settlements can corrupt user balances during partial failures.
+
+The key insight is that fixing Layer 1 will eliminate ~60% of your resolution errors, which makes Layer 2's error handling much more reliable, which then makes Layer 3's transaction safety the final polish.
+
+Multi-Layered Execution Plan
+Phase 1: Core Data Integrity (Highest ROI - Fixes Root Cause)
+This phase migrates you from fragile string-based resolution to robust numeric-based resolution:
+
+1A. Schema Migration - Move scraped_kols from text to numeric types
+
+Already partially done: solGain and usdGain are decimal, wins/losses are integer
+This ensures data is parsed once during scraping, not 59 times during resolution
+1B. Scraper Robustness - Rewrite kol-scraper.ts to use DOM selectors instead of regex
+
+Replace all regex text extraction with querySelector targeting
+Move all parsing logic into KOLDataParser (centralize in one place)
+Output clean numeric data directly to database
+1C. On-Demand Scraping - Already implemented in market-resolver.ts:21-42!
+
+I see you already have getFreshKolData() that performs on-demand scraping
+Ensure all resolution methods use this instead of cached data
+1D. Username Normalization - Already implemented in kol-data-parser.ts:44-46!
+
+You have normalizeUsername() that lowercases and trims
+Ensure this is used consistently in both scraping and resolution matching
+Phase 2: Resilient Error Handling (Prevents User Losses)
+This phase ensures system failures trigger refunds instead of incorrect resolutions:
+
+2A. Add Market Cancellation State
+
+Extend markets.outcome to support: 'pending' | 'yes' | 'no' | 'cancelled'
+Update schema and types
+2B. Implement Graceful Degradation
+
+Wrap each market resolution in try-catch
+On error (missing metadata, API failure, scraping failure), set outcome to 'cancelled'
+Log detailed error for debugging
+2C. Build Refund Logic
+
+Create refundMarket(marketId) function
+Returns all bet amounts to users
+Updates user balances atomically
+2D. API Dependency Safety
+
+For follower growth markets, check if cached data is newer than market start time
+If X API fails AND cache is stale, cancel market instead of using bad data
+Phase 3: Financial Atomicity (Final Polish)
+This phase ensures bet settlements can never partially fail:
+
+3A. Transactional Settlement
+
+Refactor market-resolver.ts:772-810 (the settleBets method)
+Wrap all bet settlements for a single market in one database transaction
+Use the same row-locking pattern from placeBetWithLocking (already in db-storage.ts:370-735)
+3B. Code Cleanup
+
+Remove any deprecated transaction methods
+Ensure all bet placements use placeBetWithLocking
+3C. Audit Market Logic
+
+Fix top_rank_maintain and rank_flippening resolution logic
+Add unit tests for each market type
+Phase 4: Testing & Validation (Safety Net)
+4A. Integration Tests
+
+Test market resolution with fresh scraped data
+Test cancellation and refund flows
+Test settlement atomicity with concurrent bets
+4B. Data Validation
+
+Add staleness checks for all data sources
+Add schema validation for metadata
+This plan is designed to be executed sequentially because each phase builds on the previous one. However, within each phase, tasks can often be parallelized.
+
+Key Efficiency Optimizations:
+
+Phase 1 can be done in parallel across multiple files
+Phase 2A and 2C can be built simultaneously
+Phase 3 is smallest since your transactional infrastructure already exists
+Would you like me to proceed with implementing this plan? I'll start with Phase 1 to fix the data integrity issues at the root.
