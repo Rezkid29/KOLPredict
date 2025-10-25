@@ -1,0 +1,70 @@
+ Testing KOL Scraper V2 with Playwright...
+
+🚀 Initializing Playwright browser with stealth configuration...
+Using Chromium from: /nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium
+✅ Browser initialized successfully with Playwright
+🌐 Navigating to https://kolscan.io/leaderboard...
+⏳ Waiting for dynamic content to load...
+✅ Leaderboard rows found.
+📜 Scrolling to load all content...
+📄 Extracting leaderboard data and profile URLs...
+✅ Successfully extracted 20 KOL entries from leaderboard
+Found 20 KOLs. Processing 3 for testing...
+🔎 Navigating to profile page: https://kolscan.io/account/CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o?timeframe=1
+⚠️ Profile stats grid not found, data may be limited.
+📄 Extracting detailed data from https://kolscan.io/account/CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o?timeframe=1...
+❌ Failed to scrape profile https://kolscan.io/account/CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o?timeframe=1: page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+❌ Failed to process profile for Unknown (/account/CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o?timeframe=1) page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+🔎 Navigating to profile page: https://kolscan.io/account/CUKFKdJw7F91bZBbtAJMrLLxqtVigVSJhx644EFnCnw?timeframe=1
+⚠️ Profile stats grid not found, data may be limited.
+📄 Extracting detailed data from https://kolscan.io/account/CUKFKdJw7F91bZBbtAJMrLLxqtVigVSJhx644EFnCnw?timeframe=1...
+❌ Failed to scrape profile https://kolscan.io/account/CUKFKdJw7F91bZBbtAJMrLLxqtVigVSJhx644EFnCnw?timeframe=1: page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+❌ Failed to process profile for Unknown (/account/CUKFKdJw7F91bZBbtAJMrLLxqtVigVSJhx644EFnCnw?timeframe=1) page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+🔎 Navigating to profile page: https://kolscan.io/account/3kebnKw7cPdSkLRfiMEALyZJGZ4wdiSRvmoN4rD1yPzV?timeframe=1
+⚠️ Profile stats grid not found, data may be limited.
+📄 Extracting detailed data from https://kolscan.io/account/3kebnKw7cPdSkLRfiMEALyZJGZ4wdiSRvmoN4rD1yPzV?timeframe=1...
+❌ Failed to scrape profile https://kolscan.io/account/3kebnKw7cPdSkLRfiMEALyZJGZ4wdiSRvmoN4rD1yPzV?timeframe=1: page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+❌ Failed to process profile for Unknown (/account/3kebnKw7cPdSkLRfiMEALyZJGZ4wdiSRvmoN4rD1yPzV?timeframe=1) page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:23)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at KOLScraperV2Playwright.scrapeKOLProfile (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:177:46)
+    at async KOLScraperV2Playwright.scrapeAndSave (/home/runner/workspace/server/kol-scraper-v2-playwright.ts:328:31)
+    at async testPlaywrightScraper (/home/runner/workspace/server/test-scraper-playwright.ts:8:20)
+💾 Saving 0 full KOL entries to database...
+✅ Saved 0/0 KOL entries to database
+🔒 Closing browser...
+✅ Browser closed
+
+✅ Playwright test completed successfully!
+📊 Results: 0/0 KOLs scraped and saved
