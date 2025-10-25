@@ -47,30 +47,35 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
   const calculateAMMShares = (
     amount: number,
     pos: "YES" | "NO",
-    yesPool: number,
-    noPool: number
+    yesSharePool: number,
+    yesCollateralPool: number,
+    noSharePool: number,
+    noCollateralPool: number
   ): number => {
     if (amount <= 0) return 0;
-    const k = yesPool * noPool;
     
     if (pos === "YES") {
-      // Add collateral to YES pool, receive shares from YES pool
-      const newYesCollateral = yesPool + amount;
-      const newYesShares = k / newYesCollateral;
-      return yesPool - newYesShares;
+      // Buying YES: add collateral to YES pool, receive shares
+      const k = yesSharePool * yesCollateralPool;
+      const newYesCollateralPool = yesCollateralPool + amount;
+      const newYesSharePool = k / newYesCollateralPool;
+      return yesSharePool - newYesSharePool;
     } else {
-      // Add collateral to NO pool, receive shares from NO pool
-      const newNoCollateral = noPool + amount;
-      const newNoShares = k / newNoCollateral;
-      return noPool - newNoShares;
+      // Buying NO: add collateral to NO pool, receive shares
+      const k = noSharePool * noCollateralPool;
+      const newNoCollateralPool = noCollateralPool + amount;
+      const newNoSharePool = k / newNoCollateralPool;
+      return noSharePool - newNoSharePool;
     }
   };
 
-  const yesPool = parseFloat(market.yesCollateralPool);
-  const noPool = parseFloat(market.noCollateralPool);
+  const yesSharePool = parseFloat(market.yesSharePool);
+  const yesCollateralPool = parseFloat(market.yesCollateralPool);
+  const noSharePool = parseFloat(market.noSharePool);
+  const noCollateralPool = parseFloat(market.noCollateralPool);
   
   const estimatedShares = action === "buy" 
-    ? calculateAMMShares(amountAfterFee, position, yesPool, noPool)
+    ? calculateAMMShares(amountAfterFee, position, yesSharePool, yesCollateralPool, noSharePool, noCollateralPool)
     : betAmount;
   
   // Potential payout if position wins (each share pays $1.00)
