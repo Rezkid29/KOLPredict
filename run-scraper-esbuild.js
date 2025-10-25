@@ -1,9 +1,7 @@
 
-import { register } from 'esbuild-register/dist/node.js';
-
-register({
+require('esbuild-register/dist/node').register({
   target: 'node18',
-  format: 'esm'
+  format: 'cjs'
 });
 
-import('./server/test-scraper-v2.ts');
+require('./server/test-scraper-v2.ts');
