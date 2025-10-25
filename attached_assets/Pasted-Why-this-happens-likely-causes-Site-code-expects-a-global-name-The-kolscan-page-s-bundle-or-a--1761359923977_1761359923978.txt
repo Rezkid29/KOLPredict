@@ -1,0 +1,157 @@
+Why this happens (likely causes)
+
+Site code expects a global __name
+The kolscan page’s bundle (or a library it uses) may reference __name as a global during runtime. When your script runs (or when Playwright injects helper code) the site’s startup order can change and that symbol isn’t created yet → ReferenceError.
+
+Timing / race condition
+You’re evaluating page code before the site’s runtime has fully initialized. Your page.evaluate(...) executes while some page script is still initializing or after a failed initialization, causing the missing global.
+
+Isolation/injection interaction
+Some frameworks/compiled bundles use globals which can be sensitive to the execution environment (headless, different userAgent, CSP or isolated worlds). Playwright’s page.evaluate executes in a different isolated world — that sometimes reveals missing globals.
+
+Playwright wrapping / serialization quirk (less likely)
+There are edge cases where function serialization/interpolation causes naming issues, but that’s uncommon. Still worth debugging as described below.
+
+How to confirm (quick debug steps)
+
+Add these to the top of scrapeKOLProfile() (before goto) or run after navigation to surface what's happening:
+
+page.on('console', msg => console.log('PAGE LOG:', msg.type(), msg.text()));
+page.on('pageerror', err => console.error('PAGE ERROR:', err));
+
+
+Then after the profile goto run a tiny evaluate to see if __name exists:
+
+const hasName = await profilePage.evaluate(() => typeof (window as any).__name !== 'undefined');
+console.log('__name exists?', hasName);
+
+
+Also dump a minimal HTML snippet if you want:
+
+const htmlHead = await profilePage.evaluate(() => document.querySelector('main')?.outerHTML?.slice(0,1000));
+console.log('main head snippet:', htmlHead);
+
+
+This will show page console errors and whether the global exists — very helpful for narrowing cause.
+
+Practical fixes (recommended, in order)
+1) Make scraping resilient: wait longer / wait for concrete elements
+
+Your current selector 'main div[class*="grid"] p' may not be the first thing the site renders. Increase the wait or target a more specific element you can rely on:
+
+await profilePage.waitForLoadState('networkidle', { timeout: 45000 });
+await profilePage.waitForSelector('main .Token Pnl, [data-testid="profile-stats"]', { timeout: 15000 }).catch(()=>{console.warn('stats selector missing');});
+await profilePage.waitForTimeout(2000);
+
+
+(Adjust the selector to something that definitely exists for that profile page.)
+
+2) Guard your page.evaluate and retry on ReferenceError
+
+Wrap the evaluation in a retry that specifically handles ReferenceError and waits a bit before retrying:
+
+async function safeEvaluate<T>(page: Page, fn: Function, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await page.evaluate(fn as any);
+    } catch (err: any) {
+      if (err.message && err.message.includes('ReferenceError')) {
+        console.warn('ReferenceError inside page, retrying...', i+1, err.message);
+        await page.waitForTimeout(1500 + i * 1000);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('safeEvaluate retries exhausted');
+}
+
+
+Use safeEvaluate(profilePage, () => { /* extraction logic */ });
+
+3) Define __name if the site expects it
+
+If the site expects __name to exist, you can inject a small global before your page JS runs. Two options:
+
+(a) inject before navigation with addInitScript (best, because it runs before any page script):
+
+await context.addInitScript(() => {
+  // create a harmless shim if site expects __name
+  // pick a type the site likely expects (string/object); try empty string first
+  if (typeof window.__name === 'undefined') {
+    (window as any).__name = '';
+  }
+});
+
+
+Do this once when you create the context (in init()), before newPage() and before the goto.
+
+(b) set it after navigation (less ideal):
+
+await profilePage.evaluate(() => { if (typeof (window as any).__name === 'undefined') (window as any).__name = ''; });
+
+
+Either shim usually avoids the ReferenceError if the page merely tests or reads it.
+
+4) Remove or avoid console.log inside evaluated function
+
+Sometimes console usage inside the page evaluate can surface odd behaviour. Use minimal logging and return structured data, then console.log in Node.
+
+5) Debug in headed mode and reproduce locally
+
+Temporarily run with headless: false and slowMo to observe what's happening visually:
+
+this.browser = await chromium.launch({ headless: false, slowMo: 50, args: [...] });
+
+
+This often shows a login popup/CSP overlay/consent modal that blocks DOM from populating.
+
+Concrete changes to apply to your code
+
+In init() add addInitScript to context before creating pages:
+
+const context = await this.browser.newContext({
+  userAgent: ...,
+  viewport: ...
+});
+
+// Inject shim before any page script runs
+await context.addInitScript(() => {
+  if (typeof (window as any).__name === 'undefined') (window as any).__name = '';
+});
+
+this.leaderboardPage = await context.newPage();
+
+
+Add page error/console handlers in scrapeKOLProfile to collect page-side errors:
+
+profilePage.on('console', msg => console.log('PAGE LOG:', msg.type(), msg.text()));
+profilePage.on('pageerror', err => console.error('PAGE ERROR:', err));
+
+
+Replace direct profilePage.evaluate(...) with a safe wrapper that retries on ReferenceError (see safeEvaluate function above).
+
+Increase wait / fallback:
+
+await profilePage.goto(fullUrl, { waitUntil: 'networkidle', timeout: 60000 });
+await profilePage.waitForTimeout(1500);
+
+Why these fixes are safe
+
+addInitScript creates a harmless shim — it’s just setting a global if it’s missing. That prevents ReferenceError without interfering with most pages.
+
+Retry / longer wait addresses timing/race conditions.
+
+Console & pageerror handlers let you see exactly where the site fails if it still does.
+
+Final checklist for you to try
+
+Add the addInitScript shim (best single change).
+
+Add page console/pageerror listeners and re-run to capture more info.
+
+Use the safeEvaluate retry wrapper.
+
+If still failing: run in headed mode and inspect the page, or dump document.documentElement.innerHTML to find which script references __name.
+
+If you want, paste the output after adding the page.on('pageerror', ...) and addInitScript changes and I’ll read the logs and propose the exact minimal change. If you’d like I can also produce a patch diff of exactly where to insert the addInitScript and safeEvaluate in your current file.
