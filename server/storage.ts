@@ -14,6 +14,16 @@ import {
   type SolanaWithdrawal, type InsertSolanaWithdrawal,
   type PlatformFee, type InsertPlatformFee,
   type UserProfile, type InsertUserProfile,
+  type UserFollow, type InsertUserFollow,
+  type Activity, type InsertActivity,
+  type Conversation, type InsertConversation, type ConversationWithParticipants,
+  type Message, type InsertMessage,
+  type ForumThread, type InsertForumThread,
+  type ForumComment, type InsertForumComment,
+  type Notification, type InsertNotification,
+  type Achievement, type InsertAchievement,
+  type UserAchievement, type InsertUserAchievement,
+  type Faq, type InsertFaq,
   type LeaderboardEntry,
   type PriceHistoryPoint
 } from "@shared/schema";
@@ -132,6 +142,58 @@ export interface IStorage {
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
   getProfileByUsername(username: string): Promise<{ user: User; profile: UserProfile } | undefined>;
   ensureUserProfile(userId: string): Promise<UserProfile>;
+  updateUserProfile(userId: string, updates: Partial<Pick<UserProfile, 'bio' | 'avatarUrl'>>): Promise<UserProfile>;
+
+  // Follow system
+  followUser(followerId: string, followingId: string): Promise<UserFollow>;
+  unfollowUser(followerId: string, followingId: string): Promise<void>;
+  isFollowing(followerId: string, followingId: string): Promise<boolean>;
+  getFollowers(userId: string, limit?: number): Promise<Array<{ user: User; followedAt: Date }>>;
+  getFollowing(userId: string, limit?: number): Promise<Array<{ user: User; followedAt: Date }>>;
+
+  // Activities
+  createActivity(activity: InsertActivity): Promise<Activity>;
+  getUserActivities(userId: string, limit?: number): Promise<Activity[]>;
+  getFollowingActivities(userId: string, limit?: number): Promise<Activity[]>;
+
+  // Messaging
+  createConversation(user1Id: string, user2Id: string): Promise<Conversation>;
+  getConversation(user1Id: string, user2Id: string): Promise<Conversation | undefined>;
+  getUserConversations(userId: string, limit?: number): Promise<ConversationWithParticipants[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  getConversationMessages(conversationId: string, limit?: number): Promise<Message[]>;
+  markMessagesAsRead(conversationId: string, userId: string): Promise<void>;
+  getUnreadMessageCount(userId: string): Promise<number>;
+
+  // Forum
+  createForumThread(thread: InsertForumThread): Promise<ForumThread>;
+  getForumThreads(category?: string, limit?: number): Promise<ForumThread[]>;
+  getForumThread(threadId: string): Promise<ForumThread | undefined>;
+  updateForumThread(threadId: string, updates: Partial<Pick<ForumThread, 'title' | 'content' | 'isPinned' | 'isLocked'>>): Promise<ForumThread>;
+  createForumComment(comment: InsertForumComment): Promise<ForumComment>;
+  getForumComments(threadId: string, limit?: number): Promise<ForumComment[]>;
+  voteForumThread(threadId: string, userId: string, vote: 'up' | 'down'): Promise<void>;
+  voteForumComment(commentId: string, userId: string, vote: 'up' | 'down'): Promise<void>;
+
+  // Achievements
+  createAchievement(achievement: InsertAchievement): Promise<Achievement>;
+  getAchievements(): Promise<Achievement[]>;
+  awardAchievement(userId: string, achievementId: string): Promise<UserAchievement>;
+  getUserAchievements(userId: string): Promise<Array<UserAchievement & { achievement: Achievement }>>;
+  hasAchievement(userId: string, achievementId: string): Promise<boolean>;
+
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  markNotificationAsRead(notificationId: string): Promise<void>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+
+  // FAQs
+  createFaq(faq: InsertFaq): Promise<Faq>;
+  getFaqs(category?: string): Promise<Faq[]>;
+  updateFaq(faqId: string, updates: Partial<Pick<Faq, 'question' | 'answer' | 'category' | 'order'>>): Promise<Faq>;
+  deleteFaq(faqId: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1091,6 +1153,165 @@ export class MemStorage implements IStorage {
 
   async ensureUserProfile(userId: string): Promise<UserProfile> {
     throw new Error("MemStorage profile methods not implemented - use DbStorage");
+  }
+
+  async updateUserProfile(userId: string, updates: Partial<Pick<UserProfile, 'bio' | 'avatarUrl'>>): Promise<UserProfile> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Follow system (stub implementations)
+  async followUser(followerId: string, followingId: string): Promise<UserFollow> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async unfollowUser(followerId: string, followingId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getFollowers(userId: string, limit?: number): Promise<Array<{ user: User; followedAt: Date }>> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getFollowing(userId: string, limit?: number): Promise<Array<{ user: User; followedAt: Date }>> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Activities (stub implementations)
+  async createActivity(activity: InsertActivity): Promise<Activity> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUserActivities(userId: string, limit?: number): Promise<Activity[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getFollowingActivities(userId: string, limit?: number): Promise<Activity[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Messaging (stub implementations)
+  async createConversation(user1Id: string, user2Id: string): Promise<Conversation> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getConversation(user1Id: string, user2Id: string): Promise<Conversation | undefined> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUserConversations(userId: string, limit?: number): Promise<ConversationWithParticipants[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getConversationMessages(conversationId: string, limit?: number): Promise<Message[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Forum (stub implementations)
+  async createForumThread(thread: InsertForumThread): Promise<ForumThread> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getForumThreads(category?: string, limit?: number): Promise<ForumThread[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getForumThread(threadId: string): Promise<ForumThread | undefined> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async updateForumThread(threadId: string, updates: Partial<Pick<ForumThread, 'title' | 'content' | 'isPinned' | 'isLocked'>>): Promise<ForumThread> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async createForumComment(comment: InsertForumComment): Promise<ForumComment> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getForumComments(threadId: string, limit?: number): Promise<ForumComment[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async voteForumThread(threadId: string, userId: string, vote: 'up' | 'down'): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async voteForumComment(commentId: string, userId: string, vote: 'up' | 'down'): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Achievements (stub implementations)
+  async createAchievement(achievement: InsertAchievement): Promise<Achievement> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getAchievements(): Promise<Achievement[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async awardAchievement(userId: string, achievementId: string): Promise<UserAchievement> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUserAchievements(userId: string): Promise<Array<UserAchievement & { achievement: Achievement }>> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async hasAchievement(userId: string, achievementId: string): Promise<boolean> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // Notifications (stub implementations)
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUserNotifications(userId: string, limit?: number): Promise<Notification[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  // FAQs (stub implementations)
+  async createFaq(faq: InsertFaq): Promise<Faq> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async getFaqs(category?: string): Promise<Faq[]> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async updateFaq(faqId: string, updates: Partial<Pick<Faq, 'question' | 'answer' | 'category' | 'order'>>): Promise<Faq> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async deleteFaq(faqId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
   }
 }
 
