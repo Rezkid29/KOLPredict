@@ -85,6 +85,7 @@ export default function Home() {
     action: "buy" | "sell",
   ) => {
     try {
+      // Send to /api/bets with action parameter (not /api/bets/sell)
       await apiRequest("POST", "/api/bets", {
         marketId,
         position,

@@ -87,6 +87,7 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
     if (action === "buy" && betAmount > userBalance) return;
     if (action === "sell" && betAmount > currentShares) return;
     
+    // Pass action to onConfirm - it will be sent as "action" parameter to /api/bets
     onConfirm(market.id, position, betAmount, action);
     setAmount("");
     onClose();
