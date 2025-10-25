@@ -750,8 +750,8 @@ export class MemStorage implements IStorage {
     const market = this.markets.get(marketId);
     if (!market) return [];
 
-    const currentYesPrice = parseFloat(market.yesPrice);
-    const currentNoPrice = parseFloat(market.noPrice);
+    const currentYesPrice = parseFloat(market.currentYesPrice);
+    const currentNoPrice = parseFloat(market.currentNoPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
     const resolvesAt = new Date(market.resolvesAt);
