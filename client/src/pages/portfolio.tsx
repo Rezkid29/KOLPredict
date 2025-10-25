@@ -29,8 +29,8 @@ export default function Portfolio() {
   const totalProfit = user?.totalProfit ? parseFloat(user.totalProfit) : 0;
   const winRate = user?.totalBets ? ((user.totalWins / user.totalBets) * 100) : 0;
   
-  const activeBets = bets.filter(b => b.status === "pending");
-  const settledBets = bets.filter(b => b.status !== "pending");
+  const activeBets = bets.filter(b => b.status === "pending" || b.status === "open");
+  const settledBets = bets.filter(b => b.status === "settled" || b.status === "won" || b.status === "lost");
 
   const totalInvested = activeBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
 
@@ -230,7 +230,7 @@ export default function Portfolio() {
                         <div className="text-muted-foreground">
                           Total: <span className="font-medium text-foreground tabular-nums">{parseFloat(bet.amount).toFixed(2)}</span> PTS
                         </div>
-                        {bet.profit && (
+                        {bet.profit !== null && bet.profit !== undefined && (
                           <div className={parseFloat(bet.profit) >= 0 ? "text-success font-bold" : "text-destructive font-bold"}>
                             P&L: <span className="font-semibold tabular-nums">
                               {parseFloat(bet.profit) >= 0 ? '+' : ''}{parseFloat(bet.profit).toFixed(2)}
