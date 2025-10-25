@@ -339,7 +339,7 @@ export class DbStorage implements IStorage {
 
         await tx
           .update(users)
-          .set({ 
+          .set({
             balance: newBalance,
             totalProfit: newTotalProfit,
             totalWins: newTotalWins
@@ -799,7 +799,7 @@ export class DbStorage implements IStorage {
       const newTotalProfit = isSell && profit !== null
         ? (parseFloat(user.totalProfit) + profit).toFixed(2)
         : user.totalProfit;
-        
+
       await tx
         .update(users)
         .set({
@@ -823,10 +823,10 @@ export class DbStorage implements IStorage {
         })
         .where(eq(markets.id, params.marketId));
 
-      return { 
-        bet: createdBet, 
+      return {
+        bet: createdBet,
         priceImpact,
-        platformFee: platformFee > 0 ? platformFee : undefined 
+        platformFee: platformFee > 0 ? platformFee : undefined
       };
     });
   }
@@ -932,8 +932,8 @@ export class DbStorage implements IStorage {
       }
 
       await db.update(positions)
-        .set({ 
-          shares: newShares.toFixed(2), 
+        .set({
+          shares: newShares.toFixed(2),
           averagePrice: newAvgPrice.toFixed(4),
           updatedAt: new Date()
         })
@@ -951,28 +951,60 @@ export class DbStorage implements IStorage {
     }
   }
 
-  // Price history
+  // Price history - Generate historical data with dynamic intervals based on time until resolution
   async getMarketPriceHistory(marketId: string, days: number = 7): Promise<PriceHistoryPoint[]> {
     const market = await this.getMarket(marketId);
     if (!market) return [];
 
-    const currentYesPrice = parseFloat(market.currentYesPrice);
-    const currentNoPrice = parseFloat(market.currentNoPrice);
+    const currentYesPrice = parseFloat(market.yesPrice);
+    const currentNoPrice = parseFloat(market.noPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
+    const resolvesAt = new Date(market.resolvesAt);
+    const msUntilResolution = resolvesAt.getTime() - now.getTime();
+    const hoursUntilResolution = msUntilResolution / (1000 * 60 * 60);
 
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
+    let intervals: number;
+    let intervalType: 'minutes' | 'hours' | 'days';
+    let intervalMs: number;
 
-      const progress = (days - i) / days;
+    if (hoursUntilResolution <= 1) {
+      // Show last 60 minutes in 1-minute intervals
+      intervals = 60;
+      intervalType = 'minutes';
+      intervalMs = 60 * 1000;
+    } else if (hoursUntilResolution <= 24) {
+      // Show last 24 hours in 1-hour intervals
+      intervals = 24;
+      intervalType = 'hours';
+      intervalMs = 60 * 60 * 1000;
+    } else {
+      // Show last 7 days in 1-day intervals
+      intervals = 7;
+      intervalType = 'days';
+      intervalMs = 24 * 60 * 60 * 1000;
+    }
+
+    for (let i = intervals - 1; i >= 0; i--) {
+      const date = new Date(now.getTime() - (i * intervalMs));
+
+      const progress = (intervals - i) / intervals;
       const baseYesPrice = 0.5 + (currentYesPrice - 0.5) * progress;
       const randomVariation = (Math.random() - 0.5) * 0.05;
       const yesPrice = Math.max(0.01, Math.min(0.99, baseYesPrice + randomVariation));
       const noPrice = 1.0 - yesPrice;
 
+      let timeLabel: string;
+      if (intervalType === 'minutes') {
+        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+      } else if (intervalType === 'hours') {
+        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+      } else {
+        timeLabel = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }
+
       history.push({
-        time: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        time: timeLabel,
         yesPrice: parseFloat(yesPrice.toFixed(4)),
         noPrice: parseFloat(noPrice.toFixed(4)),
       });
@@ -1259,9 +1291,9 @@ export class DbStorage implements IStorage {
     yesCollateralPool: number,
     noSharePool: number,
     noCollateralPool: number
-  ): { 
+  ): {
     shares: number; // Shares received by the user
-    newYesSharePool: number; 
+    newYesSharePool: number;
     newYesCollateralPool: number;
     newNoSharePool: number;
     newNoCollateralPool: number;
@@ -1294,13 +1326,13 @@ export class DbStorage implements IStorage {
       // Avoid division by zero if shares is 0
       const avgPrice = shares > 0 ? amount / shares : 0;
 
-      return { 
-        shares, 
-        newYesSharePool, 
+      return {
+        shares,
+        newYesSharePool,
         newYesCollateralPool,
         newNoSharePool,
         newNoCollateralPool,
-        avgPrice 
+        avgPrice
       };
     } else {
       // Buying NO - same CPMM logic for NO pool
@@ -1322,13 +1354,13 @@ export class DbStorage implements IStorage {
       // Calculate average price
       const avgPrice = shares > 0 ? amount / shares : 0;
 
-      return { 
-        shares, 
-        newYesSharePool, 
+      return {
+        shares,
+        newYesSharePool,
         newYesCollateralPool,
         newNoSharePool,
         newNoCollateralPool,
-        avgPrice 
+        avgPrice
       };
     }
   }
@@ -1364,12 +1396,12 @@ export class DbStorage implements IStorage {
       const newNoSharePool = noSharePool;
       const newNoCollateralPool = noCollateralPool;
 
-      return { 
-        payout, 
-        newYesSharePool, 
-        newYesCollateralPool, 
-        newNoSharePool, 
-        newNoCollateralPool 
+      return {
+        payout,
+        newYesSharePool,
+        newYesCollateralPool,
+        newNoSharePool,
+        newNoCollateralPool
       };
     } else {
       // Selling NO - same CPMM logic for NO pool
@@ -1388,12 +1420,12 @@ export class DbStorage implements IStorage {
       const newYesSharePool = yesSharePool;
       const newYesCollateralPool = yesCollateralPool;
 
-      return { 
-        payout, 
-        newYesSharePool, 
-        newYesCollateralPool, 
-        newNoSharePool, 
-        newNoCollateralPool 
+      return {
+        payout,
+        newYesSharePool,
+        newYesCollateralPool,
+        newNoSharePool,
+        newNoCollateralPool
       };
     }
   }

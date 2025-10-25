@@ -127,7 +127,16 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
         {/* Performance chart */}
         <div className="border border-border rounded-lg p-3 bg-muted/20">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground font-medium">7-Day Price Trend</p>
+            <p className="text-xs text-muted-foreground font-medium">
+              {(() => {
+                if (!market.resolvesAt) return "Price Trend";
+                const msUntilResolution = new Date(market.resolvesAt).getTime() - Date.now();
+                const hoursUntilResolution = msUntilResolution / (1000 * 60 * 60);
+                if (hoursUntilResolution <= 1) return "60-Min Price Trend";
+                if (hoursUntilResolution <= 24) return "24-Hr Price Trend";
+                return "7-Day Price Trend";
+              })()}
+            </p>
             {priceHistory.length > 0 && (
               <Badge variant="outline" className="text-xs gap-1">
                 <TrendingUp className="h-3 w-3" />

@@ -745,7 +745,7 @@ export class MemStorage implements IStorage {
     }));
   }
 
-  // Price history - Generate mock historical data
+  // Price history - Generate historical data with dynamic intervals based on time until resolution
   async getMarketPriceHistory(marketId: string, days: number = 7): Promise<PriceHistoryPoint[]> {
     const market = this.markets.get(marketId);
     if (!market) return [];
@@ -754,21 +754,51 @@ export class MemStorage implements IStorage {
     const currentNoPrice = parseFloat(market.noPrice);
     const history: PriceHistoryPoint[] = [];
     const now = new Date();
+    const resolvesAt = new Date(market.resolvesAt);
+    const msUntilResolution = resolvesAt.getTime() - now.getTime();
+    const hoursUntilResolution = msUntilResolution / (1000 * 60 * 60);
 
-    // Generate historical data points (one per day)
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      
-      // Create a trend that leads to current prices
-      const progress = (days - i) / days;
+    let intervals: number;
+    let intervalType: 'minutes' | 'hours' | 'days';
+    let intervalMs: number;
+
+    if (hoursUntilResolution <= 1) {
+      // Show last 60 minutes in 1-minute intervals
+      intervals = 60;
+      intervalType = 'minutes';
+      intervalMs = 60 * 1000;
+    } else if (hoursUntilResolution <= 24) {
+      // Show last 24 hours in 1-hour intervals
+      intervals = 24;
+      intervalType = 'hours';
+      intervalMs = 60 * 60 * 1000;
+    } else {
+      // Show last 7 days in 1-day intervals
+      intervals = 7;
+      intervalType = 'days';
+      intervalMs = 24 * 60 * 60 * 1000;
+    }
+
+    for (let i = intervals - 1; i >= 0; i--) {
+      const date = new Date(now.getTime() - (i * intervalMs));
+
+      const progress = (intervals - i) / intervals;
       const baseYesPrice = 0.5 + (currentYesPrice - 0.5) * progress;
       const randomVariation = (Math.random() - 0.5) * 0.05;
       const yesPrice = Math.max(0.01, Math.min(0.99, baseYesPrice + randomVariation));
       const noPrice = 1.0 - yesPrice;
 
+      let timeLabel: string;
+      if (intervalType === 'minutes') {
+        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+      } else if (intervalType === 'hours') {
+        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+      } else {
+        timeLabel = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }
+
       history.push({
-        time: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        time: timeLabel,
         yesPrice: parseFloat(yesPrice.toFixed(4)),
         noPrice: parseFloat(noPrice.toFixed(4)),
       });
