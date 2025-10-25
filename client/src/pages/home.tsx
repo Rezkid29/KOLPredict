@@ -199,7 +199,7 @@ export default function Home() {
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Trade prediction markets on Key Opinion Leader performance. Bet on
-              follower growth, engagement rates, and real-time influence
+              rankings, P&L, win ratios, and real-time influence
               metrics.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 pt-6">
