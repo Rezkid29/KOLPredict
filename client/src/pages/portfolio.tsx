@@ -15,6 +15,7 @@ import {
   XCircle
 } from "lucide-react";
 import type { BetWithMarket, User } from "@shared/schema";
+import logoImage from "/favicon.png";
 
 export default function Portfolio() {
   const { data: user } = useQuery<User>({
@@ -79,7 +80,7 @@ export default function Portfolio() {
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
-              <BarChart3 className="h-6 w-6 text-primary" />
+              <img src={logoImage} alt="KOL Predict Logo" className="h-6 w-6" />
             </div>
             <h1 className="text-4xl md:text-5xl font-display font-bold">Portfolio</h1>
           </div>
