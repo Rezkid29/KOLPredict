@@ -9,29 +9,16 @@ export interface RawKOLData {
   usdGain: string | null;
 }
 
-export interface KOLHolding {
-  tokenName: string;
-  tokenSymbol: string;
-  valueUsd: string | null;
-  amount: string | null;
-}
-
-export interface KOLTrade {
-  type: 'buy' | 'sell';
-  tokenName: string;
-  amount: string | null;
-  valueUsd: string | null;
-  timestamp: string | null;
-}
-
 export interface KOLDetailedData {
-  pnl1d?: string | null;
+  pnl1d: string | null;
   pnl7d: string | null;
   pnl30d: string | null;
-  totalTrades: string | null;
-  winRatePercent: string | null;
-  holdings: KOLHolding[];
-  tradeHistory: KOLTrade[];
+  winRate1d: string | null;
+  winRate7d: string | null;
+  winRate30d: string | null;
+  totalTrades1d: string | null;
+  totalTrades7d: string | null;
+  totalTrades30d: string | null;
 }
 
 export type FullKOLData = RawKOLData & KOLDetailedData & { profileUrl?: string };
@@ -120,13 +107,18 @@ export class KOLDataParser {
       losses,
       solGain: this.parseSolGain(raw.solGain),
       usdGain: this.parseUsdGain(raw.usdGain),
-      // New detailed fields
+      // PnL for each timeframe
+      pnl1d: this.parseDecimalValue(raw.pnl1d),
       pnl7d: this.parseDecimalValue(raw.pnl7d),
       pnl30d: this.parseDecimalValue(raw.pnl30d),
-      totalTrades: this.parseIntValue(raw.totalTrades),
-      winRatePercent: this.parseDecimalValue(raw.winRatePercent),
-      holdings: raw.holdings && raw.holdings.length > 0 ? JSON.stringify(raw.holdings) : null,
-      tradeHistory: raw.tradeHistory && raw.tradeHistory.length > 0 ? JSON.stringify(raw.tradeHistory) : null,
+      // Win Rate for each timeframe
+      winRate1d: this.parseDecimalValue(raw.winRate1d),
+      winRate7d: this.parseDecimalValue(raw.winRate7d),
+      winRate30d: this.parseDecimalValue(raw.winRate30d),
+      // Total Trades for each timeframe
+      totalTrades1d: this.parseIntValue(raw.totalTrades1d),
+      totalTrades7d: this.parseIntValue(raw.totalTrades7d),
+      totalTrades30d: this.parseIntValue(raw.totalTrades30d),
       profileUrl: raw.profileUrl || null,
     };
   }
