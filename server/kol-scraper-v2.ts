@@ -72,7 +72,6 @@ window.scrollTo(0, document.body.scrollHeight);
 });
 await new Promise(resolve => setTimeout(resolve, 2000));
 
-// --- UPDATED LEADERBOARD EXTRACTION LOGIC ---
 console.log('📄 Extracting leaderboard data and profile URLs...');
 const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
 const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
@@ -89,18 +88,15 @@ const profileUrl = row.getAttribute('href');
 const rankEl = row.querySelector('span, p'); 
 const rank = rankEl ? rankEl.textContent?.trim() : (i + 1).toString();
 
-// Find username (more resilient)
 let username = 'Unknown';
 const pEls = Array.from(row.querySelectorAll('p'));
 const potentialNameEl = pEls.find(p => {
 const text = p.textContent || '';
-// Find text that is not PnL, not rank, not W/L
 return text.length > 0 && !text.includes('Sol') && !text.includes('$') && !text.match(/^[\d\s\/]+$/);
 });
 if (potentialNameEl) {
 username = potentialNameEl.textContent?.trim() || 'Unknown';
 } else {
-// Fallback to original
 const usernameEl = row.querySelector('p[class*="font-semibold"], p[class*="font-bold"]');
 if (usernameEl) username = usernameEl.textContent?.trim() || 'Unknown';
 }
@@ -123,7 +119,7 @@ const pnlEl = Array.from(row.querySelectorAll('p, span')).find(el =>
 el.textContent?.includes('Sol') && el.textContent.includes('$')
 );
 if (pnlEl) {
-const pnlText = pnlEl.textContent;
+const pnlText = pnlEl.textContent || '';
 const solMatch = pnlText.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
 const usdMatch = pnlText.match(/\$\s*([+-]?[\d,]+\.?\d*)/);
 if (solMatch) solGain = solMatch[1].replace(/,/g, '');
@@ -131,7 +127,7 @@ if (usdMatch) usdGain = usdMatch[1].replace(/,/g, '');
 }
 
 extractedEntries.push({
-summary: { rank, username, xHandle, winsLosses, solGain, usdGain },
+summary: { rank: rank || '', username, xHandle, winsLosses, solGain, usdGain },
 profileUrl
 });
 
@@ -143,7 +139,6 @@ continue;
 
 return extractedEntries;
 });
-// --- END OF UPDATED SECTION ---
 
 console.log(`✅ Successfully extracted ${kolEntries.length} KOL entries from leaderboard`);
 return kolEntries;
@@ -154,14 +149,12 @@ throw error;
 }
 }
 
-// --- MAJORLY UPDATED PROFILE SCRAPING LOGIC ---
 async scrapeKOLProfile(profileUrl: string): Promise<KOLDetailedData> {
 if (!this.browser) {
 throw new Error('Browser not initialized');
 }
 
 let profilePage: Page | null = null;
-// Always go to the 1d view first
 const baseUrl = profileUrl.includes('?') ? profileUrl.split('?')[0] : profileUrl;
 const fullUrl = `https://kolscan.io${baseUrl}?timeframe=1`;
 console.log(`🔎 Navigating to profile page: ${fullUrl}`);
@@ -175,7 +168,6 @@ waitUntil: 'networkidle2',
 timeout: 30000
 });
 
-// Wait for the main stats grid to appear
 try {
 await profilePage.waitForSelector('main div[class*="grid"] p', { timeout: 7000 });
 console.log('✅ Profile stats grid found.');
@@ -186,19 +178,14 @@ console.warn('⚠️ Profile stats grid not found, data may be limited.');
 console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
 const detailedData = await profilePage.evaluate(async () => {
-// Helper to pause execution
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper 1: Find a stat value by its label
-// This looks for a div containing the label text and returns its sibling's text.
 const findStatValueByLabel = (labelRegex: RegExp): string | null => {
 try {
-// Based on the screenshot, stats are in 'div's with two 'p' tags
 const allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
 for (const div of allStatDivs) {
 const texts = Array.from(div.querySelectorAll('p')).map(p => p.textContent || '');
 if (texts.length === 2) {
-// texts[0] is label, texts[1] is value
 if (labelRegex.test(texts[0])) {
 return texts[1].trim();
 }
@@ -208,112 +195,88 @@ return null;
 } catch (e) { return null; }
 };
 
-// Helper 2: Find the main PnL display
-const findMainPnL = (): string | null => {
+const extractSolFromPnL = (): string | null => {
 try {
-// "121/241 +164.68 Sol ($31,322.5)"
 const pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(el => 
 el.textContent?.includes('Sol') && 
 el.textContent.includes('$') &&
 el.textContent.match(/\d+\s*\/\s*\d+/)
 );
-if (!pnlEl) return null;
+if (!pnlEl || !pnlEl.textContent) return null;
 
-const pnlRaw = pnlEl.textContent;
-const pnlMatch = pnlRaw.match(/([+-]?[\d,]+\.?\d*)\s*Sol\s*\(\$([+-]?[\d,]+\.?\d*)\)/i);
+const pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
 if (pnlMatch) {
-// Format as "164.68 Sol ($31322.5)"
-return `${pnlMatch[1].replace(/,/g, '')} Sol ($${pnlMatch[2].replace(/,/g, '')})`;
+return pnlMatch[1].replace(/,/g, '');
 }
-return null; // No match
+return null;
 } catch (e) { return null; }
 };
 
-// Helper 3: Click a timeframe button
-const clickTimeframe = async (label: '1d' | '7d' | '30d'): Promise<string | null> => {
+const extractCurrentTimeframeData = (): { pnl: string | null; winRate: string | null; volume: string | null } => {
+const pnl = extractSolFromPnL();
+let winRate = findStatValueByLabel(/Win Rate/i);
+if (winRate) winRate = winRate.replace('%', '');
+let volume = findStatValueByLabel(/Volume/i);
+if (volume) volume = volume.replace(/[$,]/g, '');
+
+return { pnl, winRate, volume };
+};
+
+const clickTimeframeAndExtract = async (label: '1d' | '7d' | '30d'): Promise<{ pnl: string | null; winRate: string | null; volume: string | null }> => {
 try {
 const button = Array.from(document.querySelectorAll('button')).find(
 b => b.textContent?.trim().toLowerCase() === label
 );
-if (!button) return null;
+if (!button) {
+console.error(`Button ${label} not found`);
+return { pnl: null, winRate: null, volume: null };
+}
 
-const oldPnL = findMainPnL();
+const oldData = extractCurrentTimeframeData();
 button.click();
 
-// Wait for PnL to update
-let newPnL = oldPnL;
-for (let i = 0; i < 10; i++) { // Wait up to 5 seconds
-await delay(500);
-newPnL = findMainPnL();
-if (newPnL !== oldPnL) {
-return newPnL; // Success
+await delay(1500);
+const newData = extractCurrentTimeframeData();
+
+if (newData.pnl === oldData.pnl && newData.winRate === oldData.winRate) {
+await delay(1500);
+return extractCurrentTimeframeData();
 }
-}
-return newPnL; // Return whatever we have after timeout
+
+return newData;
 } catch (e) {
 console.error(`Error clicking ${label}:`, e);
-return null;
+return { pnl: null, winRate: null, volume: null };
 }
 };
 
-// --- Main Extraction Logic ---
-
-// 1. Scrape 1d data (already loaded)
 console.log('Extracting 1d data...');
-const pnl1d = findMainPnL();
-let winRatePercent = findStatValueByLabel(/Win Rate/i);
-if (winRatePercent) winRatePercent = winRatePercent.replace('%', '');
+const data1d = extractCurrentTimeframeData();
 
-// Use "Volume" or "Realized Profits" for Total Trades
-let totalTrades = findStatValueByLabel(/Volume/i) || findStatValueByLabel(/Realized Profits/i);
-if (totalTrades) totalTrades = totalTrades.replace(/[$,]/g, '');
+console.log('Clicking 7d button...');
+const data7d = await clickTimeframeAndExtract('7d');
 
-// 2. Click 7d and scrape PnL
-console.log('Clicking 7d and extracting PnL...');
-const pnl7d = await clickTimeframe('7d');
-
-// 3. Click 30d and scrape PnL
-console.log('Clicking 30d and extracting PnL...');
-const pnl30d = await clickTimeframe('30d');
-
-// 4. Extract Holdings (only need to do this once)
-let holdings: Array<{tokenName: string; tokenSymbol: string; valueUsd: string | null; amount: string | null}> = [];
-const holdingElements = document.querySelectorAll('a[href*="/token/"]');
-for (const elem of Array.from(holdingElements).slice(0, 10)) {
-const tokenName = elem.textContent?.trim();
-if (tokenName && tokenName.length > 0 && tokenName.toUpperCase() !== tokenName) { // Filter out symbols
-const parent = elem.closest('tr, div[class*="flex"], div[class*="grid"]');
-const parentText = parent?.textContent || '';
-const valueMatch = parentText.match(/\$([\d,]+\.?\d*)/);
-
-holdings.push({
-tokenName: tokenName,
-tokenSymbol: tokenName,
-valueUsd: valueMatch ? valueMatch[1].replace(/,/g, '') : null,
-amount: null
-});
-}
-}
+console.log('Clicking 30d button...');
+const data30d = await clickTimeframeAndExtract('30d');
 
 console.log('=== EXTRACTION RESULTS ===');
-console.log('PnL 1D:', pnl1d);
-console.log('PnL 7D:', pnl7d);
-console.log('PnL 30D:', pnl30d);
-console.log('Total Trades (Volume):', totalTrades);
-console.log('Win Rate %:', winRatePercent);
+console.log('1D - PnL:', data1d.pnl, 'Win Rate:', data1d.winRate, 'Volume:', data1d.volume);
+console.log('7D - PnL:', data7d.pnl, 'Win Rate:', data7d.winRate, 'Volume:', data7d.volume);
+console.log('30D - PnL:', data30d.pnl, 'Win Rate:', data30d.winRate, 'Volume:', data30d.volume);
 console.log('========================');
 
-return { 
-pnl1d: pnl1d,
-pnl7d: pnl7d, 
-pnl30d: pnl30d, 
-totalTrades: totalTrades, 
-winRatePercent: winRatePercent, 
-holdings: holdings, 
-tradeHistory: [] // Trade history scraping is complex, skipping for now
+return { 
+pnl1d: data1d.pnl,
+pnl7d: data7d.pnl, 
+pnl30d: data30d.pnl,
+winRate1d: data1d.winRate,
+winRate7d: data7d.winRate,
+winRate30d: data30d.winRate,
+totalTrades1d: data1d.volume,
+totalTrades7d: data7d.volume,
+totalTrades30d: data30d.volume,
 };
 });
-// --- END OF UPDATED SECTION ---
 
 return detailedData as KOLDetailedData;
 
@@ -352,14 +315,12 @@ console.log('✅ Browser closed');
 }
 }
 
-// --- UPDATED scrapeAndSave LOGIC ---
 async scrapeAndSave(): Promise<{ scraped: number; saved: number }> {
 let allKOLData: FullKOLData[] = [];
 try {
 await this.init();
 const leaderboardEntries = await this.scrapeLeaderboard();
 
-// Limit to 3 for testing
 const limitedEntries = leaderboardEntries.slice(0, 3);
 console.log(`Found ${leaderboardEntries.length} KOLs. Processing ${limitedEntries.length} for testing...`);
 
@@ -370,49 +331,33 @@ continue;
 }
 
 try {
-// Add a delay between each profile scrape
 await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
 
-// Scrape the profile page. The function will handle 1d, 7d, and 30d.
 const profileData = await this.scrapeKOLProfile(entry.profileUrl);
 
-// Parse winsLosses from leaderboard data
-let wins: string | null = null;
-let losses: string | null = null;
-if (entry.summary.winsLosses) {
-const parts = entry.summary.winsLosses.split('/');
-if (parts.length === 2) {
-wins = parts[0].trim();
-losses = parts[1].trim();
-}
-}
-
-// Merge leaderboard summary and profile details with proper field mapping
 const fullKOLData: FullKOLData = {
 rank: entry.summary.rank,
 username: entry.summary.username,
 xHandle: entry.summary.xHandle,
 winsLosses: entry.summary.winsLosses,
-wins: wins,
-losses: losses,
 solGain: entry.summary.solGain,
 usdGain: entry.summary.usdGain,
-pnl1d: profileData.pnl1d || null,
-pnl7d: profileData.pnl7d || null,
-pnl30d: profileData.pnl30d || null,
-totalTrades: profileData.totalTrades || null,
-winRatePercent: profileData.winRatePercent || null,
-holdings: profileData.holdings || null,
-tradeHistory: profileData.tradeHistory || null,
+pnl1d: profileData.pnl1d,
+pnl7d: profileData.pnl7d,
+pnl30d: profileData.pnl30d,
+winRate1d: profileData.winRate1d,
+winRate7d: profileData.winRate7d,
+winRate30d: profileData.winRate30d,
+totalTrades1d: profileData.totalTrades1d,
+totalTrades7d: profileData.totalTrades7d,
+totalTrades30d: profileData.totalTrades30d,
 profileUrl: entry.profileUrl
 };
 
 console.log(`✅ Processed ${fullKOLData.username}:`, {
-wins: fullKOLData.wins,
-losses: fullKOLData.losses,
-solGain: fullKOLData.solGain,
 pnl7d: fullKOLData.pnl7d,
-totalTrades: fullKOLData.totalTrades
+winRate7d: fullKOLData.winRate7d,
+totalTrades7d: fullKOLData.totalTrades7d
 });
 
 allKOLData.push(fullKOLData);
@@ -436,6 +381,7 @@ await this.close();
 }
 }
 }
+
 async function main() {
 const scraper = new KOLScraperV2();
 try {
@@ -455,24 +401,21 @@ console.log('='.repeat(100));
 latestScrapedData.forEach((kol, index) => {
 console.log(`\n[${index + 1}] RANK #${kol.rank} - ${kol.username}`);
 console.log('-'.repeat(100));
-console.log(`  Username:     ${kol.username}`);
-console.log(`  X Handle:     ${kol.xHandle || 'N/A'}`);
-console.log(`  Wins/Losses:  ${kol.winsLosses || 'N/A'}`);
-console.log(`  SOL Gain:     ${kol.solGain || 'N/A'}`);
-console.log(`  USD Gain:     ${kol.usdGain || 'N/A'}`);
-console.log(`  PNL 1D:       ${(kol as any).pnl1d || 'N/A'}`); 
-console.log(`  PNL 7D:       ${kol.pnl7d || 'N/A'}`);
-console.log(`  PNL 30D:      ${kol.pnl30d || 'N/A'}`);
-console.log(`  Total Trades: ${kol.totalTrades || 'N/A'}`);
-console.log(`  Win Rate:     ${kol.winRatePercent || 'N/A'}`);
-console.log(`  Scraped At:   ${kol.scrapedAt}`);
-
-if (kol.holdings) {
-console.log(`  Holdings:     ${kol.holdings}`);
-}
-if (kol.tradeHistory) {
-console.log(`  Trade Hist:_ ${kol.tradeHistory}`);
-}
+console.log(`  Username:       ${kol.username}`);
+console.log(`  X Handle:       ${kol.xHandle || 'N/A'}`);
+console.log(`  Wins/Losses:    ${kol.wins}/${kol.losses || 'N/A'}`);
+console.log(`  SOL Gain:       ${kol.solGain || 'N/A'}`);
+console.log(`  USD Gain:       ${kol.usdGain || 'N/A'}`);
+console.log(`  PNL 1D:         ${kol.pnl1d || 'N/A'}`); 
+console.log(`  PNL 7D:         ${kol.pnl7d || 'N/A'}`);
+console.log(`  PNL 30D:        ${kol.pnl30d || 'N/A'}`);
+console.log(`  Win Rate 1D:    ${kol.winRate1d || 'N/A'}%`);
+console.log(`  Win Rate 7D:    ${kol.winRate7d || 'N/A'}%`);
+console.log(`  Win Rate 30D:   ${kol.winRate30d || 'N/A'}%`);
+console.log(`  Total Trades 1D:${kol.totalTrades1d || 'N/A'}`);
+console.log(`  Total Trades 7D:${kol.totalTrades7d || 'N/A'}`);
+console.log(`  Total Trades 30D:${kol.totalTrades30d || 'N/A'}`);
+console.log(`  Scraped At:     ${kol.scrapedAt}`);
 });
 
 console.log('\n' + '='.repeat(100));
@@ -491,4 +434,3 @@ main().catch(err => console.error('Error running main:', err));
 }
 
 export const kolScraperV2 = new KOLScraperV2();
-
