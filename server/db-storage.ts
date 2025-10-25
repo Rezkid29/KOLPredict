@@ -36,6 +36,16 @@ import {
   solanaWithdrawals,
   platformFees,
   userProfiles,
+  userFollows,
+  activities,
+  conversations,
+  messages,
+  forumThreads,
+  forumComments,
+  notifications,
+  achievements,
+  userAchievements,
+  faqs,
   type User,
   type InsertUser,
   type Kol,
@@ -72,6 +82,27 @@ import {
   type PriceHistoryPoint,
   type UserProfile,
   type InsertUserProfile,
+  type UserFollow,
+  type InsertUserFollow,
+  type Activity,
+  type InsertActivity,
+  type Conversation,
+  type InsertConversation,
+  type ConversationWithParticipants,
+  type Message,
+  type InsertMessage,
+  type ForumThread,
+  type InsertForumThread,
+  type ForumComment,
+  type InsertForumComment,
+  type Notification,
+  type InsertNotification,
+  type Achievement,
+  type InsertAchievement,
+  type UserAchievement,
+  type InsertUserAchievement,
+  type Faq,
+  type InsertFaq,
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 
@@ -1352,6 +1383,540 @@ export class DbStorage implements IStorage {
     await db.update(userProfiles).set(updateData).where(eq(userProfiles.id, createdProfile.id));
 
     return { ...createdProfile, ...updateData };
+  }
+
+  async updateUserProfile(userId: string, updates: Partial<Pick<UserProfile, 'bio' | 'avatarUrl'>>): Promise<UserProfile> {
+    await db.update(userProfiles).set({ ...updates, updatedAt: new Date() }).where(eq(userProfiles.userId, userId));
+    const profile = await this.getUserProfile(userId);
+    if (!profile) {
+      throw new NotFoundError(`User profile for user ${userId} not found`);
+    }
+    return profile;
+  }
+
+  // Phase 1: Shared Transaction Helpers
+  private async withUserProfileCounts<T>(
+    tx: any,
+    followerId: string,
+    followingId: string,
+    increment: boolean,
+    operation: (tx: any) => Promise<T>
+  ): Promise<T> {
+    const delta = increment ? 1 : -1;
+
+    await tx
+      .update(userProfiles)
+      .set({ 
+        followingCount: sql`${userProfiles.followingCount} + ${delta}`,
+        updatedAt: new Date()
+      })
+      .where(eq(userProfiles.userId, followerId));
+
+    await tx
+      .update(userProfiles)
+      .set({ 
+        followersCount: sql`${userProfiles.followersCount} + ${delta}`,
+        updatedAt: new Date()
+      })
+      .where(eq(userProfiles.userId, followingId));
+
+    return await operation(tx);
+  }
+
+  private async logActivity(tx: any, activity: InsertActivity): Promise<void> {
+    await tx.insert(activities).values(activity);
+  }
+
+  private async withNotificationDispatch(tx: any, notification: InsertNotification): Promise<void> {
+    await tx.insert(notifications).values(notification);
+  }
+
+  // Phase 2: Core Methods (Follow, Activity, Notifications)
+  async followUser(followerId: string, followingId: string): Promise<UserFollow> {
+    return await db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(userFollows)
+        .where(sql`${userFollows.followerId} = ${followerId} AND ${userFollows.followingId} = ${followingId}`)
+        .limit(1);
+
+      if (existing.length > 0) {
+        return existing[0];
+      }
+
+      await this.ensureUserProfile(followerId);
+      await this.ensureUserProfile(followingId);
+
+      return await this.withUserProfileCounts(tx, followerId, followingId, true, async (tx) => {
+        const [follow] = await tx.insert(userFollows).values({ followerId, followingId }).returning();
+
+        await this.logActivity(tx, {
+          userId: followerId,
+          type: 'followed_user',
+          data: JSON.stringify({ followingId })
+        });
+
+        const follower = await this.getUser(followerId);
+        await this.withNotificationDispatch(tx, {
+          userId: followingId,
+          type: 'new_follower',
+          title: 'New Follower',
+          message: `${follower?.username || 'Someone'} started following you`,
+          data: JSON.stringify({ followerId })
+        });
+
+        return follow;
+      });
+    });
+  }
+
+  async unfollowUser(followerId: string, followingId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(userFollows)
+        .where(sql`${userFollows.followerId} = ${followerId} AND ${userFollows.followingId} = ${followingId}`)
+        .limit(1);
+
+      if (existing.length === 0) {
+        return;
+      }
+
+      await this.withUserProfileCounts(tx, followerId, followingId, false, async (tx) => {
+        await tx
+          .delete(userFollows)
+          .where(sql`${userFollows.followerId} = ${followerId} AND ${userFollows.followingId} = ${followingId}`);
+        return;
+      });
+    });
+  }
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(userFollows)
+      .where(sql`${userFollows.followerId} = ${followerId} AND ${userFollows.followingId} = ${followingId}`)
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async getFollowers(userId: string, limit: number = 50): Promise<Array<{ user: User; followedAt: Date }>> {
+    const result = await db
+      .select({
+        user: users,
+        followedAt: userFollows.createdAt
+      })
+      .from(userFollows)
+      .innerJoin(users, eq(userFollows.followerId, users.id))
+      .where(eq(userFollows.followingId, userId))
+      .orderBy(desc(userFollows.createdAt))
+      .limit(limit);
+
+    return result.map(row => ({
+      user: row.user,
+      followedAt: row.followedAt
+    }));
+  }
+
+  async getFollowing(userId: string, limit: number = 50): Promise<Array<{ user: User; followedAt: Date }>> {
+    const result = await db
+      .select({
+        user: users,
+        followedAt: userFollows.createdAt
+      })
+      .from(userFollows)
+      .innerJoin(users, eq(userFollows.followingId, users.id))
+      .where(eq(userFollows.followerId, userId))
+      .orderBy(desc(userFollows.createdAt))
+      .limit(limit);
+
+    return result.map(row => ({
+      user: row.user,
+      followedAt: row.followedAt
+    }));
+  }
+
+  async createActivity(activity: InsertActivity): Promise<Activity> {
+    const result = await db.insert(activities).values(activity).returning();
+    return result[0];
+  }
+
+  async getUserActivities(userId: string, limit: number = 20): Promise<Activity[]> {
+    return await db
+      .select()
+      .from(activities)
+      .where(eq(activities.userId, userId))
+      .orderBy(desc(activities.createdAt))
+      .limit(limit);
+  }
+
+  async getFollowingActivities(userId: string, limit: number = 20): Promise<Activity[]> {
+    const result = await db
+      .select({
+        activity: activities
+      })
+      .from(activities)
+      .innerJoin(userFollows, eq(activities.userId, userFollows.followingId))
+      .where(eq(userFollows.followerId, userId))
+      .orderBy(desc(activities.createdAt))
+      .limit(limit);
+
+    return result.map(row => row.activity);
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const result = await db.insert(notifications).values(notification).returning();
+    return result[0];
+  }
+
+  async getUserNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, notificationId));
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.userId, userId));
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(notifications)
+      .where(sql`${notifications.userId} = ${userId} AND ${notifications.read} = false`);
+    return result[0]?.count || 0;
+  }
+
+  // Phase 3: Messaging
+  async createConversation(user1Id: string, user2Id: string): Promise<Conversation> {
+    const existing = await db
+      .select()
+      .from(conversations)
+      .where(
+        sql`(${conversations.user1Id} = ${user1Id} AND ${conversations.user2Id} = ${user2Id}) OR (${conversations.user1Id} = ${user2Id} AND ${conversations.user2Id} = ${user1Id})`
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const result = await db.insert(conversations).values({ user1Id, user2Id }).returning();
+    return result[0];
+  }
+
+  async getConversation(user1Id: string, user2Id: string): Promise<Conversation | undefined> {
+    const result = await db
+      .select()
+      .from(conversations)
+      .where(
+        sql`(${conversations.user1Id} = ${user1Id} AND ${conversations.user2Id} = ${user2Id}) OR (${conversations.user1Id} = ${user2Id} AND ${conversations.user2Id} = ${user1Id})`
+      )
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserConversations(userId: string, limit: number = 50): Promise<ConversationWithParticipants[]> {
+    const result = await db
+      .select({
+        conversation: conversations,
+        user1: users,
+        user2Profile: userProfiles
+      })
+      .from(conversations)
+      .innerJoin(users, sql`${users.id} = CASE WHEN ${conversations.user1Id} = ${userId} THEN ${conversations.user2Id} ELSE ${conversations.user1Id} END`)
+      .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
+      .where(sql`${conversations.user1Id} = ${userId} OR ${conversations.user2Id} = ${userId}`)
+      .orderBy(desc(conversations.lastMessageAt))
+      .limit(limit);
+
+    const conversationsWithUnread = await Promise.all(
+      result.map(async (row) => {
+        const otherUserId = row.conversation.user1Id === userId ? row.conversation.user2Id : row.conversation.user1Id;
+        const unreadCount = await this.getConversationUnreadCount(row.conversation.id, userId);
+
+        return {
+          ...row.conversation,
+          user1: {
+            username: row.conversation.user1Id === userId ? null : row.user1.username,
+            avatarUrl: row.conversation.user1Id === userId ? null : row.user2Profile?.avatarUrl || null
+          },
+          user2: {
+            username: row.conversation.user2Id === userId ? null : row.user1.username,
+            avatarUrl: row.conversation.user2Id === userId ? null : row.user2Profile?.avatarUrl || null
+          },
+          unreadCount
+        };
+      })
+    );
+
+    return conversationsWithUnread;
+  }
+
+  private async getConversationUnreadCount(conversationId: string, userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(messages)
+      .where(
+        sql`${messages.conversationId} = ${conversationId} AND ${messages.senderId} != ${userId} AND ${messages.read} = false`
+      );
+    return result[0]?.count || 0;
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    return await db.transaction(async (tx) => {
+      const [newMessage] = await tx.insert(messages).values(message).returning();
+
+      await tx
+        .update(conversations)
+        .set({ lastMessageAt: new Date() })
+        .where(eq(conversations.id, message.conversationId));
+
+      return newMessage;
+    });
+  }
+
+  async getConversationMessages(conversationId: string, limit: number = 50): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit);
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {
+    await db
+      .update(messages)
+      .set({ read: true })
+      .where(
+        sql`${messages.conversationId} = ${conversationId} AND ${messages.senderId} != ${userId} AND ${messages.read} = false`
+      );
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(
+        sql`(${conversations.user1Id} = ${userId} OR ${conversations.user2Id} = ${userId}) AND ${messages.senderId} != ${userId} AND ${messages.read} = false`
+      );
+    return result[0]?.count || 0;
+  }
+
+  // Phase 4: Forum
+  async createForumThread(thread: InsertForumThread): Promise<ForumThread> {
+    const result = await db.insert(forumThreads).values(thread).returning();
+    return result[0];
+  }
+
+  async getForumThreads(category?: string, limit: number = 50): Promise<ForumThread[]> {
+    let query = db.select().from(forumThreads);
+
+    if (category) {
+      query = query.where(eq(forumThreads.category, category)) as any;
+    }
+
+    return await query.orderBy(desc(forumThreads.isPinned), desc(forumThreads.createdAt)).limit(limit);
+  }
+
+  async getForumThread(threadId: string): Promise<ForumThread | undefined> {
+    const result = await db.select().from(forumThreads).where(eq(forumThreads.id, threadId)).limit(1);
+    return result[0];
+  }
+
+  async updateForumThread(
+    threadId: string,
+    updates: Partial<Pick<ForumThread, 'title' | 'content' | 'isPinned' | 'isLocked'>>
+  ): Promise<ForumThread> {
+    const result = await db
+      .update(forumThreads)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(forumThreads.id, threadId))
+      .returning();
+    
+    if (!result[0]) {
+      throw new NotFoundError(`Forum thread ${threadId} not found`);
+    }
+    return result[0];
+  }
+
+  async createForumComment(comment: InsertForumComment): Promise<ForumComment> {
+    return await db.transaction(async (tx) => {
+      const [newComment] = await tx.insert(forumComments).values(comment).returning();
+
+      await tx
+        .update(forumThreads)
+        .set({ 
+          commentsCount: sql`${forumThreads.commentsCount} + 1`,
+          updatedAt: new Date()
+        })
+        .where(eq(forumThreads.id, comment.threadId));
+
+      return newComment;
+    });
+  }
+
+  async getForumComments(threadId: string, limit: number = 50): Promise<ForumComment[]> {
+    return await db
+      .select()
+      .from(forumComments)
+      .where(eq(forumComments.threadId, threadId))
+      .orderBy(desc(forumComments.createdAt))
+      .limit(limit);
+  }
+
+  async voteForumThread(threadId: string, userId: string, vote: 'up' | 'down'): Promise<void> {
+    await db.transaction(async (tx) => {
+      const thread = await tx
+        .select()
+        .from(forumThreads)
+        .where(eq(forumThreads.id, threadId))
+        .for('update')
+        .limit(1);
+
+      if (!thread[0]) {
+        throw new NotFoundError(`Forum thread ${threadId} not found`);
+      }
+
+      if (vote === 'up') {
+        await tx
+          .update(forumThreads)
+          .set({ upvotes: sql`${forumThreads.upvotes} + 1` })
+          .where(eq(forumThreads.id, threadId));
+      } else {
+        await tx
+          .update(forumThreads)
+          .set({ downvotes: sql`${forumThreads.downvotes} + 1` })
+          .where(eq(forumThreads.id, threadId));
+      }
+    });
+  }
+
+  async voteForumComment(commentId: string, userId: string, vote: 'up' | 'down'): Promise<void> {
+    await db.transaction(async (tx) => {
+      const comment = await tx
+        .select()
+        .from(forumComments)
+        .where(eq(forumComments.id, commentId))
+        .for('update')
+        .limit(1);
+
+      if (!comment[0]) {
+        throw new NotFoundError(`Forum comment ${commentId} not found`);
+      }
+
+      if (vote === 'up') {
+        await tx
+          .update(forumComments)
+          .set({ upvotes: sql`${forumComments.upvotes} + 1` })
+          .where(eq(forumComments.id, commentId));
+      } else {
+        await tx
+          .update(forumComments)
+          .set({ downvotes: sql`${forumComments.downvotes} + 1` })
+          .where(eq(forumComments.id, commentId));
+      }
+    });
+  }
+
+  // Phase 5: Achievements
+  async createAchievement(achievement: InsertAchievement): Promise<Achievement> {
+    const result = await db.insert(achievements).values(achievement).returning();
+    return result[0];
+  }
+
+  async getAchievements(): Promise<Achievement[]> {
+    return await db.select().from(achievements);
+  }
+
+  async awardAchievement(userId: string, achievementId: string): Promise<UserAchievement> {
+    const existing = await db
+      .select()
+      .from(userAchievements)
+      .where(
+        sql`${userAchievements.userId} = ${userId} AND ${userAchievements.achievementId} = ${achievementId}`
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const result = await db.insert(userAchievements).values({ userId, achievementId }).returning();
+    return result[0];
+  }
+
+  async getUserAchievements(userId: string): Promise<Array<UserAchievement & { achievement: Achievement }>> {
+    const result = await db
+      .select({
+        userAchievement: userAchievements,
+        achievement: achievements
+      })
+      .from(userAchievements)
+      .innerJoin(achievements, eq(userAchievements.achievementId, achievements.id))
+      .where(eq(userAchievements.userId, userId))
+      .orderBy(desc(userAchievements.earnedAt));
+
+    return result.map(row => ({
+      ...row.userAchievement,
+      achievement: row.achievement
+    }));
+  }
+
+  async hasAchievement(userId: string, achievementId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(userAchievements)
+      .where(
+        sql`${userAchievements.userId} = ${userId} AND ${userAchievements.achievementId} = ${achievementId}`
+      )
+      .limit(1);
+    return result.length > 0;
+  }
+
+  // Phase 6: FAQs
+  async createFaq(faq: InsertFaq): Promise<Faq> {
+    const result = await db.insert(faqs).values(faq).returning();
+    return result[0];
+  }
+
+  async getFaqs(category?: string): Promise<Faq[]> {
+    let query = db.select().from(faqs);
+
+    if (category) {
+      query = query.where(eq(faqs.category, category)) as any;
+    }
+
+    return await query.orderBy(faqs.order, desc(faqs.createdAt));
+  }
+
+  async updateFaq(
+    faqId: string,
+    updates: Partial<Pick<Faq, 'question' | 'answer' | 'category' | 'order'>>
+  ): Promise<Faq> {
+    const result = await db
+      .update(faqs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(faqs.id, faqId))
+      .returning();
+    
+    if (!result[0]) {
+      throw new NotFoundError(`FAQ ${faqId} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteFaq(faqId: string): Promise<void> {
+    await db.delete(faqs).where(eq(faqs.id, faqId));
   }
 
   // AMM calculation methods
