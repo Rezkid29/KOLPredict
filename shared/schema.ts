@@ -359,3 +359,253 @@ export type PriceHistoryPoint = {
   yesPrice: number;
   noPrice: number;
 };
+
+// Social Features Tables
+export const userProfiles = pgTable("user_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  bio: text("bio"),
+  avatarUrl: text("avatar_url"),
+  totalBets: integer("total_bets").notNull().default(0),
+  totalWins: integer("total_wins").notNull().default(0),
+  totalLosses: integer("total_losses").notNull().default(0),
+  totalVolume: decimal("total_volume", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  profitLoss: decimal("profit_loss", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  winRate: decimal("win_rate", { precision: 5, scale: 2 }).notNull().default("0.00"),
+  roi: decimal("roi", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  followersCount: integer("followers_count").notNull().default(0),
+  followingCount: integer("following_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const userFollows = pgTable("user_follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  followerId: varchar("follower_id").notNull().references(() => users.id),
+  followingId: varchar("following_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const activities = pgTable("activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // new_bet, bet_won, bet_lost, followed_user, followed_kol
+  data: text("data").notNull(), // JSON string with activity details
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  user1Id: varchar("user1_id").notNull().references(() => users.id),
+  user2Id: varchar("user2_id").notNull().references(() => users.id),
+  lastMessageAt: timestamp("last_message_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const forumThreads = pgTable("forum_threads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category").notNull(), // general, strategies, kols, markets
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  commentsCount: integer("comments_count").notNull().default(0),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  isLocked: boolean("is_locked").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const forumComments = pgTable("forum_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  threadId: varchar("thread_id").notNull().references(() => forumThreads.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  parentId: varchar("parent_id").references((): any => forumComments.id), // For nested replies
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // new_follower, new_message, forum_reply, achievement_earned, bet_won, bet_lost
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  data: text("data"), // JSON string with notification details
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull(),
+  category: text("category").notNull(), // betting, social, volume, streak
+  requirement: text("requirement").notNull(), // JSON string with requirement logic
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  achievementId: varchar("achievement_id").notNull().references(() => achievements.id),
+  earnedAt: timestamp("earned_at").notNull().defaultNow(),
+});
+
+export const faqs = pgTable("faqs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  category: text("category").notNull(), // getting_started, betting, kols, technical
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Insert schemas for social features
+export const insertUserProfileSchema = createInsertSchema(userProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  followersCount: true,
+  followingCount: true,
+  totalBets: true,
+  totalWins: true,
+  totalLosses: true,
+  totalVolume: true,
+  profitLoss: true,
+  winRate: true,
+  roi: true,
+});
+
+export const insertUserFollowSchema = createInsertSchema(userFollows).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertActivitySchema = createInsertSchema(activities).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+  lastMessageAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+  read: true,
+});
+
+export const insertForumThreadSchema = createInsertSchema(forumThreads).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+  commentsCount: true,
+  isPinned: true,
+  isLocked: true,
+});
+
+export const insertForumCommentSchema = createInsertSchema(forumComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+  read: true,
+});
+
+export const insertAchievementSchema = createInsertSchema(achievements).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({
+  id: true,
+  earnedAt: true,
+});
+
+export const insertFaqSchema = createInsertSchema(faqs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for social features
+export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
+export type UserProfile = typeof userProfiles.$inferSelect;
+
+export type InsertUserFollow = z.infer<typeof insertUserFollowSchema>;
+export type UserFollow = typeof userFollows.$inferSelect;
+
+export type InsertActivity = z.infer<typeof insertActivitySchema>;
+export type Activity = typeof activities.$inferSelect;
+
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+
+export type InsertForumThread = z.infer<typeof insertForumThreadSchema>;
+export type ForumThread = typeof forumThreads.$inferSelect;
+
+export type InsertForumComment = z.infer<typeof insertForumCommentSchema>;
+export type ForumComment = typeof forumComments.$inferSelect;
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+
+export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+
+export type InsertFaq = z.infer<typeof insertFaqSchema>;
+export type Faq = typeof faqs.$inferSelect;
+
+// Composite types
+export type UserProfileWithStats = UserProfile & {
+  user: { username: string | null };
+  achievementsCount: number;
+  isFollowing?: boolean;
+};
+
+export type ForumThreadWithUser = ForumThread & {
+  user: { username: string | null; avatarUrl: string | null };
+};
+
+export type ForumCommentWithUser = ForumComment & {
+  user: { username: string | null; avatarUrl: string | null };
+};
+
+export type ConversationWithParticipants = Conversation & {
+  user1: { username: string | null; avatarUrl: string | null };
+  user2: { username: string | null; avatarUrl: string | null };
+  unreadCount: number;
+};
