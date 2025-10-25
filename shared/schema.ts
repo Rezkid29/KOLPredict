@@ -131,14 +131,18 @@ export const scrapedKols = pgTable("scraped_kols", {
   losses: integer("losses"),
   solGain: decimal("sol_gain", { precision: 10, scale: 2 }),
   usdGain: decimal("usd_gain", { precision: 10, scale: 2 }),
-  // New detailed metrics
+  // PnL metrics for each timeframe
+  pnl1d: decimal("pnl_1d", { precision: 10, scale: 2 }),
   pnl7d: decimal("pnl_7d", { precision: 10, scale: 2 }),
   pnl30d: decimal("pnl_30d", { precision: 10, scale: 2 }),
-  totalTrades: integer("total_trades"),
-  winRatePercent: decimal("win_rate_percent", { precision: 5, scale: 2 }),
-  // JSON fields for complex data
-  holdings: text("holdings"), // JSON string of holdings array
-  tradeHistory: text("trade_history"), // JSON string of trades array
+  // Win Rate for each timeframe
+  winRate1d: decimal("win_rate_1d", { precision: 5, scale: 2 }),
+  winRate7d: decimal("win_rate_7d", { precision: 5, scale: 2 }),
+  winRate30d: decimal("win_rate_30d", { precision: 5, scale: 2 }),
+  // Total Trades (Volume) for each timeframe
+  totalTrades1d: integer("total_trades_1d"),
+  totalTrades7d: integer("total_trades_7d"),
+  totalTrades30d: integer("total_trades_30d"),
   profileUrl: text("profile_url"),
   scrapedAt: timestamp("scraped_at").notNull().defaultNow(),
 });
