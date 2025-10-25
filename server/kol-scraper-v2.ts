@@ -73,46 +73,76 @@ window.scrollTo(0, document.body.scrollHeight);
 await new Promise(resolve => setTimeout(resolve, 2000));
 
 console.log('📄 Extracting leaderboard data and profile URLs...');
+
 const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
 const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
 
-const rows = Array.from(document.querySelectorAll('a[href^="/account/"]'));
-console.log(`Found ${rows.length} potential KOL entry rows`);
+// Select all username links, then get their parent containers which have the full row data
+const userLinks = Array.from(document.querySelectorAll('a[href^="/account/"]'));
+const rows = userLinks.map(link => link.parentElement).filter(el => el !== null) as HTMLElement[];
 
 for (let i = 0; i < rows.length && extractedEntries.length < 20; i++) {
 const row = rows[i];
 try {
 const fullText = row.textContent || '';
-const profileUrl = row.getAttribute('href');
+const rank = (i + 1).toString();
 
-const rank = (i + 1).toString();  // Use index +1 as rank
-
-let username = fullText.trim();
-if (!username || username.length === 0) username = 'Unknown';
-
-let xHandle: string | null = null;
-const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
-if (xLinkEl) {
-const href = xLinkEl.getAttribute('href') || '';
-const match = href.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)/);
-if (match && match[1]) xHandle = match[1];
+// Extract profile URL from the <a> tag inside the row
+let profileUrl: string | null = null;
+const profileLink = row.querySelector('a[href^="/account/"]');
+if (profileLink) {
+profileUrl = profileLink.getAttribute('href');
 }
 
-let winsLosses: string | null = null;
-const wlMatch = fullText.match(/(\d{1,4})\s*\/\s*(\d{1,4})/);
-if (wlMatch) winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
+// Extract username from <h1> inside the profile link
+let username = 'Unknown';
+const usernameEl = row.querySelector('h1');
+if (usernameEl && usernameEl.textContent) {
+username = usernameEl.textContent.trim();
+}
 
+// Extract X handle - look for the paragraph next to Twitter logo
+let xHandle: string | null = null;
+const twitterLogo = row.querySelector('img[alt="twitter logo"]');
+if (twitterLogo) {
+// The handle should be in a <p> element that's a sibling
+const handleEl = twitterLogo.nextElementSibling;
+if (handleEl && handleEl.tagName === 'P') {
+const handleText = handleEl.textContent?.trim();
+if (handleText) {
+xHandle = handleText;
+}
+}
+}
+
+// Extract wins/losses - look for pattern like "123/45" in the text
+let winsLosses: string | null = null;
+const wlMatch = fullText.match(/(\d{1,5})\s*\/\s*(\d{1,5})/);
+if (wlMatch) {
+winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
+}
+
+// Extract SOL and USD gains from the text
 let solGain: string | null = null;
 let usdGain: string | null = null;
-const pnlEl = Array.from(row.querySelectorAll('p, span')).find(el => 
-el.textContent?.includes('Sol') && el.textContent.includes('$')
-);
-if (pnlEl) {
-const pnlText = pnlEl.textContent || '';
-const solMatch = pnlText.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
-const usdMatch = pnlText.match(/\$\s*([+-]?[\d,]+\.?\d*)/);
-if (solMatch) solGain = solMatch[1].replace(/,/g, '');
-if (usdMatch) usdGain = usdMatch[1].replace(/,/g, '');
+
+// Match pattern like "+122.75 Sol"
+const solMatch = fullText.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+if (solMatch) {
+solGain = solMatch[1].replace(/,/g, '');
+}
+
+// Match pattern like "($23,820.3)" or "$23820.3"
+const usdMatch = fullText.match(/\$\s*([+-]?[\d,]+\.?\d*[kKmM]?)/);
+if (usdMatch) {
+let usdValue = usdMatch[1].replace(/,/g, '');
+// Handle k/m suffix
+if (usdValue.toLowerCase().endsWith('k')) {
+usdValue = (parseFloat(usdValue.slice(0, -1)) * 1000).toString();
+} else if (usdValue.toLowerCase().endsWith('m')) {
+usdValue = (parseFloat(usdValue.slice(0, -1)) * 1000000).toString();
+}
+usdGain = usdValue;
 }
 
 extractedEntries.push({
