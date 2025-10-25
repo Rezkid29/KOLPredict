@@ -85,21 +85,10 @@ try {
 const fullText = row.textContent || '';
 const profileUrl = row.getAttribute('href');
 
-const rankEl = row.querySelector('span, p'); 
-const rank = rankEl ? rankEl.textContent?.trim() : (i + 1).toString();
+const rank = (i + 1).toString();  // Use index +1 as rank
 
-let username = 'Unknown';
-const pEls = Array.from(row.querySelectorAll('p'));
-const potentialNameEl = pEls.find(p => {
-const text = p.textContent || '';
-return text.length > 0 && !text.includes('Sol') && !text.includes('$') && !text.match(/^[\d\s\/]+$/);
-});
-if (potentialNameEl) {
-username = potentialNameEl.textContent?.trim() || 'Unknown';
-} else {
-const usernameEl = row.querySelector('p[class*="font-semibold"], p[class*="font-bold"]');
-if (usernameEl) username = usernameEl.textContent?.trim() || 'Unknown';
-}
+let username = fullText.trim();
+if (!username || username.length === 0) username = 'Unknown';
 
 let xHandle: string | null = null;
 const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
@@ -163,117 +152,78 @@ try {
 profilePage = await this.browser.newPage();
 await profilePage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
+let accountData: any | null = null;
+
+const captureResponse = async (response: any) => {
+try {
+const url = response.url();
+if (!url.includes('/api/')) return;
+const status = response.status();
+if (status !== 200) return;
+const contentType = response.headers()['content-type'];
+if (!contentType?.includes('application/json')) return;
+
+if (url.includes('/api/account')) {
+const json = await response.json();
+if (!accountData) accountData = json;
+}
+} catch (err) {
+console.warn('Failed to parse response:', err);
+}
+};
+
+profilePage.on('response', captureResponse);
+
 await profilePage.goto(fullUrl, {
 waitUntil: 'networkidle2',
 timeout: 30000
 });
 
-try {
-await profilePage.waitForSelector('main div[class*="grid"] p', { timeout: 7000 });
-console.log('✅ Profile stats grid found.');
-} catch(e) {
-console.warn('⚠️ Profile stats grid not found, data may be limited.');
+// Allow initial API calls to finish
+await new Promise(resolve => setTimeout(resolve, 2000));
+
+if (!accountData) {
+throw new Error('Failed to capture account API response');
 }
 
-console.log(`📄 Extracting detailed data from ${fullUrl}...`);
-
-const detailedData = await profilePage.evaluate(() => {
-return (async () => {
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-const findStatValueByLabel = (labelRegex) => {
-try {
-const allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
-for (let i = 0; i < allStatDivs.length; i++) {
-const div = allStatDivs[i];
-const texts = Array.from(div.querySelectorAll('p')).map(p => p.textContent || '');
-if (texts.length === 2 && labelRegex.test(texts[0])) {
-return texts[1].trim();
-}
-}
-return null;
-} catch (e) { return null; }
+const getLeaderboardEntry = (timeframe: number) => {
+if (!accountData?.leaderboard) return null;
+return accountData.leaderboard.find((entry: any) => entry.timeframe === timeframe) || null;
 };
 
-const extractSolFromPnL = () => {
-try {
-const pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(el => 
-el.textContent && el.textContent.includes('Sol') && 
-el.textContent.includes('$') &&
-el.textContent.match(/\d+\s*\/\s*\d+/)
-);
-if (!pnlEl || !pnlEl.textContent) return null;
-
-const pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
-return pnlMatch ? pnlMatch[1].replace(/,/g, '') : null;
-} catch (e) { return null; }
+const formatNumber = (value: number | null | undefined) => {
+if (value === null || value === undefined || Number.isNaN(value)) return null;
+return value.toString();
 };
 
-const extractCurrentTimeframeData = () => {
-let pnl = extractSolFromPnL();
-let winRate = findStatValueByLabel(/Win Rate/i);
-if (winRate) winRate = winRate.replace('%', '');
-let volume = findStatValueByLabel(/Volume/i);
-if (volume) volume = volume.replace(/[$,]/g, '');
-return { pnl, winRate, volume };
+const computeWinRate = (wins?: number, losses?: number) => {
+const total = (wins ?? 0) + (losses ?? 0);
+if (total === 0) return null;
+const rate = ((wins ?? 0) / total) * 100;
+return rate.toFixed(2);
 };
 
-const clickTimeframeAndExtract = async (label) => {
-try {
-const button = Array.from(document.querySelectorAll('button')).find(b => 
-b.textContent && b.textContent.trim().toLowerCase() === label
-);
-if (!button) {
-console.error('Button ' + label + ' not found');
-return { pnl: null, winRate: null, volume: null };
-}
-
-const oldData = extractCurrentTimeframeData();
-button.click();
-await delay(1500);
-let newData = extractCurrentTimeframeData();
-
-if (newData.pnl === oldData.pnl && newData.winRate === oldData.winRate) {
-await delay(1500);
-return extractCurrentTimeframeData();
-}
-return newData;
-} catch (e) {
-console.error('Error clicking ' + label + ':', e);
-return { pnl: null, winRate: null, volume: null };
-}
+const timeframes = {
+tf1: getLeaderboardEntry(1),
+tf7: getLeaderboardEntry(7),
+tf30: getLeaderboardEntry(30)
 };
 
-console.log('Extracting 1d data...');
-const data1d = extractCurrentTimeframeData();
-
-console.log('Clicking 7d button...');
-const data7d = await clickTimeframeAndExtract('7d');
-
-console.log('Clicking 30d button...');
-const data30d = await clickTimeframeAndExtract('30d');
-
-console.log('=== EXTRACTION RESULTS ===');
-console.log('1D - PnL:', data1d.pnl, 'Win Rate:', data1d.winRate, 'Volume:', data1d.volume);
-console.log('7D - PnL:', data7d.pnl, 'Win Rate:', data7d.winRate, 'Volume:', data7d.volume);
-console.log('30D - PnL:', data30d.pnl, 'Win Rate:', data30d.winRate, 'Volume:', data30d.volume);
-console.log('========================');
-
-return { 
-pnl1d: data1d.pnl,
-pnl7d: data7d.pnl, 
-pnl30d: data30d.pnl,
-winRate1d: data1d.winRate,
-winRate7d: data7d.winRate,
-winRate30d: data30d.winRate,
-totalTrades1d: data1d.volume,
-totalTrades7d: data7d.volume,
-totalTrades30d: data30d.volume
+const detailedData: KOLDetailedData = {
+pnl1d: formatNumber(timeframes.tf1?.profit),
+pnl7d: formatNumber(timeframes.tf7?.profit),
+pnl30d: formatNumber(timeframes.tf30?.profit),
+winRate1d: computeWinRate(timeframes.tf1?.wins, timeframes.tf1?.losses),
+winRate7d: computeWinRate(timeframes.tf7?.wins, timeframes.tf7?.losses),
+winRate30d: computeWinRate(timeframes.tf30?.wins, timeframes.tf30?.losses),
+totalTrades1d: formatNumber((timeframes.tf1?.wins ?? 0) + (timeframes.tf1?.losses ?? 0)),
+totalTrades7d: formatNumber((timeframes.tf7?.wins ?? 0) + (timeframes.tf7?.losses ?? 0)),
+totalTrades30d: formatNumber((timeframes.tf30?.wins ?? 0) + (timeframes.tf30?.losses ?? 0))
 };
-})();
-});
 
-return detailedData as KOLDetailedData;
+profilePage.off('response', captureResponse);
+
+return detailedData;
 
 } catch (error) {
 console.error(`❌ Failed to scrape profile ${fullUrl}:`, error);
@@ -349,11 +299,7 @@ totalTrades30d: profileData.totalTrades30d,
 profileUrl: entry.profileUrl
 };
 
-console.log(`✅ Processed ${fullKOLData.username}:`, {
-pnl7d: fullKOLData.pnl7d,
-winRate7d: fullKOLData.winRate7d,
-totalTrades7d: fullKOLData.totalTrades7d
-});
+console.log(`✅ Processed ${fullKOLData.username}: { pnl1d: '${fullKOLData.pnl1d}', pnl7d: '${fullKOLData.pnl7d}', pnl30d: '${fullKOLData.pnl30d}', winRate1d: '${fullKOLData.winRate1d}', winRate7d: '${fullKOLData.winRate7d}', winRate30d: '${fullKOLData.winRate30d}', totalTrades1d: '${fullKOLData.totalTrades1d}', totalTrades7d: '${fullKOLData.totalTrades7d}', totalTrades30d: '${fullKOLData.totalTrades30d}' }`);
 
 allKOLData.push(fullKOLData);
 
