@@ -459,6 +459,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user profile by username
+  app.get("/api/profile/:username", async (req, res) => {
+    try {
+      const { username } = req.params;
+
+      if (!username) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      const result = await storage.getProfileByUsername(username);
+      if (!result) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { user, profile } = result;
+
+      res.json({
+        user,
+        profile,
+        isFollowing: false
+      });
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
   // Get all markets with KOL data
   app.get("/api/markets", async (req, res) => {
     try {

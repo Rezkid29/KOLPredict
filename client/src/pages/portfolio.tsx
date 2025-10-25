@@ -160,7 +160,7 @@ export default function Portfolio() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar balance={balance} username={user?.username} />
+      <Navbar balance={balance} username={user?.username ?? undefined} />
 
       <div className="container mx-auto px-4 py-10">
         {/* Header */}

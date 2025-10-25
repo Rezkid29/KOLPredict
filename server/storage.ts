@@ -13,6 +13,7 @@ import {
   type SolanaDeposit, type InsertSolanaDeposit,
   type SolanaWithdrawal, type InsertSolanaWithdrawal,
   type PlatformFee, type InsertPlatformFee,
+  type UserProfile, type InsertUserProfile,
   type LeaderboardEntry,
   type PriceHistoryPoint
 } from "@shared/schema";
@@ -126,6 +127,11 @@ export interface IStorage {
   createPlatformFee(fee: InsertPlatformFee): Promise<PlatformFee>;
   getTotalPlatformFees(): Promise<string>;
   getUserPlatformFees(userId: string): Promise<PlatformFee[]>;
+  
+  // User profiles
+  getUserProfile(userId: string): Promise<UserProfile | undefined>;
+  getProfileByUsername(username: string): Promise<{ user: User; profile: UserProfile } | undefined>;
+  ensureUserProfile(userId: string): Promise<UserProfile>;
 }
 
 export class MemStorage implements IStorage {
@@ -1072,6 +1078,19 @@ export class MemStorage implements IStorage {
     return Array.from(this.platformFees.values())
       .filter((fee) => fee.userId === userId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  // User profile methods (stub implementations - not used since we use DbStorage)
+  async getUserProfile(userId: string): Promise<UserProfile | undefined> {
+    throw new Error("MemStorage profile methods not implemented - use DbStorage");
+  }
+
+  async getProfileByUsername(username: string): Promise<{ user: User; profile: UserProfile } | undefined> {
+    throw new Error("MemStorage profile methods not implemented - use DbStorage");
+  }
+
+  async ensureUserProfile(userId: string): Promise<UserProfile> {
+    throw new Error("MemStorage profile methods not implemented - use DbStorage");
   }
 }
 

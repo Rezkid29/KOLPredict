@@ -35,6 +35,7 @@ import {
   solanaDeposits,
   solanaWithdrawals,
   platformFees,
+  userProfiles,
   type User,
   type InsertUser,
   type Kol,
@@ -69,6 +70,8 @@ import {
   type InsertPlatformFee,
   type LeaderboardEntry,
   type PriceHistoryPoint,
+  type UserProfile,
+  type InsertUserProfile,
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 
@@ -1286,6 +1289,69 @@ export class DbStorage implements IStorage {
       .from(platformFees)
       .where(eq(platformFees.userId, userId))
       .orderBy(desc(platformFees.createdAt));
+  }
+
+  // User profile methods
+  async getUserProfile(userId: string): Promise<UserProfile | undefined> {
+    const result = await db
+      .select()
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, userId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getProfileByUsername(username: string): Promise<{ user: User; profile: UserProfile } | undefined> {
+    const user = await this.getUserByUsername(username);
+    if (!user) {
+      return undefined;
+    }
+
+    const profile = await this.ensureUserProfile(user.id);
+    return { user, profile };
+  }
+
+  async ensureUserProfile(userId: string): Promise<UserProfile> {
+    const existingProfile = await this.getUserProfile(userId);
+    if (existingProfile) {
+      return existingProfile;
+    }
+
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new NotFoundError(`User with id ${userId} not found`);
+    }
+
+    const totalLosses = user.totalBets - user.totalWins;
+    const profitLoss = parseFloat(user.totalProfit);
+    const winRate = user.totalBets > 0 ? (user.totalWins / user.totalBets) * 100 : 0;
+    
+    const totalVolume = user.totalBets * parseFloat(user.balance);
+    const roi = totalVolume > 0 ? (profitLoss / totalVolume) * 100 : 0;
+
+    const newProfile: InsertUserProfile = {
+      userId: user.id,
+      bio: null,
+      avatarUrl: null,
+    };
+
+    const result = await db.insert(userProfiles).values(newProfile).returning();
+    const createdProfile = result[0];
+
+    const updateData = {
+      totalBets: user.totalBets,
+      totalWins: user.totalWins,
+      totalLosses,
+      profitLoss: profitLoss.toFixed(2),
+      winRate: winRate.toFixed(2),
+      roi: roi.toFixed(2),
+      totalVolume: totalVolume.toFixed(2),
+      updatedAt: new Date(),
+    };
+
+    await db.update(userProfiles).set(updateData).where(eq(userProfiles.id, createdProfile.id));
+
+    return { ...createdProfile, ...updateData };
   }
 
   // AMM calculation methods
