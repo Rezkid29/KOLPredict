@@ -540,8 +540,10 @@ export class DbStorage implements IStorage {
       let platformFee: number = 0;
       let netBetAmount: number = 0; // Initialize to avoid TypeScript errors
 
-      let profit: number = 0;
+      let profit: number | null = null; // Initialize profit as null
       let averageCost: number = 0;
+
+      const isSell = params.action === "sell";
 
       if (params.action === "buy") {
         // Re-validate balance inside transaction
@@ -708,11 +710,15 @@ export class DbStorage implements IStorage {
           amount: betAmount.toFixed(2),
           price: currentPrice.toFixed(4), // Record the price at which the bet was placed
           shares: sharesAmount.toFixed(2),
-          status: params.action === "sell" ? "settled" : "open",
-          profit: params.action === "sell" ? profit.toFixed(2) : undefined,
-          averageCost: params.action === "buy" ? averageCost.toFixed(4) : undefined,
+          status: isSell ? "settled" : "open", // Use "open" for buys, "settled" for sells
+          profit: isSell && profit !== null ? profit.toFixed(2) : null, // Include profit only for sells and if it's not null
+          averageCost: isSell ? undefined : averageCost.toFixed(4), // Average cost is relevant for buys
         })
         .returning();
+
+      if (isSell) {
+        console.log(`   ✅ Bet created with profit: ${createdBet.profit}`);
+      }
 
       // STEP 4.5: Record platform fee if this was a buy order
       if (params.action === "buy" && platformFee > 0) {
@@ -789,10 +795,11 @@ export class DbStorage implements IStorage {
         .where(eq(users.id, params.userId));
 
       // STEP 7: Update user stats
-      const newTotalProfit = params.action === "sell" 
+      // Only update totalProfit if it's a sell and profit is calculated
+      const newTotalProfit = isSell && profit !== null
         ? (parseFloat(user.totalProfit) + profit).toFixed(2)
         : user.totalProfit;
-
+        
       await tx
         .update(users)
         .set({

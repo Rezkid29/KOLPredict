@@ -230,11 +230,16 @@ export default function Portfolio() {
                         <div className="text-muted-foreground">
                           Total: <span className="font-medium text-foreground tabular-nums">{parseFloat(bet.amount).toFixed(2)}</span> PTS
                         </div>
-                        {bet.profit !== null && bet.profit !== undefined && (
+                        {(bet.profit !== null && bet.profit !== undefined && parseFloat(bet.profit) !== 0) && (
                           <div className={parseFloat(bet.profit) >= 0 ? "text-success font-bold" : "text-destructive font-bold"}>
                             P&L: <span className="font-semibold tabular-nums">
                               {parseFloat(bet.profit) >= 0 ? '+' : ''}{parseFloat(bet.profit).toFixed(2)}
                             </span> PTS
+                          </div>
+                        )}
+                        {(bet.profit !== null && bet.profit !== undefined && parseFloat(bet.profit) === 0 && bet.status === 'settled') && (
+                          <div className="text-muted-foreground font-bold">
+                            P&L: <span className="font-semibold tabular-nums">0.00</span> PTS
                           </div>
                         )}
                       </div>
