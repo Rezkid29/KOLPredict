@@ -175,9 +175,9 @@ export class KOLScraperV2Playwright {
       console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
       const detailedData = await profilePage.evaluate(async () => {
-        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        const findStatValueByLabel = (labelRegex: RegExp): string | null => {
+        const findStatValueByLabel = (labelRegex) => {
           try {
             const allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
             for (let i = 0; i < allStatDivs.length; i++) {
@@ -193,7 +193,7 @@ export class KOLScraperV2Playwright {
           }
         };
 
-        const extractSolFromPnL = (): string | null => {
+        const extractSolFromPnL = () => {
           try {
             const pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(el =>
               el.textContent && el.textContent.includes('Sol') &&
@@ -218,7 +218,7 @@ export class KOLScraperV2Playwright {
           return { pnl, winRate, volume };
         };
 
-        const clickTimeframeAndExtract = async (label: string) => {
+        const clickTimeframeAndExtract = async (label) => {
           try {
             const button = Array.from(document.querySelectorAll('button')).find(b =>
               b.textContent && b.textContent.trim().toLowerCase() === label
