@@ -204,7 +204,7 @@ export default function Home() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </div>
                 <span className="text-sm font-semibold text-white">
-                  {markets.length} Live Markets
+                  {filteredMarkets.length} Live Markets
                 </span>
               </div>
               <div className="px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
@@ -212,7 +212,7 @@ export default function Home() {
                   24h Volume:{" "}
                 </span>
                 <span className="text-sm font-bold tabular-nums text-white">
-                  {markets
+                  {filteredMarkets
                     .reduce((sum, m) => sum + parseFloat(m.totalVolume), 0)
                     .toFixed(0)}{" "}
                   PTS
