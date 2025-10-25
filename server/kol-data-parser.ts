@@ -99,6 +99,10 @@ export class KOLDataParser {
   static parseFullKOLData(raw: FullKOLData): InsertScrapedKol {
     const { wins, losses } = this.parseWinsLosses(raw.winsLosses);
 
+    const toDecimalString = (val: number | null): string | null => {
+      return val !== null ? val.toString() : null;
+    };
+
     return {
       rank: this.parseRank(raw.rank),
       username: this.normalizeUsername(raw.username),
@@ -108,13 +112,13 @@ export class KOLDataParser {
       solGain: this.parseSolGain(raw.solGain),
       usdGain: this.parseUsdGain(raw.usdGain),
       // PnL for each timeframe
-      pnl1d: this.parseDecimalValue(raw.pnl1d),
-      pnl7d: this.parseDecimalValue(raw.pnl7d),
-      pnl30d: this.parseDecimalValue(raw.pnl30d),
+      pnl1d: toDecimalString(this.parseDecimalValue(raw.pnl1d)),
+      pnl7d: toDecimalString(this.parseDecimalValue(raw.pnl7d)),
+      pnl30d: toDecimalString(this.parseDecimalValue(raw.pnl30d)),
       // Win Rate for each timeframe
-      winRate1d: this.parseDecimalValue(raw.winRate1d),
-      winRate7d: this.parseDecimalValue(raw.winRate7d),
-      winRate30d: this.parseDecimalValue(raw.winRate30d),
+      winRate1d: toDecimalString(this.parseDecimalValue(raw.winRate1d)),
+      winRate7d: toDecimalString(this.parseDecimalValue(raw.winRate7d)),
+      winRate30d: toDecimalString(this.parseDecimalValue(raw.winRate30d)),
       // Total Trades for each timeframe
       totalTrades1d: this.parseIntValue(raw.totalTrades1d),
       totalTrades7d: this.parseIntValue(raw.totalTrades7d),
