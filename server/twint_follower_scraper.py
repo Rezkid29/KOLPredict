@@ -1,14 +1,19 @@
 
 #!/usr/bin/env python3
 """
-X/Twitter follower scraper using snscrape
+X/Twitter follower scraper using snscrape Python API
 Scrapes follower counts and basic profile data without requiring API credentials
 """
 
 import json
 import sys
 from datetime import datetime
-import subprocess
+
+try:
+    import snscrape.modules.twitter as sntwitter
+except ImportError:
+    print("Error: snscrape not installed. Run: pip install snscrape", file=sys.stderr)
+    sys.exit(1)
 
 def get_user_info(username):
     """
@@ -24,41 +29,25 @@ def get_user_info(username):
     clean_username = username.replace('@', '')
     
     try:
-        # Use snscrape CLI to get user info
-        cmd = [
-            'snscrape',
-            '--jsonl',
-            '--max-results', '1',
-            f'twitter-user:{clean_username}'
-        ]
+        # Use snscrape's User scraper
+        user_scraper = sntwitter.TwitterUserScraper(clean_username)
+        user = user_scraper.entity
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            print(f"Error: {result.stderr}", file=sys.stderr)
-            return None
-        
-        # Parse the JSON output
-        if result.stdout.strip():
-            user_data_raw = json.loads(result.stdout.strip().split('\n')[0])
-            
+        if user:
             user_data = {
-                'username': user_data_raw.get('username', clean_username),
-                'name': user_data_raw.get('displayname', ''),
-                'followers': user_data_raw.get('followersCount', 0),
-                'following': user_data_raw.get('friendsCount', 0),
-                'tweets': user_data_raw.get('statusesCount', 0),
-                'bio': user_data_raw.get('description', ''),
-                'verified': user_data_raw.get('verified', False),
+                'username': user.username,
+                'name': user.displayname or user.username,
+                'followers': user.followersCount,
+                'following': user.friendsCount,
+                'tweets': user.statusesCount,
+                'bio': user.description or '',
+                'verified': user.verified,
                 'scraped_at': datetime.now().isoformat()
             }
             return user_data
         else:
             return None
             
-    except subprocess.TimeoutExpired:
-        print(f"Timeout scraping @{clean_username}", file=sys.stderr)
-        return None
     except Exception as e:
         print(f"Error scraping @{clean_username}: {str(e)}", file=sys.stderr)
         return None
