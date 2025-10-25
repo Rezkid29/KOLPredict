@@ -177,14 +177,17 @@ console.warn('⚠️ Profile stats grid not found, data may be limited.');
 
 console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
-const detailedData = await profilePage.evaluate(async () => {
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const detailedData = await profilePage.evaluate(async function() {
+function delay(ms) { 
+  return new Promise(resolve => setTimeout(resolve, ms)); 
+}
 
-const findStatValueByLabel = (labelRegex: RegExp): string | null => {
+function findStatValueByLabel(labelRegex) {
 try {
-const allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
-for (const div of allStatDivs) {
-const texts = Array.from(div.querySelectorAll('p')).map(p => p.textContent || '');
+var allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
+for (var i = 0; i < allStatDivs.length; i++) {
+var div = allStatDivs[i];
+var texts = Array.from(div.querySelectorAll('p')).map(function(p) { return p.textContent || ''; });
 if (texts.length === 2) {
 if (labelRegex.test(texts[0])) {
 return texts[1].trim();
@@ -193,50 +196,50 @@ return texts[1].trim();
 }
 return null;
 } catch (e) { return null; }
-};
+}
 
-const extractSolFromPnL = (): string | null => {
+function extractSolFromPnL() {
 try {
-const pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(el => 
-el.textContent?.includes('Sol') && 
+var pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(function(el) {
+return el.textContent && el.textContent.includes('Sol') && 
 el.textContent.includes('$') &&
-el.textContent.match(/\d+\s*\/\s*\d+/)
-);
+el.textContent.match(/\d+\s*\/\s*\d+/);
+});
 if (!pnlEl || !pnlEl.textContent) return null;
 
-const pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+var pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
 if (pnlMatch) {
 return pnlMatch[1].replace(/,/g, '');
 }
 return null;
 } catch (e) { return null; }
-};
+}
 
-const extractCurrentTimeframeData = (): { pnl: string | null; winRate: string | null; volume: string | null } => {
-const pnl = extractSolFromPnL();
-let winRate = findStatValueByLabel(/Win Rate/i);
+function extractCurrentTimeframeData() {
+var pnl = extractSolFromPnL();
+var winRate = findStatValueByLabel(/Win Rate/i);
 if (winRate) winRate = winRate.replace('%', '');
-let volume = findStatValueByLabel(/Volume/i);
+var volume = findStatValueByLabel(/Volume/i);
 if (volume) volume = volume.replace(/[$,]/g, '');
 
-return { pnl, winRate, volume };
-};
+return { pnl: pnl, winRate: winRate, volume: volume };
+}
 
-const clickTimeframeAndExtract = async (label: '1d' | '7d' | '30d'): Promise<{ pnl: string | null; winRate: string | null; volume: string | null }> => {
+async function clickTimeframeAndExtract(label) {
 try {
-const button = Array.from(document.querySelectorAll('button')).find(
-b => b.textContent?.trim().toLowerCase() === label
-);
+var button = Array.from(document.querySelectorAll('button')).find(function(b) {
+return b.textContent && b.textContent.trim().toLowerCase() === label;
+});
 if (!button) {
-console.error(`Button ${label} not found`);
+console.error('Button ' + label + ' not found');
 return { pnl: null, winRate: null, volume: null };
 }
 
-const oldData = extractCurrentTimeframeData();
+var oldData = extractCurrentTimeframeData();
 button.click();
 
 await delay(1500);
-const newData = extractCurrentTimeframeData();
+var newData = extractCurrentTimeframeData();
 
 if (newData.pnl === oldData.pnl && newData.winRate === oldData.winRate) {
 await delay(1500);
@@ -245,19 +248,19 @@ return extractCurrentTimeframeData();
 
 return newData;
 } catch (e) {
-console.error(`Error clicking ${label}:`, e);
+console.error('Error clicking ' + label + ':', e);
 return { pnl: null, winRate: null, volume: null };
 }
-};
+}
 
 console.log('Extracting 1d data...');
-const data1d = extractCurrentTimeframeData();
+var data1d = extractCurrentTimeframeData();
 
 console.log('Clicking 7d button...');
-const data7d = await clickTimeframeAndExtract('7d');
+var data7d = await clickTimeframeAndExtract('7d');
 
 console.log('Clicking 30d button...');
-const data30d = await clickTimeframeAndExtract('30d');
+var data30d = await clickTimeframeAndExtract('30d');
 
 console.log('=== EXTRACTION RESULTS ===');
 console.log('1D - PnL:', data1d.pnl, 'Win Rate:', data1d.winRate, 'Volume:', data1d.volume);
@@ -274,7 +277,7 @@ winRate7d: data7d.winRate,
 winRate30d: data30d.winRate,
 totalTrades1d: data1d.volume,
 totalTrades7d: data7d.volume,
-totalTrades30d: data30d.volume,
+totalTrades30d: data30d.volume
 };
 });
 
