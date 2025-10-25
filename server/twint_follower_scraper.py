@@ -1,18 +1,18 @@
 
 #!/usr/bin/env python3
 """
-Twint-based X/Twitter follower scraper
+X/Twitter follower scraper using snscrape
 Scrapes follower counts and basic profile data without requiring API credentials
 """
 
-import twint
 import json
 import sys
 from datetime import datetime
+import subprocess
 
 def get_user_info(username):
     """
-    Get user information including follower count using Twint
+    Get user information including follower count using snscrape
     
     Args:
         username: Twitter/X handle (without @)
@@ -23,35 +23,42 @@ def get_user_info(username):
     # Remove @ if present
     clean_username = username.replace('@', '')
     
-    # Configure Twint
-    c = twint.Config()
-    c.Username = clean_username
-    c.User_full = True
-    c.Store_object = True
-    c.Hide_output = True
-    
     try:
-        # Run the search
-        twint.run.Lookup(c)
+        # Use snscrape CLI to get user info
+        cmd = [
+            'snscrape',
+            '--jsonl',
+            '--max-results', '1',
+            f'twitter-user:{clean_username}'
+        ]
         
-        # Get the user object from Twint's storage
-        user = twint.output.users_list[-1] if twint.output.users_list else None
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
-        if user:
+        if result.returncode != 0:
+            print(f"Error: {result.stderr}", file=sys.stderr)
+            return None
+        
+        # Parse the JSON output
+        if result.stdout.strip():
+            user_data_raw = json.loads(result.stdout.strip().split('\n')[0])
+            
             user_data = {
-                'username': user.username,
-                'name': user.name,
-                'followers': user.followers,
-                'following': user.following,
-                'tweets': user.tweets,
-                'bio': user.bio,
-                'verified': user.verified,
+                'username': user_data_raw.get('username', clean_username),
+                'name': user_data_raw.get('displayname', ''),
+                'followers': user_data_raw.get('followersCount', 0),
+                'following': user_data_raw.get('friendsCount', 0),
+                'tweets': user_data_raw.get('statusesCount', 0),
+                'bio': user_data_raw.get('description', ''),
+                'verified': user_data_raw.get('verified', False),
                 'scraped_at': datetime.now().isoformat()
             }
             return user_data
         else:
             return None
             
+    except subprocess.TimeoutExpired:
+        print(f"Timeout scraping @{clean_username}", file=sys.stderr)
+        return None
     except Exception as e:
         print(f"Error scraping @{clean_username}: {str(e)}", file=sys.stderr)
         return None
