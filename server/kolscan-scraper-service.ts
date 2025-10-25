@@ -122,12 +122,7 @@ export class KolscanScraperService {
     console.log(`\n🐦 Enriching ${scrapedKols.length} KOLs with Twitter follower data...`);
     const followerMap = new Map<string, number>();
 
-    // Extract X handles - debug logging
-    console.log('🔍 DEBUG: Extracting X handles from scraped KOLs:');
-    scrapedKols.forEach((kol, idx) => {
-      console.log(`  [${idx + 1}] ${kol.username} -> xHandle: "${kol.xHandle || 'N/A'}"`);
-    });
-
+    // Extract X handles
     const handles = scrapedKols
       .map(kol => kol.xHandle)
       .filter(handle => handle && handle.length > 0);
@@ -137,19 +132,16 @@ export class KolscanScraperService {
       return followerMap;
     }
 
-    console.log(`📋 Found ${handles.length} X handles to scrape with Python: [${handles.join(', ')}]`);
+    console.log(`Found ${handles.length} X handles to scrape with Python`);
 
     // Use Python scraper for batch follower collection
     try {
-      console.log(`🐍 Calling Python scraper with handles: [${handles.join(', ')}]`);
       const pythonFollowers = await this.scrapePythonFollowers(handles);
-      console.log(`🐍 Python scraper returned ${pythonFollowers.size} results`);
       pythonFollowers.forEach((followers, handle) => {
         followerMap.set(handle, followers);
-        console.log(`  ✅ Mapped @${handle} -> ${followers.toLocaleString()} followers`);
       });
     } catch (error) {
-      console.error('❌ Python scraper batch failed:', error);
+      console.error('Python scraper batch failed:', error);
     }
 
     console.log(`✅ Successfully enriched ${followerMap.size}/${handles.length} KOLs with follower data`);
