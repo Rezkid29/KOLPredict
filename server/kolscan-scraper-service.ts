@@ -76,42 +76,62 @@ export class KolscanScraperService {
   }
 
   private async scrapePythonFollowers(handles: string[]): Promise<Map<string, number>> {
+    console.log(`\n🐍 Starting Python scraper for ${handles.length} handles`);
+    
     return new Promise((resolve, reject) => {
       const followerMap = new Map<string, number>();
 
-      const pythonProcess = spawn('python3', [
+      const pythonArgs = [
         'server/twint_follower_scraper.py',
         '--json',
         ...handles
-      ]);
+      ];
+
+      console.log(`📝 Python command: python3 ${pythonArgs.join(' ')}`);
+
+      const pythonProcess = spawn('python3', pythonArgs);
 
       let stdout = '';
       let stderr = '';
 
       pythonProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
+        const chunk = data.toString();
+        stdout += chunk;
+        console.log(`  [Python stdout]: ${chunk.trim()}`);
       });
 
       pythonProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
+        const chunk = data.toString();
+        stderr += chunk;
+        console.log(`  [Python stderr]: ${chunk.trim()}`);
       });
 
       pythonProcess.on('close', (code) => {
+        console.log(`\n🏁 Python process exited with code: ${code}`);
+        
         if (code !== 0) {
-          console.error(`Python scraper failed: ${stderr}`);
+          console.error(`❌ Python scraper failed with exit code ${code}`);
+          console.error(`Error output: ${stderr}`);
           resolve(followerMap); // Return empty map on failure
           return;
         }
 
+        console.log(`📄 Raw Python output (${stdout.length} chars):`);
+        console.log(stdout.substring(0, 500)); // Show first 500 chars
+
         try {
           const results = JSON.parse(stdout);
+          console.log(`✅ Successfully parsed ${results.length} results from Python`);
+          
           results.forEach((user: any) => {
             followerMap.set(user.username, user.followers);
-            console.log(`  ✅ @${user.username}: ${user.followers.toLocaleString()} followers`);
+            console.log(`  📊 @${user.username}: ${user.followers.toLocaleString()} followers`);
           });
+          
           resolve(followerMap);
         } catch (error) {
-          console.error(`Failed to parse Python output: ${error}`);
+          console.error(`❌ Failed to parse Python JSON output: ${error}`);
+          console.error(`Raw output was: ${stdout}`);
           resolve(followerMap);
         }
       });
@@ -122,29 +142,43 @@ export class KolscanScraperService {
     console.log(`\n🐦 Enriching ${scrapedKols.length} KOLs with Twitter follower data...`);
     const followerMap = new Map<string, number>();
 
-    // Extract X handles
+    // Debug: Show all scraped KOLs and their X handles
+    console.log('🔍 DEBUG: Scraped KOLs data:');
+    scrapedKols.forEach((kol, idx) => {
+      console.log(`  [${idx + 1}] ${kol.username} -> xHandle: "${kol.xHandle || 'N/A'}"`);
+    });
+
+    // Extract X handles - filter out empty/null values
     const handles = scrapedKols
       .map(kol => kol.xHandle)
-      .filter(handle => handle && handle.length > 0);
+      .filter(handle => handle && handle.trim().length > 0)
+      .map(handle => handle.trim());
 
+    console.log(`\n📋 Extracted ${handles.length} valid X handles from ${scrapedKols.length} KOLs`);
+    
     if (handles.length === 0) {
       console.log('⚠️  No X handles found to scrape');
       return followerMap;
     }
 
-    console.log(`Found ${handles.length} X handles to scrape with Python`);
+    console.log(`🐍 Testing follower counts for: [${handles.join(', ')}]`);
 
     // Use Python scraper for batch follower collection
     try {
+      console.log(`🚀 Calling Python scraper with ${handles.length} handles...`);
       const pythonFollowers = await this.scrapePythonFollowers(handles);
+      
+      console.log(`📊 Python scraper completed, returned ${pythonFollowers.size} results`);
+      
       pythonFollowers.forEach((followers, handle) => {
         followerMap.set(handle, followers);
+        console.log(`  ✅ @${handle}: ${followers.toLocaleString()} followers`);
       });
     } catch (error) {
-      console.error('Python scraper batch failed:', error);
+      console.error('❌ Python scraper batch failed:', error);
     }
 
-    console.log(`✅ Successfully enriched ${followerMap.size}/${handles.length} KOLs with follower data`);
+    console.log(`\n✅ Successfully enriched ${followerMap.size}/${handles.length} KOLs with follower data`);
     return followerMap;
   }
 
