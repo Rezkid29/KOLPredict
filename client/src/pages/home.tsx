@@ -7,27 +7,49 @@ import { LiveFeed } from "@/components/live-feed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
-import type { MarketWithKol, BetWithMarket, User, PositionWithMarket } from "@shared/schema";
+import type {
+  MarketWithKol,
+  BetWithMarket,
+  User,
+  PositionWithMarket,
+} from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 
 export default function Home() {
   const [betModalOpen, setBetModalOpen] = useState(false);
-  const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(null);
+  const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(
+    null,
+  );
   const [betType, setBetType] = useState<"buy" | "sell">("buy");
   const [searchQuery, setSearchQuery] = useState("");
   const [liveFeedOpen, setLiveFeedOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const { toast } = useToast();
-  
+
   // Connect to WebSocket for real-time updates
   const { isConnected } = useWebSocket();
 
-  const { data: markets = [], isLoading: marketsLoading } = useQuery<MarketWithKol[]>({
+  const { data: markets = [], isLoading: marketsLoading } = useQuery<
+    MarketWithKol[]
+  >({
     queryKey: ["/api/markets"],
   });
 
@@ -54,7 +76,12 @@ export default function Home() {
     setBetModalOpen(true);
   };
 
-  const handleConfirmBet = async (marketId: string, position: "YES" | "NO", amount: number, action: "buy" | "sell") => {
+  const handleConfirmBet = async (
+    marketId: string,
+    position: "YES" | "NO",
+    amount: number,
+    action: "buy" | "sell",
+  ) => {
     try {
       await apiRequest("POST", "/api/bets", {
         marketId,
@@ -73,15 +100,18 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
     } catch (error: any) {
-      let errorMessage = error?.message || "Failed to place bet. Please try again.";
-      
+      let errorMessage =
+        error?.message || "Failed to place bet. Please try again.";
+
       // Provide user-friendly messages for common errors
       if (errorMessage.includes("not live")) {
-        errorMessage = "This market is no longer accepting bets. It may have expired or been resolved.";
+        errorMessage =
+          "This market is no longer accepting bets. It may have expired or been resolved.";
       } else if (errorMessage.includes("resolved")) {
-        errorMessage = "This market has already been resolved and is closed for trading.";
+        errorMessage =
+          "This market has already been resolved and is closed for trading.";
       }
-      
+
       toast({
         title: "Cannot Place Bet",
         description: errorMessage,
@@ -91,40 +121,56 @@ export default function Home() {
   };
 
   const categories = [
-    { value: 'performance', label: 'Performance', color: 'text-success dark:text-success' },
-    { value: 'ranking', label: 'Ranking', color: 'text-primary dark:text-primary' },
-    { value: 'social', label: 'Social', color: 'text-primary dark:text-primary' },
+    {
+      value: "performance",
+      label: "Performance",
+      color: "text-success dark:text-success",
+    },
+    {
+      value: "ranking",
+      label: "Ranking",
+      color: "text-primary dark:text-primary",
+    },
+    {
+      value: "social",
+      label: "Social",
+      color: "text-primary dark:text-primary",
+    },
   ];
 
   const toggleCategory = (category: string) => {
-    setSelectedCategories(prev =>
+    setSelectedCategories((prev) =>
       prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
     );
   };
 
   const filteredMarkets = markets.filter((market) => {
     const query = searchQuery.toLowerCase();
-    const matchesSearch = (
+    const matchesSearch =
       market.kol.name.toLowerCase().includes(query) ||
       market.kol.handle.toLowerCase().includes(query) ||
-      market.title.toLowerCase().includes(query)
-    );
-    
-    const matchesCategory = selectedCategories.length === 0 || 
-      (market.marketCategory && selectedCategories.includes(market.marketCategory));
-    
+      market.title.toLowerCase().includes(query);
+
+    const matchesCategory =
+      selectedCategories.length === 0 ||
+      (market.marketCategory &&
+        selectedCategories.includes(market.marketCategory));
+
     // Only show live, unresolved markets - check both flags
     // resolved can be true even if isLive is true (during settlement)
     const isActive = market.isLive && market.resolved !== true;
-    
+
     return matchesSearch && matchesCategory && isActive;
   });
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username} />
+      <Navbar
+        balance={user?.balance ? parseFloat(user.balance) : 1000}
+        username={user?.username}
+      />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden border-b border-border/50 bg-gradient-to-br from-background via-primary/5 to-background">
@@ -132,15 +178,23 @@ export default function Home() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(120,119,198,0.08),rgba(255,255,255,0))]" />
         <div className="container mx-auto px-4 py-20 md:py-28 relative">
           <div className="max-w-3xl mx-auto text-center space-y-8">
-            <Badge variant="outline" className="gap-2 px-4 py-2.5 border-primary/40 text-primary backdrop-blur-sm bg-background/50">
+            <Badge
+              variant="outline"
+              className="gap-2 px-4 py-2.5 border-primary/40 text-primary backdrop-blur-sm bg-background/50"
+            >
               <Sparkles className="h-4 w-4" />
               Trade KOL Performance Markets
             </Badge>
-            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight leading-tight">
-              Bet on <span className="text-primary bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">Influence</span>
+            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight leading-tight text white">
+              Bet on{" "}
+              <span className="text-primary bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                Influence
+              </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Trade prediction markets on Key Opinion Leader performance. Bet on follower growth, engagement rates, and real-time influence metrics.
+              Trade prediction markets on Key Opinion Leader performance. Bet on
+              follower growth, engagement rates, and real-time influence
+              metrics.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 pt-6">
               <div className="flex items-center gap-2.5 px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
@@ -148,12 +202,19 @@ export default function Home() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </div>
-                <span className="text-sm font-semibold">{markets.length} Live Markets</span>
+                <span className="text-sm font-semibold">
+                  {markets.length} Live Markets
+                </span>
               </div>
               <div className="px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
-                <span className="text-sm text-muted-foreground">24h Volume: </span>
+                <span className="text-sm text-muted-foreground">
+                  24h Volume:{" "}
+                </span>
                 <span className="text-sm font-bold tabular-nums">
-                  {markets.reduce((sum, m) => sum + parseFloat(m.totalVolume), 0).toFixed(0)} PTS
+                  {markets
+                    .reduce((sum, m) => sum + parseFloat(m.totalVolume), 0)
+                    .toFixed(0)}{" "}
+                  PTS
                 </span>
               </div>
             </div>
@@ -180,11 +241,19 @@ export default function Home() {
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="default" className="gap-2 shrink-0" data-testid="button-filter">
+                  <Button
+                    variant="outline"
+                    size="default"
+                    className="gap-2 shrink-0"
+                    data-testid="button-filter"
+                  >
                     <Filter className="h-4 w-4" />
                     Filter
                     {selectedCategories.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
+                      <Badge
+                        variant="secondary"
+                        className="ml-1 h-5 w-5 p-0 flex items-center justify-center"
+                      >
                         {selectedCategories.length}
                       </Badge>
                     )}
@@ -225,7 +294,10 @@ export default function Home() {
             {marketsLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-[450px] rounded-lg bg-card/50 border border-card-border/50 animate-pulse" />
+                  <div
+                    key={i}
+                    className="h-[450px] rounded-lg bg-card/50 border border-card-border/50 animate-pulse"
+                  />
                 ))}
               </div>
             ) : filteredMarkets.length === 0 ? (
@@ -235,11 +307,16 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">No markets found</h3>
                 <p className="text-muted-foreground">
-                  {searchQuery ? "Try a different search term" : "Check back soon for new markets"}
+                  {searchQuery
+                    ? "Try a different search term"
+                    : "Check back soon for new markets"}
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5" data-testid="markets-grid">
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 gap-5"
+                data-testid="markets-grid"
+              >
                 {filteredMarkets.map((market) => (
                   <MarketCard
                     key={market.id}
@@ -295,7 +372,8 @@ export default function Home() {
           selectedMarket && user
             ? (() => {
                 const position = userPositions.find(
-                  (p) => p.marketId === selectedMarket.id && p.position === "YES"
+                  (p) =>
+                    p.marketId === selectedMarket.id && p.position === "YES",
                 );
                 return position ? parseFloat(position.shares) : 0;
               })()
@@ -305,7 +383,8 @@ export default function Home() {
           selectedMarket && user
             ? (() => {
                 const position = userPositions.find(
-                  (p) => p.marketId === selectedMarket.id && p.position === "NO"
+                  (p) =>
+                    p.marketId === selectedMarket.id && p.position === "NO",
                 );
                 return position ? parseFloat(position.shares) : 0;
               })()
