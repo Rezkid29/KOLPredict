@@ -185,8 +185,8 @@ export default function Home() {
               <Sparkles className="h-4 w-4" />
               Trade KOL Performance Markets
             </Badge>
-            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight leading-tight text white">
-              Bet on{" "}
+            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight leading-tight">
+              <span className="text-white">Bet on</span>{" "}
               <span className="text-primary bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
                 Influence
               </span>
@@ -202,7 +202,7 @@ export default function Home() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </div>
-                <span className="text-sm font-semibold">
+                <span className="text-sm font-semibold text-white">
                   {markets.length} Live Markets
                 </span>
               </div>
@@ -210,7 +210,7 @@ export default function Home() {
                 <span className="text-sm text-muted-foreground">
                   24h Volume:{" "}
                 </span>
-                <span className="text-sm font-bold tabular-nums">
+                <span className="text-sm font-bold tabular-nums text-white">
                   {markets
                     .reduce((sum, m) => sum + parseFloat(m.totalVolume), 0)
                     .toFixed(0)}{" "}
