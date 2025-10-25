@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Navbar } from "@/components/navbar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { BetModal } from "@/components/bet-modal";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Wallet, 
   TrendingUp, 
@@ -14,10 +17,15 @@ import {
   CheckCircle2,
   XCircle
 } from "lucide-react";
-import type { BetWithMarket, User } from "@shared/schema";
+import type { BetWithMarket, User, PositionWithMarket, MarketWithKol } from "@shared/schema";
 import logoImage from "/favicon.png";
 
 export default function Portfolio() {
+  const [betModalOpen, setBetModalOpen] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
   });
@@ -25,6 +33,85 @@ export default function Portfolio() {
   const { data: bets = [], isLoading } = useQuery<BetWithMarket[]>({
     queryKey: ["/api/bets/user"],
   });
+
+  const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
+    queryKey: ["/api/positions/user"],
+  });
+
+  const placeBetMutation = useMutation({
+    mutationFn: async ({
+      marketId,
+      position,
+      amount,
+      action,
+    }: {
+      marketId: string;
+      position: "YES" | "NO";
+      amount: number;
+      action: "buy" | "sell";
+    }) => {
+      const endpoint = action === "buy" ? "/api/bets" : "/api/bets/sell";
+      const body =
+        action === "buy"
+          ? {
+              userId: user?.id,
+              marketId,
+              position,
+              amount,
+            }
+          : {
+              userId: user?.id,
+              marketId,
+              position,
+              shares: amount,
+            };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to place bet");
+      }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bets/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+      toast({
+        title: "Success",
+        description: "Bet placed successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleConfirmBet = (
+    marketId: string,
+    position: "YES" | "NO",
+    amount: number,
+    action: "buy" | "sell"
+  ) => {
+    placeBetMutation.mutate({ marketId, position, amount, action });
+  };
+
+  const handleBetClick = (market: MarketWithKol) => {
+    setSelectedMarket(market);
+    setBetModalOpen(true);
+  };
 
   const balance = user?.balance ? parseFloat(user.balance) : 1000;
   const totalProfit = user?.totalProfit ? parseFloat(user.totalProfit) : 0;
@@ -185,7 +272,8 @@ export default function Portfolio() {
                 {bets.map((bet) => (
                   <div
                     key={bet.id}
-                    className="flex items-start gap-4 p-5 rounded-lg border border-border/60 hover-elevate transition-all"
+                    onClick={() => handleBetClick(bet.market)}
+                    className="flex items-start gap-4 p-5 rounded-lg border border-border/60 hover-elevate transition-all cursor-pointer"
                     data-testid={`bet-history-${bet.id}`}
                   >
                     <Avatar className="h-12 w-12 ring-2 ring-border" data-testid={`avatar-${bet.id}`}>
@@ -256,6 +344,37 @@ export default function Portfolio() {
           )}
         </Card>
       </div>
+
+      {/* Bet Modal */}
+      <BetModal
+        open={betModalOpen}
+        onClose={() => setBetModalOpen(false)}
+        market={selectedMarket}
+        userBalance={balance}
+        userYesShares={
+          selectedMarket && user
+            ? (() => {
+                const position = userPositions.find(
+                  (p) =>
+                    p.marketId === selectedMarket.id && p.position === "YES",
+                );
+                return position ? parseFloat(position.shares) : 0;
+              })()
+            : 0
+        }
+        userNoShares={
+          selectedMarket && user
+            ? (() => {
+                const position = userPositions.find(
+                  (p) =>
+                    p.marketId === selectedMarket.id && p.position === "NO",
+                );
+                return position ? parseFloat(position.shares) : 0;
+              })()
+            : 0
+        }
+        onConfirm={handleConfirmBet}
+      />
     </div>
   );
 }
