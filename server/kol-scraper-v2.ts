@@ -1,7 +1,11 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, Page } from 'puppeteer';
 import { dbStorage } from "./db-storage";
 import type { InsertScrapedKol } from "@shared/schema";
 import { KOLDataParser, type RawKOLData, type FullKOLData, type KOLDetailedData } from './kol-data-parser';
+
+puppeteer.use(StealthPlugin());
 
 export class KOLScraperV2 {
 private browser?: Browser;
@@ -13,7 +17,7 @@ console.log('✅ Browser already initialized, reusing instance');
 return;
 }
 
-console.log('🚀 Initializing Puppeteer browser...');
+console.log('🚀 Initializing Puppeteer browser with stealth plugin...');
 
 const launchOptions: any = {
 headless: true,
@@ -37,13 +41,9 @@ launchOptions.executablePath = chromiumPath;
 this.browser = await puppeteer.launch(launchOptions);
 this.leaderboardPage = await this.browser.newPage();
 
-await this.leaderboardPage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+await this.leaderboardPage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.141 Safari/537.36');
 
-await this.leaderboardPage.evaluateOnNewDocument(() => {
-Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-});
-
-console.log('✅ Browser initialized successfully');
+console.log('✅ Browser initialized successfully with stealth plugin');
 }
 
 async scrapeLeaderboard(): Promise<{ summary: RawKOLData, profileUrl: string | null }[]> {
@@ -177,90 +177,81 @@ console.warn('⚠️ Profile stats grid not found, data may be limited.');
 
 console.log(`📄 Extracting detailed data from ${fullUrl}...`);
 
-const detailedData = await profilePage.evaluate(async function() {
-function delay(ms) { 
-  return new Promise(resolve => setTimeout(resolve, ms)); 
-}
+const detailedData = await profilePage.evaluate(() => {
+return (async () => {
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-function findStatValueByLabel(labelRegex) {
+const findStatValueByLabel = (labelRegex) => {
 try {
-var allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
-for (var i = 0; i < allStatDivs.length; i++) {
-var div = allStatDivs[i];
-var texts = Array.from(div.querySelectorAll('p')).map(function(p) { return p.textContent || ''; });
-if (texts.length === 2) {
-if (labelRegex.test(texts[0])) {
+const allStatDivs = Array.from(document.querySelectorAll('main div[class*="grid"] > div'));
+for (let i = 0; i < allStatDivs.length; i++) {
+const div = allStatDivs[i];
+const texts = Array.from(div.querySelectorAll('p')).map(p => p.textContent || '');
+if (texts.length === 2 && labelRegex.test(texts[0])) {
 return texts[1].trim();
 }
 }
-}
 return null;
 } catch (e) { return null; }
-}
+};
 
-function extractSolFromPnL() {
+const extractSolFromPnL = () => {
 try {
-var pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(function(el) {
-return el.textContent && el.textContent.includes('Sol') && 
+const pnlEl = Array.from(document.querySelectorAll('h3, div, p')).find(el => 
+el.textContent && el.textContent.includes('Sol') && 
 el.textContent.includes('$') &&
-el.textContent.match(/\d+\s*\/\s*\d+/);
-});
+el.textContent.match(/\d+\s*\/\s*\d+/)
+);
 if (!pnlEl || !pnlEl.textContent) return null;
 
-var pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
-if (pnlMatch) {
-return pnlMatch[1].replace(/,/g, '');
-}
-return null;
+const pnlMatch = pnlEl.textContent.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+return pnlMatch ? pnlMatch[1].replace(/,/g, '') : null;
 } catch (e) { return null; }
-}
+};
 
-function extractCurrentTimeframeData() {
-var pnl = extractSolFromPnL();
-var winRate = findStatValueByLabel(/Win Rate/i);
+const extractCurrentTimeframeData = () => {
+let pnl = extractSolFromPnL();
+let winRate = findStatValueByLabel(/Win Rate/i);
 if (winRate) winRate = winRate.replace('%', '');
-var volume = findStatValueByLabel(/Volume/i);
+let volume = findStatValueByLabel(/Volume/i);
 if (volume) volume = volume.replace(/[$,]/g, '');
+return { pnl, winRate, volume };
+};
 
-return { pnl: pnl, winRate: winRate, volume: volume };
-}
-
-async function clickTimeframeAndExtract(label) {
+const clickTimeframeAndExtract = async (label) => {
 try {
-var button = Array.from(document.querySelectorAll('button')).find(function(b) {
-return b.textContent && b.textContent.trim().toLowerCase() === label;
-});
+const button = Array.from(document.querySelectorAll('button')).find(b => 
+b.textContent && b.textContent.trim().toLowerCase() === label
+);
 if (!button) {
 console.error('Button ' + label + ' not found');
 return { pnl: null, winRate: null, volume: null };
 }
 
-var oldData = extractCurrentTimeframeData();
+const oldData = extractCurrentTimeframeData();
 button.click();
-
 await delay(1500);
-var newData = extractCurrentTimeframeData();
+let newData = extractCurrentTimeframeData();
 
 if (newData.pnl === oldData.pnl && newData.winRate === oldData.winRate) {
 await delay(1500);
 return extractCurrentTimeframeData();
 }
-
 return newData;
 } catch (e) {
 console.error('Error clicking ' + label + ':', e);
 return { pnl: null, winRate: null, volume: null };
 }
-}
+};
 
 console.log('Extracting 1d data...');
-var data1d = extractCurrentTimeframeData();
+const data1d = extractCurrentTimeframeData();
 
 console.log('Clicking 7d button...');
-var data7d = await clickTimeframeAndExtract('7d');
+const data7d = await clickTimeframeAndExtract('7d');
 
 console.log('Clicking 30d button...');
-var data30d = await clickTimeframeAndExtract('30d');
+const data30d = await clickTimeframeAndExtract('30d');
 
 console.log('=== EXTRACTION RESULTS ===');
 console.log('1D - PnL:', data1d.pnl, 'Win Rate:', data1d.winRate, 'Volume:', data1d.volume);
@@ -279,6 +270,7 @@ totalTrades1d: data1d.volume,
 totalTrades7d: data7d.volume,
 totalTrades30d: data30d.volume
 };
+})();
 });
 
 return detailedData as KOLDetailedData;

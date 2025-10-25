@@ -1,7 +1,11 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, Page } from 'puppeteer';
 import { dbStorage } from "./db-storage";
 import type { InsertScrapedKol } from "@shared/schema";
 import { KOLDataParser, type RawKOLData } from './kol-data-parser';
+
+puppeteer.use(StealthPlugin());
 
 type KOLData = RawKOLData;
 
@@ -15,7 +19,7 @@ export class KOLScraper {
       return;
     }
 
-    console.log('🚀 Initializing Puppeteer browser...');
+    console.log('🚀 Initializing Puppeteer browser with stealth plugin...');
     
     const launchOptions: any = {
       headless: true,
@@ -41,13 +45,9 @@ export class KOLScraper {
 
     this.page = await this.browser.newPage();
 
-    await this.page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    await this.page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.141 Safari/537.36');
 
-    await this.page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
-
-    console.log('✅ Browser initialized successfully');
+    console.log('✅ Browser initialized successfully with stealth plugin');
   }
 
   async scrapeLeaderboard(): Promise<KOLData[]> {
