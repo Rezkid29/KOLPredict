@@ -640,15 +640,20 @@ export class DbStorage implements IStorage {
           );
         }
 
-        // Calculate profit: payout - total original investment
-        // Total investment = shares sold × average cost per share
+        // Calculate profit: payout - total original investment (including platform fee)
+        // When you bought these shares, you paid: (shares × avgCost) + platform fee
+        // The avgCost already includes the fee impact, but we need to account for the total cost
+        // Total cost per share when buying = avgCost / (1 - PLATFORM_FEE_PERCENTAGE)
+        // This reverses the fee calculation to get the original amount paid
         const totalInvestment = params.amount * averageCost;
-        profit = betAmount - totalInvestment;
+        const originalAmountPaid = totalInvestment / (1 - PLATFORM_FEE_PERCENTAGE);
+        profit = betAmount - originalAmountPaid;
 
         console.log(`\n💰 SELL P&L CALCULATION:`);
         console.log(`   Shares sold: ${params.amount}`);
         console.log(`   Average cost per share: ${averageCost.toFixed(4)}`);
-        console.log(`   Total investment: ${totalInvestment.toFixed(2)}`);
+        console.log(`   Net investment (after fee): ${totalInvestment.toFixed(2)}`);
+        console.log(`   Original amount paid (with fee): ${originalAmountPaid.toFixed(2)}`);
         console.log(`   Payout received: ${betAmount.toFixed(2)}`);
         console.log(`   Profit/Loss: ${profit.toFixed(2)} (${profit >= 0 ? 'PROFIT' : 'LOSS'})\n`);
 
