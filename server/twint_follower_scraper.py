@@ -40,7 +40,7 @@ def get_user_info(username):
                 'followers': user.followersCount,
                 'following': user.friendsCount,
                 'tweets': user.statusesCount,
-                'bio': user.description or '',
+                'bio': user.renderedDescription or '',
                 'verified': user.verified,
                 'scraped_at': datetime.now().isoformat()
             }

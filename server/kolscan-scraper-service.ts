@@ -74,7 +74,70 @@ export class KolscanScraperService {
     };
   }
 
-  async importOrUpdateKols(scrapedKols: KOLData[]): Promise<Kol[]> {
+  async enrichWithFollowerData(scrapedKols: KOLData[]): Promise<Map<string, number>> {
+    console.log(`\n🐦 Enriching ${scrapedKols.length} KOLs with Twitter follower data...`);
+    const followerMap = new Map<string, number>();
+
+    // Extract X handles
+    const handles = scrapedKols
+      .map(kol => kol.xHandle)
+      .filter(handle => handle && handle.length > 0);
+
+    if (handles.length === 0) {
+      console.log('⚠️  No X handles found to scrape');
+      return followerMap;
+    }
+
+    try {
+      // Run Python scraper
+      const { spawn } = await import('child_process');
+      const pythonProcess = spawn('python3', [
+        'server/twint_follower_scraper.py',
+        '--json',
+        ...handles
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Python scraper exited with code ${code}`));
+          }
+        });
+      });
+
+      // Parse JSON output
+      const jsonMatch = stdout.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const followerData = JSON.parse(jsonMatch[0]);
+        
+        for (const user of followerData) {
+          followerMap.set(user.username.toLowerCase(), user.followers);
+          console.log(`  ✅ @${user.username}: ${user.followers.toLocaleString()} followers`);
+        }
+      }
+
+      console.log(`✅ Enriched ${followerMap.size}/${handles.length} KOLs with follower data\n`);
+    } catch (error) {
+      console.error('❌ Failed to scrape follower data:', error);
+    }
+
+    return followerMap;
+  }
+
+  async importOrUpdateKols(scrapedKols: KOLData[], followerMap?: Map<string, number>): Promise<Kol[]> {
     console.log(`🔄 Importing/updating ${scrapedKols.length} KOLs from kolscan...`);
     
     const importedKols: Kol[] = [];
@@ -85,6 +148,15 @@ export class KolscanScraperService {
         const existingKol = await this.storage.getKolByHandle(handle);
 
         const kolData = await this.transformScrapedKol(scrapedKol);
+
+        // Override with real follower data if available
+        if (followerMap && scrapedKol.xHandle) {
+          const realFollowers = followerMap.get(scrapedKol.xHandle.toLowerCase());
+          if (realFollowers !== undefined) {
+            kolData.followers = realFollowers;
+            console.log(`  🎯 Using real follower count for ${scrapedKol.username}: ${realFollowers.toLocaleString()}`);
+          }
+        }
 
         let kol: Kol;
         if (existingKol) {
@@ -200,6 +272,7 @@ export class KolscanScraperService {
     scraped: number;
     imported: number;
     marketsCreated: number;
+    followersEnriched: number;
   }> {
     console.log('='.repeat(70));
     console.log('🚀 KOLSCAN IMPORT & MARKET GENERATION');
@@ -210,13 +283,17 @@ export class KolscanScraperService {
       const scrapedKols = await kolScraper.scrapeLeaderboard();
       console.log(`📊 Scraped ${scrapedKols.length} KOLs from kolscan`);
 
-      const importedKols = await this.importOrUpdateKols(scrapedKols);
+      // Enrich with real Twitter follower data
+      const followerMap = await this.enrichWithFollowerData(scrapedKols);
+
+      const importedKols = await this.importOrUpdateKols(scrapedKols, followerMap);
       
       const marketsCreated = await this.generateMarkets(importedKols);
 
       console.log('='.repeat(70));
       console.log('✅ IMPORT & GENERATION COMPLETE');
       console.log(`   Scraped: ${scrapedKols.length} KOLs`);
+      console.log(`   Followers Enriched: ${followerMap.size} KOLs`);
       console.log(`   Imported/Updated: ${importedKols.length} KOLs`);
       console.log(`   Markets Created: ${marketsCreated}`);
       console.log('='.repeat(70));
@@ -225,6 +302,7 @@ export class KolscanScraperService {
         scraped: scrapedKols.length,
         imported: importedKols.length,
         marketsCreated,
+        followersEnriched: followerMap.size,
       };
     } catch (error) {
       console.error('❌ Import & generation failed:', error);
