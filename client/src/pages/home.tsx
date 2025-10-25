@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navbar } from "@/components/navbar";
 import { MarketCard } from "@/components/market-card";
 import { BetModal } from "@/components/bet-modal";
@@ -68,11 +68,13 @@ export default function Home() {
 
   const handleBuy = (market: MarketWithKol) => {
     setSelectedMarket(market);
+    setBetType("buy");
     setBetModalOpen(true);
   };
 
   const handleSell = (market: MarketWithKol) => {
     setSelectedMarket(market);
+    setBetType("sell");
     setBetModalOpen(true);
   };
 
@@ -110,6 +112,8 @@ export default function Home() {
       } else if (errorMessage.includes("resolved")) {
         errorMessage =
           "This market has already been resolved and is closed for trading.";
+      } else if (errorMessage.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds to place this bet.";
       }
 
       toast({

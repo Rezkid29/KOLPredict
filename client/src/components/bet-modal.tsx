@@ -83,6 +83,10 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
   const potentialProfit = action === "buy" ? potentialPayout - betAmount : 0;
 
   const handleConfirm = () => {
+    if (betAmount <= 0) return;
+    if (action === "buy" && betAmount > userBalance) return;
+    if (action === "sell" && betAmount > currentShares) return;
+    
     onConfirm(market.id, position, betAmount, action);
     setAmount("");
     onClose();
