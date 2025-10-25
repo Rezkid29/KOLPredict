@@ -17,7 +17,11 @@ class SocialMediaAPIClient {
   private twitterBearerToken?: string;
 
   constructor() {
-    this.twitterBearerToken = process.env.TWITTER_BEARER_TOKEN;
+    const token = process.env.TWITTER_BEARER_TOKEN;
+    this.twitterBearerToken = token ? decodeURIComponent(token) : undefined;
+    if (this.twitterBearerToken) {
+      console.log('✅ Twitter Bearer Token configured (decoded if needed)');
+    }
   }
 
   async fetchTwitterMetrics(handle: string): Promise<SocialMediaMetrics | null> {
