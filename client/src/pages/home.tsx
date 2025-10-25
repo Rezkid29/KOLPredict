@@ -160,7 +160,8 @@ export default function Home() {
 
     // Only show live, unresolved markets - check both flags
     // resolved can be true even if isLive is true (during settlement)
-    const isActive = market.isLive && market.resolved !== true;
+    // Also check outcome is still 'pending'
+    const isActive = market.isLive && market.resolved !== true && market.outcome === "pending";
 
     return matchesSearch && matchesCategory && isActive;
   });
