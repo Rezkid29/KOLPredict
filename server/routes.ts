@@ -1637,5 +1637,988 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return resolutions;
   };
 
+  // ============================================================================
+  // SOCIAL FEATURES API ENDPOINTS
+  // ============================================================================
+
+  // ----------------------------------------------------------------------------
+  // User Profile Routes
+  // ----------------------------------------------------------------------------
+
+  app.get("/api/users/:username/profile", async (req, res) => {
+    try {
+      const { username } = req.params;
+
+      if (!username) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      const profileData = await storage.getProfileByUsername(username);
+
+      if (!profileData) {
+        return res.status(404).json({ message: "User profile not found" });
+      }
+
+      res.json(profileData);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch user profile" });
+    }
+  });
+
+  app.put("/api/users/:id/profile", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { bio, avatarUrl } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const updates: { bio?: string; avatarUrl?: string } = {};
+      if (bio !== undefined) updates.bio = bio;
+      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+
+      const updatedProfile = await storage.updateUserProfile(id, updates);
+      res.json(updatedProfile);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to update user profile" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Follow System Routes
+  // ----------------------------------------------------------------------------
+
+  app.post("/api/users/:id/follow", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { followerId } = req.body;
+
+      if (!id || !followerId) {
+        return res.status(400).json({ message: "User ID and follower ID are required" });
+      }
+
+      if (id === followerId) {
+        return res.status(400).json({ message: "Cannot follow yourself" });
+      }
+
+      const follow = await storage.followUser(followerId, id);
+      res.json(follow);
+    } catch (error) {
+      console.error("Error following user:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to follow user" });
+    }
+  });
+
+  app.delete("/api/users/:id/unfollow", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { followerId } = req.body;
+
+      if (!id || !followerId) {
+        return res.status(400).json({ message: "User ID and follower ID are required" });
+      }
+
+      await storage.unfollowUser(followerId, id);
+      res.json({ message: "Successfully unfollowed user" });
+    } catch (error) {
+      console.error("Error unfollowing user:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to unfollow user" });
+    }
+  });
+
+  app.get("/api/users/:id/followers", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const followers = await storage.getFollowers(id, limit);
+      res.json(followers);
+    } catch (error) {
+      console.error("Error fetching followers:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch followers" });
+    }
+  });
+
+  app.get("/api/users/:id/following", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const following = await storage.getFollowing(id, limit);
+      res.json(following);
+    } catch (error) {
+      console.error("Error fetching following:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch following" });
+    }
+  });
+
+  app.get("/api/users/:id/is-following/:otherId", async (req, res) => {
+    try {
+      const { id, otherId } = req.params;
+
+      if (!id || !otherId) {
+        return res.status(400).json({ message: "Both user IDs are required" });
+      }
+
+      const isFollowing = await storage.isFollowing(id, otherId);
+      res.json({ isFollowing });
+    } catch (error) {
+      console.error("Error checking follow status:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to check follow status" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Activity Feed Routes
+  // ----------------------------------------------------------------------------
+
+  app.get("/api/users/:id/activities", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const activities = await storage.getUserActivities(id, limit);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching user activities:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch user activities" });
+    }
+  });
+
+  app.get("/api/activities/following", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const activities = await storage.getFollowingActivities(userId, limit);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching following activities:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch following activities" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Messaging Routes
+  // ----------------------------------------------------------------------------
+
+  app.post("/api/conversations", async (req, res) => {
+    try {
+      const { user1Id, user2Id } = req.body;
+
+      if (!user1Id || !user2Id) {
+        return res.status(400).json({ message: "Both user IDs are required" });
+      }
+
+      if (user1Id === user2Id) {
+        return res.status(400).json({ message: "Cannot create conversation with yourself" });
+      }
+
+      let conversation = await storage.getConversation(user1Id, user2Id);
+
+      if (!conversation) {
+        conversation = await storage.createConversation(user1Id, user2Id);
+      }
+
+      res.json(conversation);
+    } catch (error) {
+      console.error("Error creating/getting conversation:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to create/get conversation" });
+    }
+  });
+
+  app.get("/api/conversations", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const conversations = await storage.getUserConversations(userId, limit);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get("/api/conversations/:id/messages", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!id) {
+        return res.status(400).json({ message: "Conversation ID is required" });
+      }
+
+      const messages = await storage.getConversationMessages(id, limit);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/conversations/:id/messages", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { senderId, content } = req.body;
+
+      if (!id || !senderId || !content) {
+        return res.status(400).json({ message: "Conversation ID, sender ID, and content are required" });
+      }
+
+      if (typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: "Message content cannot be empty" });
+      }
+
+      const message = await storage.createMessage({
+        conversationId: id,
+        senderId,
+        content: content.trim(),
+      });
+
+      res.json(message);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  app.put("/api/conversations/:id/read", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId } = req.body;
+
+      if (!id || !userId) {
+        return res.status(400).json({ message: "Conversation ID and user ID are required" });
+      }
+
+      await storage.markMessagesAsRead(id, userId);
+      res.json({ message: "Messages marked as read" });
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to mark messages as read" });
+    }
+  });
+
+  app.get("/api/messages/unread-count", async (req, res) => {
+    try {
+      const { userId } = req.query;
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const count = await storage.getUnreadMessageCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread message count:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch unread message count" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Forum Routes
+  // ----------------------------------------------------------------------------
+
+  app.post("/api/forum/threads", async (req, res) => {
+    try {
+      const { userId, title, content, category } = req.body;
+
+      if (!userId || !title || !content) {
+        return res.status(400).json({ message: "User ID, title, and content are required" });
+      }
+
+      if (typeof title !== 'string' || title.trim().length === 0) {
+        return res.status(400).json({ message: "Thread title cannot be empty" });
+      }
+
+      if (typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: "Thread content cannot be empty" });
+      }
+
+      const thread = await storage.createForumThread({
+        userId,
+        title: title.trim(),
+        content: content.trim(),
+        category: category || 'general',
+      });
+
+      res.json(thread);
+    } catch (error) {
+      console.error("Error creating forum thread:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to create forum thread" });
+    }
+  });
+
+  app.get("/api/forum/threads", async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      const threads = await storage.getForumThreads(category, limit);
+      res.json(threads);
+    } catch (error) {
+      console.error("Error fetching forum threads:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch forum threads" });
+    }
+  });
+
+  app.get("/api/forum/threads/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "Thread ID is required" });
+      }
+
+      const thread = await storage.getForumThread(id);
+
+      if (!thread) {
+        return res.status(404).json({ message: "Forum thread not found" });
+      }
+
+      res.json(thread);
+    } catch (error) {
+      console.error("Error fetching forum thread:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch forum thread" });
+    }
+  });
+
+  app.put("/api/forum/threads/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, content, isPinned, isLocked } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ message: "Thread ID is required" });
+      }
+
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (content !== undefined) updates.content = content;
+      if (isPinned !== undefined) updates.isPinned = isPinned;
+      if (isLocked !== undefined) updates.isLocked = isLocked;
+
+      const updatedThread = await storage.updateForumThread(id, updates);
+      res.json(updatedThread);
+    } catch (error) {
+      console.error("Error updating forum thread:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to update forum thread" });
+    }
+  });
+
+  app.post("/api/forum/threads/:id/comments", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, content } = req.body;
+
+      if (!id || !userId || !content) {
+        return res.status(400).json({ message: "Thread ID, user ID, and content are required" });
+      }
+
+      if (typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: "Comment content cannot be empty" });
+      }
+
+      const comment = await storage.createForumComment({
+        threadId: id,
+        userId,
+        content: content.trim(),
+      });
+
+      res.json(comment);
+    } catch (error) {
+      console.error("Error creating forum comment:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to create forum comment" });
+    }
+  });
+
+  app.get("/api/forum/threads/:id/comments", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!id) {
+        return res.status(400).json({ message: "Thread ID is required" });
+      }
+
+      const comments = await storage.getForumComments(id, limit);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching forum comments:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch forum comments" });
+    }
+  });
+
+  app.post("/api/forum/threads/:id/vote", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, vote } = req.body;
+
+      if (!id || !userId || !vote) {
+        return res.status(400).json({ message: "Thread ID, user ID, and vote are required" });
+      }
+
+      if (vote !== 'up' && vote !== 'down') {
+        return res.status(400).json({ message: "Vote must be 'up' or 'down'" });
+      }
+
+      await storage.voteForumThread(id, userId, vote);
+      res.json({ message: "Vote recorded successfully" });
+    } catch (error) {
+      console.error("Error voting on forum thread:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to vote on forum thread" });
+    }
+  });
+
+  app.post("/api/forum/comments/:id/vote", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, vote } = req.body;
+
+      if (!id || !userId || !vote) {
+        return res.status(400).json({ message: "Comment ID, user ID, and vote are required" });
+      }
+
+      if (vote !== 'up' && vote !== 'down') {
+        return res.status(400).json({ message: "Vote must be 'up' or 'down'" });
+      }
+
+      await storage.voteForumComment(id, userId, vote);
+      res.json({ message: "Vote recorded successfully" });
+    } catch (error) {
+      console.error("Error voting on forum comment:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to vote on forum comment" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Achievement Routes
+  // ----------------------------------------------------------------------------
+
+  app.post("/api/achievements", async (req, res) => {
+    try {
+      const { name, description, icon, category, requirement } = req.body;
+
+      if (!name || !description || !icon || !category || !requirement) {
+        return res.status(400).json({ message: "Name, description, icon, category, and requirement are required" });
+      }
+
+      const achievement = await storage.createAchievement({
+        name,
+        description,
+        icon,
+        category,
+        requirement,
+      });
+
+      res.json(achievement);
+    } catch (error) {
+      console.error("Error creating achievement:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to create achievement" });
+    }
+  });
+
+  app.get("/api/achievements", async (req, res) => {
+    try {
+      const achievements = await storage.getAchievements();
+      res.json(achievements);
+    } catch (error) {
+      console.error("Error fetching achievements:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch achievements" });
+    }
+  });
+
+  app.get("/api/users/:id/achievements", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const achievements = await storage.getUserAchievements(id);
+      res.json(achievements);
+    } catch (error) {
+      console.error("Error fetching user achievements:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch user achievements" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // Notification Routes
+  // ----------------------------------------------------------------------------
+
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const notifications = await storage.getUserNotifications(userId, limit);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "Notification ID is required" });
+      }
+
+      await storage.markNotificationAsRead(id);
+      res.json({ message: "Notification marked as read" });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/read-all", async (req, res) => {
+    try {
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    try {
+      const { userId } = req.query;
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      const count = await storage.getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread notification count:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch unread notification count" });
+    }
+  });
+
+  // ----------------------------------------------------------------------------
+  // FAQ Routes
+  // ----------------------------------------------------------------------------
+
+  app.post("/api/faqs", async (req, res) => {
+    try {
+      const { question, answer, category, order } = req.body;
+
+      if (!question || !answer) {
+        return res.status(400).json({ message: "Question and answer are required" });
+      }
+
+      const faq = await storage.createFaq({
+        question,
+        answer,
+        category: category || 'general',
+        order: order || 0,
+      });
+
+      res.json(faq);
+    } catch (error) {
+      console.error("Error creating FAQ:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to create FAQ" });
+    }
+  });
+
+  app.get("/api/faqs", async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+
+      const faqs = await storage.getFaqs(category);
+      res.json(faqs);
+    } catch (error) {
+      console.error("Error fetching FAQs:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to fetch FAQs" });
+    }
+  });
+
+  app.put("/api/faqs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { question, answer, category, order } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ message: "FAQ ID is required" });
+      }
+
+      const updates: any = {};
+      if (question !== undefined) updates.question = question;
+      if (answer !== undefined) updates.answer = answer;
+      if (category !== undefined) updates.category = category;
+      if (order !== undefined) updates.order = order;
+
+      const updatedFaq = await storage.updateFaq(id, updates);
+      res.json(updatedFaq);
+    } catch (error) {
+      console.error("Error updating FAQ:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to update FAQ" });
+    }
+  });
+
+  app.delete("/api/faqs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "FAQ ID is required" });
+      }
+
+      await storage.deleteFaq(id);
+      res.json({ message: "FAQ deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting FAQ:", error);
+      
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: "Failed to delete FAQ" });
+    }
+  });
+
   return httpServer;
 }
