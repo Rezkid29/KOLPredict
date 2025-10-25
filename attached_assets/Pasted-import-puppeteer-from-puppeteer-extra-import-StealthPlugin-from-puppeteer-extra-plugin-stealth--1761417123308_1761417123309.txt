@@ -1,0 +1,379 @@
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, Page } from 'puppeteer';
+import { dbStorage } from "./db-storage";
+import type { InsertScrapedKol } from "@shared/schema";
+import { KOLDataParser, type RawKOLData, type FullKOLData, type KOLDetailedData } from './kol-data-parser';
+
+puppeteer.use(StealthPlugin());
+
+export class KOLScraperV2 {
+private browser?: Browser;
+private leaderboardPage?: Page;
+
+async init(): Promise<void> {
+if (this.browser) {
+console.log('✅ Browser already initialized, reusing instance');
+return;
+}
+
+console.log('🚀 Initializing Puppeteer browser with stealth plugin...');
+
+const launchOptions: any = {
+headless: true,
+args: [
+'--no-sandbox',
+'--disable-setuid-sandbox',
+'--disable-dev-shm-usage',
+'--disable-accelerated-2d-canvas',
+'--no-first-run',
+'--no-zygote',
+'--single-process',
+'--disable-gpu',
+'--window-size=1920,1080'
+]
+};
+
+const chromiumPath = process.env.CHROMIUM_EXECUTABLE_PATH;
+console.log(`Using Chromium from: ${chromiumPath || 'bundled/default'}`);
+if (chromiumPath) {
+  launchOptions.executablePath = chromiumPath;
+}
+
+this.browser = await puppeteer.launch(launchOptions);
+this.leaderboardPage = await this.browser.newPage();
+
+await this.leaderboardPage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.141 Safari/537.36');
+
+console.log('✅ Browser initialized successfully with stealth plugin');
+}
+
+async scrapeLeaderboard(): Promise<{ summary: RawKOLData, profileUrl: string | null }[]> {
+if (!this.leaderboardPage) {
+throw new Error('Scraper not initialized. Call init() first.');
+}
+
+try {
+console.log('🌐 Navigating to https://kolscan.io/leaderboard...');
+await this.leaderboardPage.goto('https://kolscan.io/leaderboard', {
+waitUntil: 'networkidle2',
+timeout: 30000
+});
+
+console.log('⏳ Waiting for dynamic content to load...');
+try {
+await this.leaderboardPage.waitForSelector('a[href^="/account/"]', { timeout: 7000 });
+console.log('✅ Leaderboard rows found.');
+} catch (e) {
+console.log('⚠️ Page structure different than expected, continuing anyway...');
+}
+
+console.log('📜 Scrolling to load all content...');
+await this.leaderboardPage.evaluate(() => {
+window.scrollTo(0, document.body.scrollHeight);
+});
+await new Promise(resolve => setTimeout(resolve, 2000));
+
+console.log('📄 Extracting leaderboard data and profile URLs...');
+const kolEntries = await this.leaderboardPage.evaluate((): { summary: RawKOLData, profileUrl: string | null }[] => {
+const extractedEntries: { summary: RawKOLData, profileUrl: string | null }[] = [];
+
+const rows = Array.from(document.querySelectorAll('a[href^="/account/"]'));
+console.log(`Found ${rows.length} potential KOL entry rows`);
+
+for (let i = 0; i < rows.length && extractedEntries.length < 20; i++) {
+const row = rows[i];
+try {
+const fullText = row.textContent || '';
+const profileUrl = row.getAttribute('href');
+
+const rank = (i + 1).toString();  // Use index +1 as rank
+
+let username = fullText.trim();
+if (!username || username.length === 0) username = 'Unknown';
+
+let xHandle: string | null = null;
+const xLinkEl = row.querySelector('a[href*="x.com/"], a[href*="twitter.com/"]');
+if (xLinkEl) {
+const href = xLinkEl.getAttribute('href') || '';
+const match = href.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)/);
+if (match && match[1]) xHandle = match[1];
+}
+
+let winsLosses: string | null = null;
+const wlMatch = fullText.match(/(\d{1,4})\s*\/\s*(\d{1,4})/);
+if (wlMatch) winsLosses = `${wlMatch[1]}/${wlMatch[2]}`;
+
+let solGain: string | null = null;
+let usdGain: string | null = null;
+const pnlEl = Array.from(row.querySelectorAll('p, span')).find(el => 
+el.textContent?.includes('Sol') && el.textContent.includes('$')
+);
+if (pnlEl) {
+const pnlText = pnlEl.textContent || '';
+const solMatch = pnlText.match(/([+-]?[\d,]+\.?\d*)\s*Sol/i);
+const usdMatch = pnlText.match(/\$\s*([+-]?[\d,]+\.?\d*)/);
+if (solMatch) solGain = solMatch[1].replace(/,/g, '');
+if (usdMatch) usdGain = usdMatch[1].replace(/,/g, '');
+}
+
+extractedEntries.push({
+summary: { rank: rank || '', username, xHandle, winsLosses, solGain, usdGain },
+profileUrl
+});
+
+} catch (err) {
+console.error('Error processing row:', err);
+continue;
+}
+}
+
+return extractedEntries;
+});
+
+console.log(`✅ Successfully extracted ${kolEntries.length} KOL entries from leaderboard`);
+return kolEntries;
+
+} catch (error) {
+console.error('❌ Leaderboard scraping failed:', error);
+throw error;
+}
+}
+
+async scrapeKOLProfile(profileUrl: string): Promise<KOLDetailedData> {
+if (!this.browser) {
+throw new Error('Browser not initialized');
+}
+
+let profilePage: Page | null = null;
+const baseUrl = profileUrl.includes('?') ? profileUrl.split('?')[0] : profileUrl;
+const fullUrl = `https://kolscan.io${baseUrl}?timeframe=1`;
+console.log(`🔎 Navigating to profile page: ${fullUrl}`);
+
+try {
+profilePage = await this.browser.newPage();
+await profilePage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
+let accountData: any | null = null;
+
+const captureResponse = async (response: any) => {
+try {
+const url = response.url();
+if (!url.includes('/api/')) return;
+const status = response.status();
+if (status !== 200) return;
+const contentType = response.headers()['content-type'];
+if (!contentType?.includes('application/json')) return;
+
+if (url.includes('/api/account')) {
+const json = await response.json();
+if (!accountData) accountData = json;
+}
+} catch (err) {
+console.warn('Failed to parse response:', err);
+}
+};
+
+profilePage.on('response', captureResponse);
+
+await profilePage.goto(fullUrl, {
+waitUntil: 'networkidle2',
+timeout: 30000
+});
+
+// Allow initial API calls to finish
+await new Promise(resolve => setTimeout(resolve, 2000));
+
+if (!accountData) {
+throw new Error('Failed to capture account API response');
+}
+
+const getLeaderboardEntry = (timeframe: number) => {
+if (!accountData?.leaderboard) return null;
+return accountData.leaderboard.find((entry: any) => entry.timeframe === timeframe) || null;
+};
+
+const formatNumber = (value: number | null | undefined) => {
+if (value === null || value === undefined || Number.isNaN(value)) return null;
+return value.toString();
+};
+
+const computeWinRate = (wins?: number, losses?: number) => {
+const total = (wins ?? 0) + (losses ?? 0);
+if (total === 0) return null;
+const rate = ((wins ?? 0) / total) * 100;
+return rate.toFixed(2);
+};
+
+const timeframes = {
+tf1: getLeaderboardEntry(1),
+tf7: getLeaderboardEntry(7),
+tf30: getLeaderboardEntry(30)
+};
+
+const detailedData: KOLDetailedData = {
+pnl1d: formatNumber(timeframes.tf1?.profit),
+pnl7d: formatNumber(timeframes.tf7?.profit),
+pnl30d: formatNumber(timeframes.tf30?.profit),
+winRate1d: computeWinRate(timeframes.tf1?.wins, timeframes.tf1?.losses),
+winRate7d: computeWinRate(timeframes.tf7?.wins, timeframes.tf7?.losses),
+winRate30d: computeWinRate(timeframes.tf30?.wins, timeframes.tf30?.losses),
+totalTrades1d: formatNumber((timeframes.tf1?.wins ?? 0) + (timeframes.tf1?.losses ?? 0)),
+totalTrades7d: formatNumber((timeframes.tf7?.wins ?? 0) + (timeframes.tf7?.losses ?? 0)),
+totalTrades30d: formatNumber((timeframes.tf30?.wins ?? 0) + (timeframes.tf30?.losses ?? 0))
+};
+
+profilePage.off('response', captureResponse);
+
+return detailedData;
+
+} catch (error) {
+console.error(`❌ Failed to scrape profile ${fullUrl}:`, error);
+throw error;
+} finally {
+if (profilePage) {
+await profilePage.close();
+}
+}
+}
+
+async saveToDatabase(data: FullKOLData[]): Promise<number> {
+console.log(`💾 Saving ${data.length} full KOL entries to database...`);
+
+const scrapedKols: InsertScrapedKol[] = KOLDataParser.parseFullKOLDataBatch(data);
+
+try {
+const saved = await dbStorage.createScrapedKols(scrapedKols);
+console.log(`✅ Saved ${saved.length}/${data.length} KOL entries to database`);
+return saved.length;
+} catch (error) {
+console.error(`Failed to save KOLs to database:`, error);
+return 0;
+}
+}
+
+async close(): Promise<void> {
+if (this.browser) {
+console.log('🔒 Closing browser...');
+await this.browser.close();
+this.browser = undefined;
+this.leaderboardPage = undefined;
+console.log('✅ Browser closed');
+}
+}
+
+async scrapeAndSave(): Promise<{ scraped: number; saved: number }> {
+let allKOLData: FullKOLData[] = [];
+try {
+await this.init();
+const leaderboardEntries = await this.scrapeLeaderboard();
+
+const limitedEntries = leaderboardEntries.slice(0, 3);
+console.log(`Found ${leaderboardEntries.length} KOLs. Processing ${limitedEntries.length} for testing...`);
+
+for (const entry of limitedEntries) {
+if (!entry.profileUrl) {
+console.warn(`⚠️ Skipping ${entry.summary.username} - no profile URL found`);
+continue;
+}
+
+try {
+await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+
+const profileData = await this.scrapeKOLProfile(entry.profileUrl);
+
+const fullKOLData: FullKOLData = {
+rank: entry.summary.rank,
+username: entry.summary.username,
+xHandle: entry.summary.xHandle,
+winsLosses: entry.summary.winsLosses,
+solGain: entry.summary.solGain,
+usdGain: entry.summary.usdGain,
+pnl1d: profileData.pnl1d,
+pnl7d: profileData.pnl7d,
+pnl30d: profileData.pnl30d,
+winRate1d: profileData.winRate1d,
+winRate7d: profileData.winRate7d,
+winRate30d: profileData.winRate30d,
+totalTrades1d: profileData.totalTrades1d,
+totalTrades7d: profileData.totalTrades7d,
+totalTrades30d: profileData.totalTrades30d,
+profileUrl: entry.profileUrl
+};
+
+console.log(`✅ Processed ${fullKOLData.username}: { pnl1d: '${fullKOLData.pnl1d}', pnl7d: '${fullKOLData.pnl7d}', pnl30d: '${fullKOLData.pnl30d}', winRate1d: '${fullKOLData.winRate1d}', winRate7d: '${fullKOLData.winRate7d}', winRate30d: '${fullKOLData.winRate30d}', totalTrades1d: '${fullKOLData.totalTrades1d}', totalTrades7d: '${fullKOLData.totalTrades7d}', totalTrades30d: '${fullKOLData.totalTrades30d}' }`);
+
+allKOLData.push(fullKOLData);
+
+} catch (error) {
+console.error(`❌ Failed to process profile for ${entry.summary.username} (${entry.profileUrl})`, error);
+}
+}
+
+const saved = await this.saveToDatabase(allKOLData);
+
+return {
+scraped: allKOLData.length,
+saved,
+};
+} catch (e) {
+console.error("❌ Fatal error during scrapeAndSave:", e);
+return { scraped: 0, saved: 0 };
+} finally {
+await this.close();
+}
+}
+}
+
+async function main() {
+const scraper = new KOLScraperV2();
+try {
+await scraper.init();
+
+console.log('\n🎯 Starting KOL scraping process...\n');
+
+const { scraped, saved } = await scraper.scrapeAndSave();
+
+console.log(`\n✅ Scraping Complete: ${scraped} entries scraped, ${saved} saved to database\n`);
+
+const latestScrapedData = await dbStorage.getLatestScrapedKols(20);
+
+console.log('📊 LATEST SCRAPED KOL DATA (Structured Format):\n');
+console.log('='.repeat(100));
+
+latestScrapedData.forEach((kol, index) => {
+console.log(`\n[${index + 1}] RANK #${kol.rank} - ${kol.username}`);
+console.log('-'.repeat(100));
+console.log(`  Username:       ${kol.username}`);
+console.log(`  X Handle:       ${kol.xHandle || 'N/A'}`);
+console.log(`  Wins/Losses:    ${kol.wins}/${kol.losses || 'N/A'}`);
+console.log(`  SOL Gain:       ${kol.solGain || 'N/A'}`);
+console.log(`  USD Gain:       ${kol.usdGain || 'N/A'}`);
+console.log(`  PNL 1D:         ${kol.pnl1d || 'N/A'}`); 
+console.log(`  PNL 7D:         ${kol.pnl7d || 'N/A'}`);
+console.log(`  PNL 30D:        ${kol.pnl30d || 'N/A'}`);
+console.log(`  Win Rate 1D:    ${kol.winRate1d || 'N/A'}%`);
+console.log(`  Win Rate 7D:    ${kol.winRate7d || 'N/A'}%`);
+console.log(`  Win Rate 30D:   ${kol.winRate30d || 'N/A'}%`);
+console.log(`  Total Trades 1D:${kol.totalTrades1d || 'N/A'}`);
+console.log(`  Total Trades 7D:${kol.totalTrades7d || 'N/A'}`);
+console.log(`  Total Trades 30D:${kol.totalTrades30d || 'N/A'}`);
+console.log(`  Scraped At:     ${kol.scrapedAt}`);
+});
+
+console.log('\n' + '='.repeat(100));
+console.log('\n📋 JSON FORMAT (for programmatic use):\n');
+console.log(JSON.stringify(latestScrapedData, null, 2));
+
+} catch (error) {
+console.error('💥 Scraping failed:', error);
+} finally {
+await scraper.close();
+}
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+main().catch(err => console.error('Error running main:', err));
+}
+
+export const kolScraperV2 = new KOLScraperV2();
