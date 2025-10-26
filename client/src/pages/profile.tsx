@@ -74,8 +74,16 @@ export default function Profile() {
   });
 
   const { data: bets = [] } = useQuery<BetWithMarket[]>({
-    queryKey: ["/api/bets/user", targetUsername],
-    enabled: isOwnProfile && !!targetUsername,
+    queryKey: ["/api/bets/user", profileData?.user.id],
+    queryFn: async () => {
+      if (!profileData?.user.id) return [];
+      const res = await fetch(`/api/bets/user?userId=${profileData.user.id}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch bets");
+      return res.json();
+    },
+    enabled: isOwnProfile && !!profileData?.user.id,
   });
 
   const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
@@ -209,7 +217,7 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bets/user"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/bets/user", targetUsername] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bets/user", profileData?.user.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activities", profileData?.user.id] });
