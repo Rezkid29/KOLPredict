@@ -528,30 +528,58 @@ export default function Profile() {
           {/* Portfolio Tab (only for own profile) */}
           {isOwnProfile && (
             <TabsContent value="portfolio">
-              <Card className="overflow-hidden border-border/60">
-                <div className="p-6 border-b border-border/50">
-                  <div className="flex items-center justify-between">
+              {/* Portfolio Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+                <Card className="p-6 hover-elevate transition-all border-border/60">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                      <Wallet className="h-6 w-6 text-primary" />
+                    </div>
                     <div>
-                      <h2 className="text-xl font-semibold mb-1">Portfolio</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {bets.length} total {bets.length === 1 ? 'bet' : 'bets'}
+                      <p className="text-sm text-muted-foreground font-medium mb-1">Current Balance</p>
+                      <p className="text-2xl font-bold tabular-nums" data-testid="text-portfolio-balance">
+                        {balance.toFixed(2)} PTS
                       </p>
                     </div>
-                    <Card className="p-4 bg-muted/50">
-                      <div className="flex items-center gap-2 text-sm">
-                        <BarChart3 className="h-4 w-4 text-warning" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Active Bets</p>
-                          <p className="font-bold">{activeBets.length}</p>
-                        </div>
-                        <div className="h-8 w-px bg-border mx-2" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Invested</p>
-                          <p className="font-bold tabular-nums">{totalInvested.toFixed(0)} PTS</p>
-                        </div>
-                      </div>
-                    </Card>
                   </div>
+                </Card>
+
+                <Card className="p-6 hover-elevate transition-all border-border/60">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-xl bg-warning/10 ring-1 ring-warning/20">
+                      <BarChart3 className="h-6 w-6 text-warning" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium mb-1">Active Bets</p>
+                      <p className="text-2xl font-bold tabular-nums" data-testid="text-portfolio-active-bets">
+                        {activeBets.length}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-6 hover-elevate transition-all border-border/60">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-xl bg-accent/10 ring-1 ring-accent/20">
+                      <Target className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium mb-1">Total Invested</p>
+                      <p className="text-2xl font-bold tabular-nums" data-testid="text-portfolio-invested">
+                        {totalInvested.toFixed(2)} PTS
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Betting History */}
+              <Card className="overflow-hidden border-border/60">
+                <div className="p-6 border-b border-border/50">
+                  <h2 className="text-xl font-semibold mb-1">Betting History</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {bets.length} total {bets.length === 1 ? 'bet' : 'bets'}
+                  </p>
                 </div>
 
                 {bets.length === 0 ? (
