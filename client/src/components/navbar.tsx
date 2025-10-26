@@ -39,6 +39,10 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
 
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      const result = await apiRequest("GET", "/api/notifications");
+      return result.json();
+    },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
