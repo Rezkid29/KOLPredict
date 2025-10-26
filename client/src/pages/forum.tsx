@@ -37,12 +37,27 @@ export default function Forum() {
     queryKey: ["/api/user"],
   });
 
+  const threadsUrl = category === "all" 
+    ? "/api/forum/threads" 
+    : `/api/forum/threads?category=${category}`;
+
   const { data: threads = [], isLoading: threadsLoading } = useQuery<(ForumThread & { user: { username: string | null } })[]>({
     queryKey: ["/api/forum/threads", category],
+    queryFn: async () => {
+      const res = await fetch(threadsUrl, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch threads");
+      return res.json();
+    },
   });
 
   const { data: comments = [] } = useQuery<(ForumComment & { user: { username: string | null } })[]>({
     queryKey: ["/api/forum/threads", selectedThreadId, "comments"],
+    queryFn: async () => {
+      if (!selectedThreadId) throw new Error("No thread selected");
+      const res = await fetch(`/api/forum/threads/${selectedThreadId}/comments`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch comments");
+      return res.json();
+    },
     enabled: !!selectedThreadId,
   });
 

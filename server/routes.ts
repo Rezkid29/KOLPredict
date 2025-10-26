@@ -14,6 +14,17 @@ import { addDays } from "date-fns";
 import rateLimit from "express-rate-limit";
 import { achievementChecker } from "./achievement-checker";
 import { requireAuth, getUserIdFromSession } from "./auth-middleware";
+import { 
+  validateMessage, 
+  validateThreadTitle, 
+  validateThreadContent,
+  validateComment,
+  validateBio,
+  validateCategory,
+  validateVote,
+  sanitizeInput,
+  FORUM_CATEGORIES
+} from "./validation";
 
 // We'll initialize these after the broadcast function is created
 let depositMonitor: ReturnType<typeof createDepositMonitor>;
@@ -276,6 +287,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         retryAfter: 60 
       });
     }
+  });
+
+  // Rate limiter for message sending
+  const messageRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // 10 messages per minute
+    message: { message: "Too many messages sent. Please slow down." },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Rate limiter for follow/unfollow actions
+  const followRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute  
+    max: 20, // 20 follow/unfollow per minute
+    message: { message: "Too many follow/unfollow actions. Please slow down." },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Rate limiter for forum posting
+  const forumPostRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // 5 posts/comments per minute
+    message: { message: "Too many posts. Please slow down." },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Rate limiter for voting
+  const voteRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 30, // 30 votes per minute
+    message: { message: "Too many votes. Please slow down." },
+    standardHeaders: true,
+    legacyHeaders: false,
   });
 
   app.post("/api/auth/solana/nonce", authRateLimiter, async (req, res) => {
@@ -1756,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Follow System Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/users/:id/follow", requireAuth, async (req, res) => {
+  app.post("/api/users/:id/follow", requireAuth, followRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const followerId = req.session.userId!;
@@ -1786,7 +1833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id/unfollow", requireAuth, async (req, res) => {
+  app.delete("/api/users/:id/unfollow", requireAuth, followRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const followerId = req.session.userId!;
@@ -2041,18 +2088,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
+  app.post("/api/conversations/:id/messages", requireAuth, messageRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { content } = req.body;
       const senderId = req.session.userId!;
 
-      if (!id || !content) {
-        return res.status(400).json({ message: "Conversation ID and content are required" });
+      if (!id) {
+        return res.status(400).json({ message: "Conversation ID is required" });
       }
 
-      if (typeof content !== 'string' || content.trim().length === 0) {
-        return res.status(400).json({ message: "Message content cannot be empty" });
+      // Validate message content
+      const validation = validateMessage(content);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
       }
 
       // Verify user is a participant in this conversation
@@ -2063,10 +2112,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "You are not a participant in this conversation" });
       }
 
+      const sanitizedContent = sanitizeInput(content);
       const message = await storage.createMessage({
         conversationId: id,
         senderId,
-        content: content.trim(),
+        content: sanitizedContent,
       });
 
       res.json(message);
@@ -2148,28 +2198,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forum Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/forum/threads", requireAuth, async (req, res) => {
+  app.post("/api/forum/threads", requireAuth, forumPostRateLimiter, async (req, res) => {
     try {
       const { title, content, category } = req.body;
       const userId = req.session.userId!;
 
-      if (!title || !content) {
-        return res.status(400).json({ message: "Title and content are required" });
+      // Validate title
+      const titleValidation = validateThreadTitle(title);
+      if (!titleValidation.valid) {
+        return res.status(400).json({ message: titleValidation.error });
       }
 
-      if (typeof title !== 'string' || title.trim().length === 0) {
-        return res.status(400).json({ message: "Thread title cannot be empty" });
+      // Validate content
+      const contentValidation = validateThreadContent(content);
+      if (!contentValidation.valid) {
+        return res.status(400).json({ message: contentValidation.error });
       }
 
-      if (typeof content !== 'string' || content.trim().length === 0) {
-        return res.status(400).json({ message: "Thread content cannot be empty" });
+      // Validate category
+      const categoryValue = category || 'general';
+      const categoryValidation = validateCategory(categoryValue, [...FORUM_CATEGORIES]);
+      if (!categoryValidation.valid) {
+        return res.status(400).json({ message: categoryValidation.error });
       }
+
+      const sanitizedTitle = sanitizeInput(title);
+      const sanitizedContent = sanitizeInput(content);
 
       const thread = await storage.createForumThread({
         userId,
-        title: title.trim(),
-        content: content.trim(),
-        category: category || 'general',
+        title: sanitizedTitle,
+        content: sanitizedContent,
+        category: categoryValue,
       });
 
       res.json(thread);
@@ -2272,24 +2332,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/comments", requireAuth, async (req, res) => {
+  app.post("/api/forum/threads/:id/comments", requireAuth, forumPostRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { content } = req.body;
       const userId = req.session.userId!;
 
-      if (!id || !content) {
-        return res.status(400).json({ message: "Thread ID and content are required" });
+      if (!id) {
+        return res.status(400).json({ message: "Thread ID is required" });
       }
 
-      if (typeof content !== 'string' || content.trim().length === 0) {
-        return res.status(400).json({ message: "Comment content cannot be empty" });
+      // Validate comment content
+      const validation = validateComment(content);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
       }
+
+      const sanitizedContent = sanitizeInput(content);
 
       const comment = await storage.createForumComment({
         threadId: id,
         userId,
-        content: content.trim(),
+        content: sanitizedContent,
       });
 
       res.json(comment);
@@ -2334,7 +2398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/vote", requireAuth, async (req, res) => {
+  app.post("/api/forum/threads/:id/vote", requireAuth, voteRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { vote } = req.body;
@@ -2365,7 +2429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/comments/:id/vote", requireAuth, async (req, res) => {
+  app.post("/api/forum/comments/:id/vote", requireAuth, voteRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { vote } = req.body;

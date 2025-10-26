@@ -368,7 +368,7 @@ export default function Messages() {
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{searchUser.username}</p>
                           <p className="text-xs text-muted-foreground">
-                            {searchUser.totalTrades} trades • {searchUser.successRate.toFixed(1)}% success
+                            {searchUser.totalTrades || 0} trades • {searchUser.successRate ? searchUser.successRate.toFixed(1) : '0.0'}% success
                           </p>
                         </div>
                       </div>
