@@ -239,15 +239,6 @@ export default function Profile() {
     setBetModalOpen(true);
   };
 
-  const handleConfirmBet = (
-    marketId: string,
-    position: "YES" | "NO",
-    amount: number,
-    action: "buy" | "sell"
-  ) => {
-    placeBetMutation.mutate({ marketId, position, amount, action });
-  };
-
   if (profileLoading || !profileData) {
     return (
       <div className="min-h-screen bg-background">
