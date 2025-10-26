@@ -209,8 +209,12 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bets/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bets/user", targetUsername] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activities", profileData?.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/me/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", targetUsername, "profile"] });
       toast({
         title: "Success",
         description: "Bet placed successfully",
