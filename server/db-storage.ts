@@ -1730,6 +1730,31 @@ export class DbStorage implements IStorage {
     return result[0]?.count || 0;
   }
 
+  async deleteConversation(conversationId: string, userId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Verify user is a participant
+      const conversation = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+
+      if (!conversation[0]) {
+        throw new NotFoundError("Conversation not found");
+      }
+
+      if (conversation[0].user1Id !== userId && conversation[0].user2Id !== userId) {
+        throw new ValidationError("You are not a participant in this conversation");
+      }
+
+      // Delete all messages in the conversation
+      await tx.delete(messages).where(eq(messages.conversationId, conversationId));
+
+      // Delete the conversation
+      await tx.delete(conversations).where(eq(conversations.id, conversationId));
+    });
+  }
+
   // Phase 4: Forum
   async createForumThread(thread: InsertForumThread): Promise<ForumThread> {
     const result = await db.insert(forumThreads).values(thread).returning();

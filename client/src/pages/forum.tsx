@@ -103,9 +103,9 @@ export default function Forum() {
         content,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       setNewCommentContent("");
-      queryClient.invalidateQueries({ queryKey: ["/api/forum/threads", selectedThreadId, "comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/forum/threads", variables.threadId, "comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/forum/threads"] });
     },
     onError: (error: Error) => {
@@ -403,7 +403,14 @@ export default function Forum() {
                             />
                           </div>
                           <Button
-                            onClick={() => createCommentMutation.mutate()}
+                            onClick={() => {
+                              if (selectedThreadId) {
+                                createCommentMutation.mutate({
+                                  threadId: selectedThreadId,
+                                  content: newCommentContent
+                                });
+                              }
+                            }}
                             disabled={!newCommentContent.trim() || createCommentMutation.isPending}
                             className="w-full mt-2"
                             size="sm"

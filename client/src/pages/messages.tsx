@@ -139,9 +139,12 @@ export default function Messages() {
     mutationFn: async (conversationId: string) => {
       return await apiRequest("DELETE", `/api/conversations/${conversationId}`, {});
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      setSelectedConversationId(null);
+      // Clear selection if we deleted the currently selected conversation
+      if (selectedConversationId === deletedId) {
+        setSelectedConversationId(null);
+      }
       setDeleteDialogOpen(false);
       setConversationToDelete(null);
       toast({

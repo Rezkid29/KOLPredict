@@ -33,8 +33,9 @@ let withdrawalProcessor: ReturnType<typeof createWithdrawalProcessor>;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Trust proxy to correctly identify client IP addresses for rate limiting
-  app.set('trust proxy', true);
+  // Configure trust proxy for Replit's reverse proxy setup
+  // Only trust the first proxy (Replit's infrastructure)
+  app.set('trust proxy', 1);
 
   // Seed database if empty
   try {
@@ -194,6 +195,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new user
       const user = await storage.createUser({ username });
 
+      // Create user profile
+      await storage.ensureUserProfile(user.id);
+
       // Set session and save it
       req.session.userId = user.id;
       await new Promise<void>((resolve, reject) => {
@@ -246,6 +250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authProvider: "guest",
         isGuest: true,
       });
+
+      // Create user profile
+      await storage.ensureUserProfile(user.id);
 
       // Set session and save it
       req.session.userId = user.id;
@@ -548,8 +555,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current user's profile
+  app.get("/api/users/me/profile", async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const profile = await storage.ensureUserProfile(userId);
+      
+      res.json({
+        user,
+        profile,
+        isFollowing: false
+      });
+    } catch (error) {
+      console.error("Error fetching own profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
   // Get user profile by username
-  app.get("/api/profile/:username", async (req, res) => {
+  app.get("/api/users/:username/profile", async (req, res) => {
     try {
       const { username } = req.params;
 
@@ -2423,6 +2457,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!id) {
         return res.status(400).json({ message: "Thread ID is required" });
+      }
+
+      // Check if thread exists and is not locked
+      const thread = await storage.getForumThread(id);
+      if (!thread) {
+        return res.status(404).json({ message: "Thread not found" });
+      }
+
+      if (thread.isLocked) {
+        return res.status(403).json({ message: "This thread is locked and cannot accept new comments" });
       }
 
       // Validate comment content
