@@ -30,6 +30,12 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
   const [amount, setAmount] = useState<string>("");
   const [action, setAction] = useState<"buy" | "sell">("buy");
 
+  // Reset amount when switching between buy/sell
+  const handleActionChange = (newAction: "buy" | "sell") => {
+    setAction(newAction);
+    setAmount("");
+  };
+
   if (!market) return null;
 
   const yesPrice = parseFloat(market.yesPrice);
@@ -176,10 +182,12 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
           </div>
 
           {/* Buy/Sell Tabs */}
-          <Tabs value={action} onValueChange={(v) => setAction(v as "buy" | "sell")}>
+          <Tabs value={action} onValueChange={(v) => handleActionChange(v as "buy" | "sell")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="buy" data-testid="tab-buy">Buy</TabsTrigger>
-              <TabsTrigger value="sell" data-testid="tab-sell">Sell</TabsTrigger>
+              <TabsTrigger value="sell" data-testid="tab-sell" disabled={currentShares === 0}>
+                Sell {currentShares > 0 && `(${currentShares.toFixed(2)})`}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -295,6 +303,22 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
             </div>
           )}
 
+          {/* Shares check for selling */}
+          {action === "sell" && betAmount > currentShares && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <p>Insufficient shares. You only have {currentShares.toFixed(2)} {position} shares.</p>
+            </div>
+          )}
+
+          {/* No shares warning */}
+          {action === "sell" && currentShares === 0 && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 text-warning text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <p>You don't own any {position} shares in this market. Switch to Buy to purchase shares.</p>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-2">
             <Button
@@ -309,7 +333,11 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
               variant={position === "YES" ? "default" : "destructive"}
               className="flex-1 font-semibold"
               onClick={handleConfirm}
-              disabled={betAmount <= 0 || (action === "buy" && betAmount > userBalance)}
+              disabled={
+                betAmount <= 0 || 
+                (action === "buy" && betAmount > userBalance) ||
+                (action === "sell" && betAmount > currentShares)
+              }
               data-testid="button-confirm-bet"
             >
               {action === "buy" ? "Buy" : "Sell"} {position}

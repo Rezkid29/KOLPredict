@@ -479,7 +479,7 @@ export default function Profile() {
               <div className="p-6 border-b border-border/50">
                 <h2 className="text-xl font-semibold mb-1">Recent Activity</h2>
                 <p className="text-sm text-muted-foreground">
-                  Latest betting activity and performance
+                  {bets.length} total bets • Latest activity and performance
                 </p>
               </div>
 
@@ -487,13 +487,13 @@ export default function Profile() {
                 <div className="p-16 text-center text-muted-foreground">
                   <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium mb-1">No Activity Yet</p>
-                  <p className="text-sm">Activity feed will show recent bets and market updates</p>
+                  <p className="text-sm">Activity feed will show all bets and market updates</p>
                 </div>
               ) : (
                 <ScrollArea className="h-[500px]">
                   <div className="p-5 space-y-3">
-                    {/* Show recent bets */}
-                    {bets.slice(0, 10).map((bet) => (
+                    {/* Show ALL bets, not just 10 */}
+                    {bets.map((bet) => (
                       <div
                         key={bet.id}
                         onClick={() => handleBetClick(bet.market)}
