@@ -211,54 +211,54 @@ export default function HowItWorks() {
         {/* Security Features */}
         <div className="mb-20">
           <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center">
-              <Shield className="h-6 w-6 text-success" />
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Shield className="h-6 w-6 text-primary" />
             </div>
             <h2 className="text-4xl font-display font-bold">Security & Fairness</h2>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="p-6 bg-gradient-to-br from-success/5 to-success/10 border-success/20">
-              <Lock className="h-8 w-8 text-success mb-4" />
+            <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <Lock className="h-8 w-8 text-primary mb-4" />
               <h3 className="text-lg font-bold mb-4">Trade Protections</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <span className="text-success mt-0.5">✓</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span className="text-muted-foreground">Max trade size: 40% of pool depth</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-success mt-0.5">✓</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span className="text-muted-foreground">Price bounds: 0.01 to 0.99</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-success mt-0.5">✓</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span className="text-muted-foreground">Atomic PostgreSQL transactions</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-success mt-0.5">✓</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span className="text-muted-foreground">2% platform fee (transparent)</span>
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <Zap className="h-8 w-8 text-primary mb-4" />
+            <Card className="p-6 bg-gradient-to-br from-chart-4/5 to-chart-4/10 border-chart-4/20">
+              <Zap className="h-8 w-8 text-chart-4 mb-4" />
               <h3 className="text-lg font-bold mb-4">Data Integrity</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">✓</span>
+                  <span className="text-chart-4 mt-0.5">✓</span>
                   <span className="text-muted-foreground">Real kolscan.io data only</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">✓</span>
+                  <span className="text-chart-4 mt-0.5">✓</span>
                   <span className="text-muted-foreground">Auto-cancel if data is stale (&gt;2hrs)</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">✓</span>
+                  <span className="text-chart-4 mt-0.5">✓</span>
                   <span className="text-muted-foreground">Rate limiting on all endpoints</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">✓</span>
+                  <span className="text-chart-4 mt-0.5">✓</span>
                   <span className="text-muted-foreground">Deterministic pricing formulas</span>
                 </div>
               </div>
