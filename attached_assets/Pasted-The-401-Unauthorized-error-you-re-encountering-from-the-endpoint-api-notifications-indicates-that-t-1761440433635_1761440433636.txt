@@ -1,0 +1,44 @@
+The 401 Unauthorized error you're encountering from the endpoint /api/notifications indicates that the request requires authentication, but the request is being made without valid authentication credentials.
+
+This is likely triggered by the apiRequest function used in your code. When it attempts to fetch notifications, it's probably not sending the necessary authentication tokens or headers. Here's how to ensure that the correct authentication is included in your requests.
+
+1. Check Authentication Logic in your API Request:
+Make sure that your apiRequest function for fetching notifications (most likely located in your api helper file) includes the proper authorization headers.
+
+Example of adding Authorization Header:
+
+const apiRequest = async (url: string, method: string = "GET", body: object = {}) => {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${yourAuthToken}`, // Ensure yourAuthToken is correct
+    },
+    body: method !== "GET" ? JSON.stringify(body) : undefined,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error: ${response.status}`);
+  }
+  
+  return response.json();
+};
+Make sure to replace yourAuthToken with the mechanism you use to get the user's token.
+
+2. Verify User Authentication:
+Ensure that the user is logged in and has a valid session before making this request. You can do this by checking their authentication state on the client side.
+
+3. Debugging:
+To debug the issue further, log out the response of your API call:
+
+const fetchNotifications = async () => {
+  try {
+    const notifications = await apiRequest("/api/notifications");
+    console.log("Fetched Notifications:", notifications);
+  } catch (error) {
+    console.error("Failed to fetch notifications:", error);
+  }
+};
+Check this in your console when you attempt to fetch notifications to see if it's returning any useful information about the failure.
+
+Once authenticated, the request to /api/notifications should work correctly. If you're still having issues, consider providing the full request context and any relevant token retrieval logic.
