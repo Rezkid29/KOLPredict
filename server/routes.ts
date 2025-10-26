@@ -13,6 +13,7 @@ import { createWithdrawalProcessor } from "./solana-withdrawal-processor";
 import { addDays } from "date-fns";
 import rateLimit from "express-rate-limit";
 import { achievementChecker } from "./achievement-checker";
+import { requireAuth, getUserIdFromSession } from "./auth-middleware";
 
 // We'll initialize these after the broadcast function is created
 let depositMonitor: ReturnType<typeof createDepositMonitor>;
@@ -178,6 +179,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create new user
       const user = await storage.createUser({ username });
+      
+      // Set session
+      req.session.userId = user.id;
+      
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
       res.status(500).json({ message: "Failed to create user" });
@@ -197,6 +202,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
+      // Set session
+      req.session.userId = user.id;
+
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
       res.status(500).json({ message: "Failed to login" });
@@ -212,6 +220,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authProvider: "guest",
         isGuest: true,
       });
+
+      // Set session
+      req.session.userId = user.id;
 
       res.json({ 
         userId: user.id, 
@@ -353,6 +364,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Existing user authenticated: ${user.id}, username: ${user.username}`);
       }
 
+      // Set session
+      req.session.userId = user.id;
+      req.session.walletAddress = publicKey;
+
       res.json({ 
         userId: user.id, 
         username: user.username,
@@ -436,18 +451,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get current user (by userId from request body/header)
+  // Logout endpoint
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Failed to logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Get current user from session
   app.get("/api/user", async (req, res) => {
     try {
-      const userId = req.query.userId as string;
+      const userId = req.session.userId || (req.query.userId as string);
 
       if (!userId) {
-        // Return default user as fallback for compatibility
-        const user = await storage.getUserByUsername("trader1");
-        if (!user) {
-          return res.status(404).json({ message: "User not found" });
-        }
-        return res.json(user);
+        return res.status(401).json({ message: "Not authenticated" });
       }
 
       const user = await storage.getUser(userId);
@@ -1736,13 +1756,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Follow System Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/users/:id/follow", async (req, res) => {
+  app.post("/api/users/:id/follow", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { followerId } = req.body;
+      const followerId = req.session.userId!;
 
-      if (!id || !followerId) {
-        return res.status(400).json({ message: "User ID and follower ID are required" });
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
       }
 
       if (id === followerId) {
@@ -1766,13 +1786,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id/unfollow", async (req, res) => {
+  app.delete("/api/users/:id/unfollow", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { followerId } = req.body;
+      const followerId = req.session.userId!;
 
-      if (!id || !followerId) {
-        return res.status(400).json({ message: "User ID and follower ID are required" });
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required" });
       }
 
       await storage.unfollowUser(followerId, id);
@@ -1929,22 +1949,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Messaging Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/conversations", async (req, res) => {
+  app.post("/api/conversations", requireAuth, async (req, res) => {
     try {
-      const { user1Id, user2Id } = req.body;
+      const { otherUserId } = req.body;
+      const user1Id = req.session.userId!;
 
-      if (!user1Id || !user2Id) {
-        return res.status(400).json({ message: "Both user IDs are required" });
+      if (!otherUserId) {
+        return res.status(400).json({ message: "Other user ID is required" });
       }
 
-      if (user1Id === user2Id) {
+      if (user1Id === otherUserId) {
         return res.status(400).json({ message: "Cannot create conversation with yourself" });
       }
 
-      let conversation = await storage.getConversation(user1Id, user2Id);
+      let conversation = await storage.getConversation(user1Id, otherUserId);
 
       if (!conversation) {
-        conversation = await storage.createConversation(user1Id, user2Id);
+        conversation = await storage.createConversation(user1Id, otherUserId);
       }
 
       res.json(conversation);
@@ -1963,14 +1984,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/conversations", async (req, res) => {
+  app.get("/api/conversations", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.query;
+      const userId = req.session.userId!;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ message: "User ID is required" });
-      }
 
       const conversations = await storage.getUserConversations(userId, limit);
       res.json(conversations);
@@ -1989,13 +2006,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/conversations/:id/messages", async (req, res) => {
+  app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const userId = req.session.userId!;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
       if (!id) {
         return res.status(400).json({ message: "Conversation ID is required" });
+      }
+
+      // Verify user is a participant in this conversation
+      const userConversations = await storage.getUserConversations(userId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
       }
 
       const messages = await storage.getConversationMessages(id, limit);
@@ -2015,17 +2041,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/conversations/:id/messages", async (req, res) => {
+  app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { senderId, content } = req.body;
+      const { content } = req.body;
+      const senderId = req.session.userId!;
 
-      if (!id || !senderId || !content) {
-        return res.status(400).json({ message: "Conversation ID, sender ID, and content are required" });
+      if (!id || !content) {
+        return res.status(400).json({ message: "Conversation ID and content are required" });
       }
 
       if (typeof content !== 'string' || content.trim().length === 0) {
         return res.status(400).json({ message: "Message content cannot be empty" });
+      }
+
+      // Verify user is a participant in this conversation
+      const userConversations = await storage.getUserConversations(senderId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
       }
 
       const message = await storage.createMessage({
@@ -2050,13 +2085,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/conversations/:id/read", async (req, res) => {
+  app.put("/api/conversations/:id/read", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { userId } = req.body;
+      const userId = req.session.userId!;
 
-      if (!id || !userId) {
-        return res.status(400).json({ message: "Conversation ID and user ID are required" });
+      if (!id) {
+        return res.status(400).json({ message: "Conversation ID is required" });
+      }
+
+      // Verify user is a participant in this conversation
+      const userConversations = await storage.getUserConversations(userId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
       }
 
       await storage.markMessagesAsRead(id, userId);
@@ -2105,12 +2148,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forum Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/forum/threads", async (req, res) => {
+  app.post("/api/forum/threads", requireAuth, async (req, res) => {
     try {
-      const { userId, title, content, category } = req.body;
+      const { title, content, category } = req.body;
+      const userId = req.session.userId!;
 
-      if (!userId || !title || !content) {
-        return res.status(400).json({ message: "User ID, title, and content are required" });
+      if (!title || !content) {
+        return res.status(400).json({ message: "Title and content are required" });
       }
 
       if (typeof title !== 'string' || title.trim().length === 0) {
@@ -2228,13 +2272,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/comments", async (req, res) => {
+  app.post("/api/forum/threads/:id/comments", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { userId, content } = req.body;
+      const { content } = req.body;
+      const userId = req.session.userId!;
 
-      if (!id || !userId || !content) {
-        return res.status(400).json({ message: "Thread ID, user ID, and content are required" });
+      if (!id || !content) {
+        return res.status(400).json({ message: "Thread ID and content are required" });
       }
 
       if (typeof content !== 'string' || content.trim().length === 0) {
@@ -2289,13 +2334,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/vote", async (req, res) => {
+  app.post("/api/forum/threads/:id/vote", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { userId, vote } = req.body;
+      const { vote } = req.body;
+      const userId = req.session.userId!;
 
-      if (!id || !userId || !vote) {
-        return res.status(400).json({ message: "Thread ID, user ID, and vote are required" });
+      if (!id || !vote) {
+        return res.status(400).json({ message: "Thread ID and vote are required" });
       }
 
       if (vote !== 'up' && vote !== 'down') {
@@ -2319,13 +2365,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/comments/:id/vote", async (req, res) => {
+  app.post("/api/forum/comments/:id/vote", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { userId, vote } = req.body;
+      const { vote } = req.body;
+      const userId = req.session.userId!;
 
-      if (!id || !userId || !vote) {
-        return res.status(400).json({ message: "Comment ID, user ID, and vote are required" });
+      if (!id || !vote) {
+        return res.status(400).json({ message: "Comment ID and vote are required" });
       }
 
       if (vote !== 'up' && vote !== 'down') {
@@ -2433,14 +2480,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notification Routes
   // ----------------------------------------------------------------------------
 
-  app.get("/api/notifications", async (req, res) => {
+  app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.query;
+      const userId = req.session.userId!;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ message: "User ID is required" });
-      }
 
       const notifications = await storage.getUserNotifications(userId, limit);
       res.json(notifications);
@@ -2459,12 +2502,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/notifications/:id/read", async (req, res) => {
+  app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const userId = req.session.userId!;
 
       if (!id) {
         return res.status(400).json({ message: "Notification ID is required" });
+      }
+
+      // Verify the notification belongs to the authenticated user
+      const userNotifications = await storage.getUserNotifications(userId);
+      const notification = userNotifications.find(n => n.id === id);
+
+      if (!notification) {
+        return res.status(403).json({ message: "You do not have permission to mark this notification as read" });
       }
 
       await storage.markNotificationAsRead(id);
@@ -2484,13 +2536,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/notifications/read-all", async (req, res) => {
+  app.put("/api/notifications/read-all", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.body;
-
-      if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
-      }
+      const userId = req.session.userId!;
 
       await storage.markAllNotificationsAsRead(userId);
       res.json({ message: "All notifications marked as read" });

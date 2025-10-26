@@ -84,7 +84,8 @@ export default function Profile() {
 
   const followMutation = useMutation({
     mutationFn: async () => {
-      if (!profileData?.user.id) return;
+      if (!currentUser) throw new Error("Authentication required");
+      if (!profileData?.user.id) throw new Error("Invalid user");
       const res = await fetch(`/api/users/${profileData.user.id}/follow`, {
         method: "POST",
         credentials: "include",
@@ -99,11 +100,19 @@ export default function Profile() {
         description: `You are now following ${targetUsername}`,
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to follow user",
+        variant: "destructive",
+      });
+    },
   });
 
   const unfollowMutation = useMutation({
     mutationFn: async () => {
-      if (!profileData?.user.id) return;
+      if (!currentUser) throw new Error("Authentication required");
+      if (!profileData?.user.id) throw new Error("Invalid user");
       const res = await fetch(`/api/users/${profileData.user.id}/unfollow`, {
         method: "DELETE",
         credentials: "include",
@@ -116,6 +125,13 @@ export default function Profile() {
       toast({
         title: "Success",
         description: `You unfollowed ${targetUsername}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unfollow user",
+        variant: "destructive",
       });
     },
   });
@@ -132,17 +148,17 @@ export default function Profile() {
       amount: number;
       action: "buy" | "sell";
     }) => {
+      if (!currentUser) throw new Error("Authentication required");
+      
       const endpoint = action === "buy" ? "/api/bets" : "/api/bets/sell";
       const body =
         action === "buy"
           ? {
-              userId: currentUser?.id,
               marketId,
               position,
               amount,
             }
           : {
-              userId: currentUser?.id,
               marketId,
               position,
               shares: amount,
@@ -299,7 +315,12 @@ export default function Profile() {
 
             {!isOwnProfile && (
               <div>
-                {profileData.isFollowing ? (
+                {!currentUser ? (
+                  <Button disabled className="gap-2" data-testid="button-follow-disabled">
+                    <UserPlus className="h-4 w-4" />
+                    Login to Follow
+                  </Button>
+                ) : profileData.isFollowing ? (
                   <Button
                     variant="outline"
                     onClick={() => unfollowMutation.mutate()}
@@ -308,7 +329,7 @@ export default function Profile() {
                     data-testid="button-unfollow"
                   >
                     <UserMinus className="h-4 w-4" />
-                    Unfollow
+                    {unfollowMutation.isPending ? "Unfollowing..." : "Unfollow"}
                   </Button>
                 ) : (
                   <Button
@@ -318,7 +339,7 @@ export default function Profile() {
                     data-testid="button-follow"
                   >
                     <UserPlus className="h-4 w-4" />
-                    Follow
+                    {followMutation.isPending ? "Following..." : "Follow"}
                   </Button>
                 )}
               </div>

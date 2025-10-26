@@ -4,10 +4,13 @@ import { toast } from '@/hooks/use-toast';
 import { getUserId } from '@/hooks/use-auth';
 
 type WebSocketMessage = {
-  type: 'BET_PLACED' | 'PRICE_UPDATE' | 'MARKET_RESOLVED';
+  type: 'BET_PLACED' | 'PRICE_UPDATE' | 'MARKET_RESOLVED' | 'NEW_MESSAGE' | 'MESSAGE_READ';
   bet?: any;
   market?: any;
   resolution?: any;
+  message?: any;
+  conversationId?: string;
+  userId?: string;
 };
 
 export function useWebSocket() {
@@ -84,6 +87,21 @@ export function useWebSocket() {
                   duration: 5000,
                 });
               }
+              break;
+              
+            case 'NEW_MESSAGE':
+              // Invalidate conversations list and messages for the specific conversation
+              queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+              if (message.conversationId) {
+                queryClient.invalidateQueries({ 
+                  queryKey: ['/api/conversations', message.conversationId, 'messages'] 
+                });
+              }
+              break;
+              
+            case 'MESSAGE_READ':
+              // Invalidate conversations list to update unread counts
+              queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
               break;
           }
         } catch (error) {

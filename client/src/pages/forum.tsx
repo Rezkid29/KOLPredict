@@ -48,9 +48,8 @@ export default function Forum() {
 
   const createThreadMutation = useMutation({
     mutationFn: async () => {
-      if (!user) return;
+      if (!user) throw new Error("Authentication required");
       return await apiRequest("/api/forum/threads", "POST", {
-        userId: user.id,
         title: newThreadTitle,
         content: newThreadContent,
         category: newThreadCategory,
@@ -66,10 +65,10 @@ export default function Forum() {
         description: "Your thread has been posted successfully",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to create thread",
+        description: error.message || "Failed to create thread",
         variant: "destructive",
       });
     },
@@ -77,9 +76,9 @@ export default function Forum() {
 
   const createCommentMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !selectedThreadId) return;
+      if (!user) throw new Error("Authentication required");
+      if (!selectedThreadId) throw new Error("No thread selected");
       return await apiRequest(`/api/forum/threads/${selectedThreadId}/comments`, "POST", {
-        userId: user.id,
         content: newCommentContent,
       });
     },
@@ -88,10 +87,10 @@ export default function Forum() {
       queryClient.invalidateQueries({ queryKey: ["/api/forum/threads", selectedThreadId, "comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/forum/threads"] });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to post comment",
+        description: error.message || "Failed to post comment",
         variant: "destructive",
       });
     },
@@ -99,14 +98,20 @@ export default function Forum() {
 
   const voteThreadMutation = useMutation({
     mutationFn: async ({ threadId, vote }: { threadId: string; vote: "up" | "down" }) => {
-      if (!user) return;
+      if (!user) throw new Error("Authentication required");
       return await apiRequest(`/api/forum/threads/${threadId}/vote`, "POST", {
-        userId: user.id,
         vote,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/forum/threads"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to vote",
+        variant: "destructive",
+      });
     },
   });
 
@@ -126,7 +131,7 @@ export default function Forum() {
 
           <Dialog open={newThreadOpen} onOpenChange={setNewThreadOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-new-thread">
+              <Button className="gap-2" data-testid="button-new-thread" disabled={!user}>
                 <Plus className="h-4 w-4" />
                 New Thread
               </Button>
@@ -134,51 +139,60 @@ export default function Forum() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Thread</DialogTitle>
-                <DialogDescription>Start a discussion with the community</DialogDescription>
+                <DialogDescription>
+                  {!user ? "Please log in to create a thread" : "Start a discussion with the community"}
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Title</label>
-                  <Input
-                    placeholder="Thread title..."
-                    value={newThreadTitle}
-                    onChange={(e) => setNewThreadTitle(e.target.value)}
-                    data-testid="input-thread-title"
-                  />
+              {!user ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p className="mb-4">You need to be logged in to create threads</p>
+                  <Button onClick={() => setNewThreadOpen(false)}>Close</Button>
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Category</label>
-                  <select
-                    value={newThreadCategory}
-                    onChange={(e) => setNewThreadCategory(e.target.value)}
-                    className="w-full p-2 rounded-md border border-border bg-background"
-                    data-testid="select-category"
+              ) : (
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Title</label>
+                    <Input
+                      placeholder="Thread title..."
+                      value={newThreadTitle}
+                      onChange={(e) => setNewThreadTitle(e.target.value)}
+                      data-testid="input-thread-title"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Category</label>
+                    <select
+                      value={newThreadCategory}
+                      onChange={(e) => setNewThreadCategory(e.target.value)}
+                      className="w-full p-2 rounded-md border border-border bg-background"
+                      data-testid="select-category"
+                    >
+                      <option value="general">General</option>
+                      <option value="strategies">Strategies</option>
+                      <option value="kols">KOLs</option>
+                      <option value="markets">Markets</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Content</label>
+                    <Textarea
+                      placeholder="Share your thoughts..."
+                      value={newThreadContent}
+                      onChange={(e) => setNewThreadContent(e.target.value)}
+                      rows={6}
+                      data-testid="textarea-thread-content"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => createThreadMutation.mutate()}
+                    disabled={!newThreadTitle.trim() || !newThreadContent.trim() || createThreadMutation.isPending}
+                    className="w-full"
+                    data-testid="button-post-thread"
                   >
-                    <option value="general">General</option>
-                    <option value="strategies">Strategies</option>
-                    <option value="kols">KOLs</option>
-                    <option value="markets">Markets</option>
-                  </select>
+                    {createThreadMutation.isPending ? "Posting..." : "Post Thread"}
+                  </Button>
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Content</label>
-                  <Textarea
-                    placeholder="Share your thoughts..."
-                    value={newThreadContent}
-                    onChange={(e) => setNewThreadContent(e.target.value)}
-                    rows={6}
-                    data-testid="textarea-thread-content"
-                  />
-                </div>
-                <Button
-                  onClick={() => createThreadMutation.mutate()}
-                  disabled={!newThreadTitle.trim() || !newThreadContent.trim() || createThreadMutation.isPending}
-                  className="w-full"
-                  data-testid="button-post-thread"
-                >
-                  Post Thread
-                </Button>
-              </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -230,6 +244,7 @@ export default function Forum() {
                               e.stopPropagation();
                               voteThreadMutation.mutate({ threadId: thread.id, vote: "up" });
                             }}
+                            disabled={!user || voteThreadMutation.isPending}
                             data-testid={`button-upvote-${thread.id}`}
                           >
                             <ThumbsUp className="h-4 w-4" />
@@ -245,6 +260,7 @@ export default function Forum() {
                               e.stopPropagation();
                               voteThreadMutation.mutate({ threadId: thread.id, vote: "down" });
                             }}
+                            disabled={!user || voteThreadMutation.isPending}
                             data-testid={`button-downvote-${thread.id}`}
                           >
                             <ThumbsDown className="h-4 w-4" />
@@ -343,24 +359,32 @@ export default function Forum() {
                     </ScrollArea>
 
                     <div className="p-5 border-t border-border/50">
-                      <div className="flex gap-2">
-                        <Textarea
-                          placeholder="Add a comment..."
-                          value={newCommentContent}
-                          onChange={(e) => setNewCommentContent(e.target.value)}
-                          rows={3}
-                          data-testid="textarea-comment"
-                        />
-                      </div>
-                      <Button
-                        onClick={() => createCommentMutation.mutate()}
-                        disabled={!newCommentContent.trim() || createCommentMutation.isPending}
-                        className="w-full mt-2"
-                        size="sm"
-                        data-testid="button-post-comment"
-                      >
-                        Post Comment
-                      </Button>
+                      {!user ? (
+                        <div className="text-center text-sm text-muted-foreground py-4">
+                          <p>Please log in to post comments</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex gap-2">
+                            <Textarea
+                              placeholder="Add a comment..."
+                              value={newCommentContent}
+                              onChange={(e) => setNewCommentContent(e.target.value)}
+                              rows={3}
+                              data-testid="textarea-comment"
+                            />
+                          </div>
+                          <Button
+                            onClick={() => createCommentMutation.mutate()}
+                            disabled={!newCommentContent.trim() || createCommentMutation.isPending}
+                            className="w-full mt-2"
+                            size="sm"
+                            data-testid="button-post-comment"
+                          >
+                            {createCommentMutation.isPending ? "Posting..." : "Post Comment"}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </>
                 )}
