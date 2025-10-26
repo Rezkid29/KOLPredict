@@ -228,6 +228,11 @@ export default function Messages() {
                   {conversations.map((conversation) => {
                     const other = conversation.user1Id === user?.id ? conversation.user2 : conversation.user1;
                     const hasUnread = conversation.unreadCount > 0;
+                    
+                    // Skip conversation if other user data is missing
+                    if (!other || !other.username) {
+                      return null;
+                    }
 
                     return (
                       <div
@@ -242,8 +247,8 @@ export default function Messages() {
                       >
                         <div className="flex items-center gap-3">
                           <Avatar className="h-12 w-12 ring-2 ring-border">
-                            <AvatarImage src={other.avatarUrl ?? undefined} alt={other.username ?? "User"} />
-                            <AvatarFallback>{other.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+                            <AvatarImage src={other.avatarUrl ?? undefined} alt={other.username} />
+                            <AvatarFallback>{other.username[0]?.toUpperCase() ?? "U"}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
@@ -287,38 +292,21 @@ export default function Messages() {
                       <AvatarFallback>{otherUser?.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <h2 className="font-semibold">{otherUser?.username}</h2>
+                      <h2 className="font-semibold">{otherUser?.username ?? "Unknown User"}</h2>
                       <p className="text-xs text-muted-foreground">Online</p>
                     </div>
                   </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="icon" variant="ghost" className="text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Conversation</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete this conversation? This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => {
-                            if (selectedConversationId) {
-                              deleteConversationMutation.mutate(selectedConversationId);
-                            }
-                          }}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="text-destructive"
+                    onClick={() => {
+                      setConversationToDelete(selectedConversationId);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
 
                 {/* Messages */}

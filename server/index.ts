@@ -10,7 +10,8 @@ const app = express();
 const MemoryStore = createMemoryStore(session);
 
 // Trust proxy for correct IP detection behind Replit's proxy
-app.set('trust proxy', true);
+// Set to 1 to only trust the first proxy (Replit's infrastructure) for security
+app.set('trust proxy', 1);
 
 // Security headers
 app.use(helmet({

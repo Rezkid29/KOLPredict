@@ -33,10 +33,6 @@ let withdrawalProcessor: ReturnType<typeof createWithdrawalProcessor>;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Configure trust proxy for Replit's reverse proxy setup
-  // Only trust the first proxy (Replit's infrastructure)
-  app.set('trust proxy', 1);
-
   // Seed database if empty
   try {
     const kols = await storage.getAllKols();
@@ -439,9 +435,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Existing user authenticated: ${user.id}, username: ${user.username}`);
       }
 
-      // Set session
+      // Set session and save it
       req.session.userId = user.id;
       req.session.walletAddress = publicKey;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({ 
         userId: user.id, 
@@ -1834,8 +1836,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updates: { bio?: string; avatarUrl?: string } = {};
-      if (bio !== undefined) updates.bio = bio;
-      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      
+      // Validate and sanitize bio if provided
+      if (bio !== undefined) {
+        const bioValidation = validateBio(bio);
+        if (!bioValidation.valid) {
+          return res.status(400).json({ message: bioValidation.error });
+        }
+        updates.bio = sanitizeInput(bio);
+      }
+      
+      // Validate and sanitize avatar URL if provided
+      if (avatarUrl !== undefined) {
+        if (avatarUrl.length > 500) {
+          return res.status(400).json({ message: "Avatar URL is too long (max 500 characters)" });
+        }
+        // Basic URL validation
+        if (avatarUrl && !avatarUrl.match(/^https?:\/\/.+/)) {
+          return res.status(400).json({ message: "Avatar URL must be a valid HTTP/HTTPS URL" });
+        }
+        updates.avatarUrl = sanitizeInput(avatarUrl);
+      }
 
       const updatedProfile = await storage.updateUserProfile(id, updates);
       res.json(updatedProfile);

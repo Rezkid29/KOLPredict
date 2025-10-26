@@ -51,8 +51,18 @@ export default function Profile() {
     profile: UserProfile;
     isFollowing: boolean;
   }>({
-    queryKey: ["/api/users", targetUsername, "profile"],
+    queryKey: username === "me" ? ["/api/users/me/profile"] : ["/api/users", targetUsername, "profile"],
     queryFn: async () => {
+      // Use dedicated "me" endpoint for own profile
+      if (username === "me") {
+        const res = await fetch(`/api/users/me/profile`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Failed to fetch profile");
+        return res.json();
+      }
+      
+      // Use username endpoint for other profiles
       if (!targetUsername) throw new Error("No username provided");
       const res = await fetch(`/api/users/${targetUsername}/profile`, {
         credentials: "include",
@@ -60,7 +70,7 @@ export default function Profile() {
       if (!res.ok) throw new Error("Failed to fetch profile");
       return res.json();
     },
-    enabled: !!targetUsername,
+    enabled: username === "me" || !!targetUsername,
   });
 
   const { data: bets = [] } = useQuery<BetWithMarket[]>({
@@ -102,7 +112,12 @@ export default function Profile() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/profile", targetUsername] });
+      // Invalidate both possible query key formats
+      if (username === "me") {
+        queryClient.invalidateQueries({ queryKey: ["/api/users/me/profile"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/users", targetUsername, "profile"] });
+      }
       toast({
         title: "Success",
         description: `You are now following ${targetUsername}`,
@@ -129,7 +144,12 @@ export default function Profile() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/profile", targetUsername] });
+      // Invalidate both possible query key formats
+      if (username === "me") {
+        queryClient.invalidateQueries({ queryKey: ["/api/users/me/profile"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/users", targetUsername, "profile"] });
+      }
       toast({
         title: "Success",
         description: `You unfollowed ${targetUsername}`,
