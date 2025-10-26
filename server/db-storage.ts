@@ -133,6 +133,14 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getAllUsers(limit: number = 100): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(limit);
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const result = await db.insert(users).values(insertUser).returning();
     return result[0];

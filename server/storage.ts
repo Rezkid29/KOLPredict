@@ -35,19 +35,20 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByWalletAddress(walletAddress: string): Promise<User | undefined>;
   getUserByTwitterId(twitterId: string): Promise<User | undefined>;
+  getAllUsers(limit?: number): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUserBalance(id: string, balance: string): Promise<void>;
   updateUserSolanaBalance(id: string, solanaBalance: string): Promise<void>;
   updateUserDepositAddress(id: string, address: string): Promise<void>;
   updateUserStats(id: string, totalBets: number, totalWins: number, totalProfit: string): Promise<void>;
-  
+
   // KOL methods
   getKol(id: string): Promise<Kol | undefined>;
   getKolByHandle(handle: string): Promise<Kol | undefined>;
   getAllKols(): Promise<Kol[]>;
   createKol(kol: InsertKol): Promise<Kol>;
   updateKol(id: string, updates: Partial<Omit<Kol, 'id'>>): Promise<Kol>;
-  
+
   // Market methods
   getMarket(id: string): Promise<Market | undefined>;
   getAllMarkets(): Promise<Market[]>;
@@ -57,7 +58,7 @@ export interface IStorage {
   updateMarket(id: string, updates: Partial<Omit<Market, 'id' | 'createdAt'>>): Promise<void>;
   updateMarketVolume(id: string, volume: string): Promise<void>;
   resolveMarket(id: string, resolvedValue: string): Promise<void>;
-  
+
   // Bet methods
   getBet(id: string): Promise<Bet | undefined>;
   getUserBets(userId: string): Promise<Bet[]>;
@@ -87,57 +88,57 @@ export interface IStorage {
   getUserPositionsWithMarkets(userId: string): Promise<PositionWithMarket[]>;
   getMarketPositions(marketId: string): Promise<Position[]>;
   updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void>;
-  
+
   // Leaderboard
   getLeaderboard(): Promise<LeaderboardEntry[]>;
-  
+
   // Price history
   getMarketPriceHistory(marketId: string, days?: number): Promise<PriceHistoryPoint[]>;
-  
+
   // Comments
   getMarketComments(marketId: string): Promise<CommentWithUser[]>;
   createComment(comment: InsertComment): Promise<Comment>;
-  
+
   // Transactions
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getUserTransactions(userId: string, limit?: number): Promise<Transaction[]>;
-  
+
   // KOL metrics history
   createKolMetricsHistory(history: InsertKolMetricsHistory): Promise<KolMetricsHistory>;
   getKolMetricsHistory(kolId: string, days?: number): Promise<KolMetricsHistory[]>;
-  
+
   // Scraped KOLs
   createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]>;
   getLatestScrapedKols(limit?: number): Promise<ScrapedKol[]>;
   getScrapedKolsByDate(date: Date): Promise<ScrapedKol[]>;
-  
+
   // Follower cache
   getFollowerCache(xHandle: string): Promise<FollowerCacheEntry | undefined>;
   upsertFollowerCache(cache: InsertFollowerCache): Promise<FollowerCacheEntry>;
   getAllFollowerCache(): Promise<FollowerCacheEntry[]>;
-  
+
   // Market metadata
   createMarketMetadata(metadata: InsertMarketMetadata): Promise<MarketMetadata>;
   getMarketMetadata(marketId: string): Promise<MarketMetadata | undefined>;
   getAllMarketMetadata(): Promise<MarketMetadata[]>;
-  
+
   // Solana deposits
   createDeposit(deposit: InsertSolanaDeposit): Promise<SolanaDeposit>;
   getPendingDeposits(): Promise<SolanaDeposit[]>;
   getUserDeposits(userId: string, limit?: number): Promise<SolanaDeposit[]>;
   updateDepositStatus(id: string, status: string, confirmations: number): Promise<void>;
-  
+
   // Solana withdrawals
   createWithdrawal(withdrawal: InsertSolanaWithdrawal): Promise<SolanaWithdrawal>;
   getPendingWithdrawals(): Promise<SolanaWithdrawal[]>;
   getUserWithdrawals(userId: string, limit?: number): Promise<SolanaWithdrawal[]>;
   updateWithdrawalStatus(id: string, status: string, signature?: string, error?: string): Promise<void>;
-  
+
   // Platform fees
   createPlatformFee(fee: InsertPlatformFee): Promise<PlatformFee>;
   getTotalPlatformFees(): Promise<string>;
   getUserPlatformFees(userId: string): Promise<PlatformFee[]>;
-  
+
   // User profiles
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
   getProfileByUsername(username: string): Promise<{ user: User; profile: UserProfile } | undefined>;
@@ -387,16 +388,20 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getAllUsers(limit: number = 100): Promise<User[]> {
+    return Array.from(this.users.values()).slice(0, limit);
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
-    const user: User = { 
+    const user: User = {
       username: null,
       walletAddress: null,
       authProvider: "username",
       isGuest: false,
       twitterId: null,
       twitterHandle: null,
-      ...insertUser, 
+      ...insertUser,
       id,
       balance: "1000.00",
       solanaDepositAddress: null,
@@ -461,8 +466,8 @@ export class MemStorage implements IStorage {
 
   async createKol(insertKol: InsertKol): Promise<Kol> {
     const id = randomUUID();
-    const kol: Kol = { 
-      ...insertKol, 
+    const kol: Kol = {
+      ...insertKol,
       id,
       trending: insertKol.trending ?? false,
       trendingPercent: insertKol.trendingPercent ?? null,
@@ -501,10 +506,10 @@ export class MemStorage implements IStorage {
     const market = this.markets.get(id);
     if (!market) return undefined;
     if (!market.kolId) return undefined;
-    
+
     const kol = this.kols.get(market.kolId);
     if (!kol) return undefined;
-    
+
     return { ...market, kol };
   }
 
@@ -591,10 +596,10 @@ export class MemStorage implements IStorage {
         const market = this.markets.get(bet.marketId);
         if (!market) return null;
         if (!market.kolId) return null;
-        
+
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
-        
+
         return {
           ...bet,
           market: { ...market, kol },
@@ -613,10 +618,10 @@ export class MemStorage implements IStorage {
         const market = this.markets.get(bet.marketId);
         if (!market) return null;
         if (!market.kolId) return null;
-        
+
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
-        
+
         return {
           ...bet,
           market: { ...market, kol },
@@ -691,7 +696,7 @@ export class MemStorage implements IStorage {
 
     const platformFee = params.action === "buy" ? betAmount * PLATFORM_FEE_PERCENTAGE : 0;
     const amountAfterFee = betAmount - platformFee;
-    
+
     const currentPrice = parseFloat(params.position === "YES" ? market.yesPrice : market.noPrice);
     const shares = amountAfterFee / currentPrice;
 
@@ -710,7 +715,7 @@ export class MemStorage implements IStorage {
 
     this.bets.set(bet.id, bet);
 
-    const newBalance = params.action === "buy" 
+    const newBalance = params.action === "buy"
       ? (userBalance - betAmount).toFixed(2)
       : (userBalance + betAmount).toFixed(2);
     user.balance = newBalance;
@@ -744,10 +749,10 @@ export class MemStorage implements IStorage {
         const market = this.markets.get(position.marketId);
         if (!market) return null;
         if (!market.kolId) return null;
-        
+
         const kol = this.kols.get(market.kolId);
         if (!kol) return null;
-        
+
         return {
           ...position,
           market: { ...market, kol },
@@ -764,11 +769,11 @@ export class MemStorage implements IStorage {
 
   async updateUserPosition(userId: string, marketId: string, position: string, shares: number, action: string): Promise<void> {
     const existing = await this.getUserPosition(userId, marketId, position);
-    
+
     if (existing) {
       const currentShares = parseFloat(existing.shares);
       const currentAvgPrice = parseFloat(existing.averagePrice);
-      
+
       if (action === "buy") {
         const newShares = currentShares + shares;
         const newAvgPrice = ((currentShares * currentAvgPrice) + (shares * parseFloat(existing.averagePrice))) / newShares;
@@ -955,16 +960,16 @@ export class MemStorage implements IStorage {
 
   async getLatestScrapedKols(limit: number = 20): Promise<ScrapedKol[]> {
     if (this.scrapedKols.length === 0) return [];
-    
-    const sorted = [...this.scrapedKols].sort((a, b) => 
+
+    const sorted = [...this.scrapedKols].sort((a, b) =>
       b.scrapedAt.getTime() - a.scrapedAt.getTime()
     );
-    
+
     const latestScrapedAt = sorted[0].scrapedAt;
-    const latest = sorted.filter(k => 
+    const latest = sorted.filter(k =>
       k.scrapedAt.getTime() === latestScrapedAt.getTime()
     );
-    
+
     return latest.slice(0, limit);
   }
 
@@ -973,8 +978,8 @@ export class MemStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-    
-    return this.scrapedKols.filter(k => 
+
+    return this.scrapedKols.filter(k =>
       k.scrapedAt >= startOfDay && k.scrapedAt <= endOfDay
     );
   }

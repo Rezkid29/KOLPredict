@@ -25,16 +25,6 @@ import {
 import type { User, ConversationWithParticipants, Message } from "@shared/schema";
 import { format } from "date-fns";
 
-type LeaderboardUser = {
-  userId: string;
-  username: string;
-  balance: string;
-  totalProfit: string;
-  totalTrades: number;
-  successRate: number;
-  avatarUrl?: string | null;
-};
-
 export default function Messages() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -64,19 +54,18 @@ export default function Messages() {
     enabled: !!selectedConversationId,
   });
 
-  const { data: allUsers = [] } = useQuery<LeaderboardUser[]>({
-    queryKey: ["/api/leaderboard"],
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
     enabled: newConversationOpen,
   });
 
   const filteredUsers = allUsers.filter((u) => {
+    if (!u.username) return false; // Skip users without usernames
+    if (u.id === user?.id) return false; // Skip current user
     if (!userSearch.trim()) return true;
     const searchLower = userSearch.toLowerCase();
-    return (
-      u.username.toLowerCase().includes(searchLower) &&
-      u.userId !== user?.id
-    );
-  }).slice(0, 10);
+    return u.username.toLowerCase().includes(searchLower);
+  }).slice(0, 20);
 
   const createConversationMutation = useMutation({
     mutationFn: async (otherUserId: string) => {
@@ -448,20 +437,20 @@ export default function Messages() {
                 <div className="p-2 space-y-1">
                   {filteredUsers.map((searchUser) => (
                     <div
-                      key={searchUser.userId}
-                      onClick={() => handleCreateConversation(searchUser.userId)}
+                      key={searchUser.id}
+                      onClick={() => handleCreateConversation(searchUser.id)}
                       className="p-3 rounded-lg cursor-pointer transition-all hover-elevate border border-transparent"
-                      data-testid={`user-search-result-${searchUser.userId}`}
+                      data-testid={`user-search-result-${searchUser.id}`}
                     >
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 ring-2 ring-border">
-                          <AvatarImage src={searchUser.avatarUrl ?? undefined} alt={searchUser.username} />
-                          <AvatarFallback>{searchUser.username[0]?.toUpperCase()}</AvatarFallback>
+                          <AvatarImage src={undefined} alt={searchUser.username ?? 'User'} />
+                          <AvatarFallback>{searchUser.username?.[0]?.toUpperCase() ?? 'U'}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{searchUser.username}</p>
+                          <p className="font-medium text-sm truncate">{searchUser.username ?? 'Unknown User'}</p>
                           <p className="text-xs text-muted-foreground">
-                            {searchUser.totalTrades || 0} trades • {searchUser.successRate ? searchUser.successRate.toFixed(1) : '0.0'}% success
+                            {searchUser.totalBets} bets • {searchUser.totalWins} wins
                           </p>
                         </div>
                       </div>

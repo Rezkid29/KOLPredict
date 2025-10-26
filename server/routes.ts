@@ -1118,6 +1118,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all users for messaging
+  app.get("/api/users", async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+      const allUsers = await storage.getAllUsers(limit);
+      res.json(allUsers);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
   // Get market price history
   app.get("/api/markets/:id/history", async (req, res) => {
     try {
