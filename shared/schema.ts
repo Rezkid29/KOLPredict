@@ -440,6 +440,27 @@ export const forumComments = pgTable("forum_comments", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// New tables for forum voting
+export const forumThreadVotes = pgTable("forum_thread_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  threadId: varchar("thread_id").notNull().references(() => forumThreads.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  voteType: text("vote_type").notNull(), // 'up' or 'down'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueThreadVote: unique().on(table.threadId, table.userId),
+}));
+
+export const forumCommentVotes = pgTable("forum_comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => forumComments.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  voteType: text("vote_type").notNull(), // 'up' or 'down'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueCommentVote: unique().on(table.commentId, table.userId),
+}));
+
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -535,10 +556,20 @@ export const insertForumCommentSchema = createInsertSchema(forumComments).omit({
   downvotes: true,
 });
 
+// Insert schemas for new vote tables
+export const insertForumThreadVoteSchema = createInsertSchema(forumThreadVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertForumCommentVoteSchema = createInsertSchema(forumCommentVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
-  read: true,
 });
 
 export const insertAchievementSchema = createInsertSchema(achievements).omit({
@@ -578,6 +609,13 @@ export type ForumThread = typeof forumThreads.$inferSelect;
 
 export type InsertForumComment = z.infer<typeof insertForumCommentSchema>;
 export type ForumComment = typeof forumComments.$inferSelect;
+
+// Types for new vote tables
+export type InsertForumThreadVote = z.infer<typeof insertForumThreadVoteSchema>;
+export type ForumThreadVote = typeof forumThreadVotes.$inferSelect;
+
+export type InsertForumCommentVote = z.infer<typeof insertForumCommentVoteSchema>;
+export type ForumCommentVote = typeof forumCommentVotes.$inferSelect;
 
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;

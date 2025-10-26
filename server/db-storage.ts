@@ -42,6 +42,8 @@ import {
   messages,
   forumThreads,
   forumComments,
+  forumThreadVotes,
+  forumCommentVotes,
   notifications,
   achievements,
   userAchievements,
@@ -1830,16 +1832,67 @@ export class DbStorage implements IStorage {
         throw new NotFoundError(`Forum thread ${threadId} not found`);
       }
 
-      if (vote === 'up') {
+      // Check if user has already voted
+      const existingVote = await tx
+        .select()
+        .from(forumThreadVotes)
+        .where(
+          sql`${forumThreadVotes.threadId} = ${threadId} AND ${forumThreadVotes.userId} = ${userId}`
+        )
+        .limit(1);
+
+      if (existingVote.length > 0) {
+        const oldVote = existingVote[0].vote;
+        
+        // If voting the same way, do nothing
+        if (oldVote === vote) {
+          return;
+        }
+
+        // User is changing their vote - remove old vote count and add new one
+        if (oldVote === 'up') {
+          await tx
+            .update(forumThreads)
+            .set({ 
+              upvotes: sql`${forumThreads.upvotes} - 1`,
+              downvotes: sql`${forumThreads.downvotes} + 1`
+            })
+            .where(eq(forumThreads.id, threadId));
+        } else {
+          await tx
+            .update(forumThreads)
+            .set({ 
+              downvotes: sql`${forumThreads.downvotes} - 1`,
+              upvotes: sql`${forumThreads.upvotes} + 1`
+            })
+            .where(eq(forumThreads.id, threadId));
+        }
+
+        // Update the vote record
         await tx
-          .update(forumThreads)
-          .set({ upvotes: sql`${forumThreads.upvotes} + 1` })
-          .where(eq(forumThreads.id, threadId));
+          .update(forumThreadVotes)
+          .set({ vote })
+          .where(eq(forumThreadVotes.id, existingVote[0].id));
       } else {
-        await tx
-          .update(forumThreads)
-          .set({ downvotes: sql`${forumThreads.downvotes} + 1` })
-          .where(eq(forumThreads.id, threadId));
+        // First time voting - insert new vote record
+        await tx.insert(forumThreadVotes).values({
+          threadId,
+          userId,
+          vote,
+        });
+
+        // Update vote count
+        if (vote === 'up') {
+          await tx
+            .update(forumThreads)
+            .set({ upvotes: sql`${forumThreads.upvotes} + 1` })
+            .where(eq(forumThreads.id, threadId));
+        } else {
+          await tx
+            .update(forumThreads)
+            .set({ downvotes: sql`${forumThreads.downvotes} + 1` })
+            .where(eq(forumThreads.id, threadId));
+        }
       }
     });
   }
@@ -1857,16 +1910,67 @@ export class DbStorage implements IStorage {
         throw new NotFoundError(`Forum comment ${commentId} not found`);
       }
 
-      if (vote === 'up') {
+      // Check if user has already voted
+      const existingVote = await tx
+        .select()
+        .from(forumCommentVotes)
+        .where(
+          sql`${forumCommentVotes.commentId} = ${commentId} AND ${forumCommentVotes.userId} = ${userId}`
+        )
+        .limit(1);
+
+      if (existingVote.length > 0) {
+        const oldVote = existingVote[0].vote;
+        
+        // If voting the same way, do nothing
+        if (oldVote === vote) {
+          return;
+        }
+
+        // User is changing their vote - remove old vote count and add new one
+        if (oldVote === 'up') {
+          await tx
+            .update(forumComments)
+            .set({ 
+              upvotes: sql`${forumComments.upvotes} - 1`,
+              downvotes: sql`${forumComments.downvotes} + 1`
+            })
+            .where(eq(forumComments.id, commentId));
+        } else {
+          await tx
+            .update(forumComments)
+            .set({ 
+              downvotes: sql`${forumComments.downvotes} - 1`,
+              upvotes: sql`${forumComments.upvotes} + 1`
+            })
+            .where(eq(forumComments.id, commentId));
+        }
+
+        // Update the vote record
         await tx
-          .update(forumComments)
-          .set({ upvotes: sql`${forumComments.upvotes} + 1` })
-          .where(eq(forumComments.id, commentId));
+          .update(forumCommentVotes)
+          .set({ vote })
+          .where(eq(forumCommentVotes.id, existingVote[0].id));
       } else {
-        await tx
-          .update(forumComments)
-          .set({ downvotes: sql`${forumComments.downvotes} + 1` })
-          .where(eq(forumComments.id, commentId));
+        // First time voting - insert new vote record
+        await tx.insert(forumCommentVotes).values({
+          commentId,
+          userId,
+          vote,
+        });
+
+        // Update vote count
+        if (vote === 'up') {
+          await tx
+            .update(forumComments)
+            .set({ upvotes: sql`${forumComments.upvotes} + 1` })
+            .where(eq(forumComments.id, commentId));
+        } else {
+          await tx
+            .update(forumComments)
+            .set({ downvotes: sql`${forumComments.downvotes} + 1` })
+            .where(eq(forumComments.id, commentId));
+        }
       }
     });
   }
