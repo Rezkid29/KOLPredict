@@ -44,7 +44,11 @@ export default function Landing() {
             <img src={logoImage} alt="KOL Predict Logo" className="h-6 w-6" />
             <span className="text-xl font-display font-bold text-foreground">KOL Predict</span>
           </div>
-          <Button onClick={() => setAuthModalOpen(true)} className="gap-2">
+          <Button onClick={() => setAuthModalOpen(true)} className="gap-2 auth-button-animated">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
             Get Started
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -77,8 +81,12 @@ export default function Landing() {
               <Button 
                 size="lg" 
                 onClick={() => setAuthModalOpen(true)}
-                className="gap-2 text-lg px-8 py-6"
+                className="gap-2 text-lg px-8 py-6 auth-button-animated"
               >
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
                 Start Trading
                 <ArrowRight className="h-5 w-5" />
               </Button>
@@ -248,8 +256,12 @@ export default function Landing() {
           <Button 
             size="lg" 
             onClick={() => setAuthModalOpen(true)}
-            className="gap-2 text-lg px-8 py-6"
+            className="gap-2 text-lg px-8 py-6 auth-button-animated"
           >
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
             Get Started Now
             <ArrowRight className="h-5 w-5" />
           </Button>
