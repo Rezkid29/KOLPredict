@@ -438,9 +438,13 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 <Button 
                   onClick={handleLogin} 
                   disabled={loading}
-                  className="w-full gap-2"
+                  className="w-full gap-2 auth-button-animated"
                   data-testid="button-login"
                 >
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
                   <LogIn className="h-4 w-4" />
                   {loading ? "Logging in..." : "Login"}
                 </Button>
@@ -464,9 +468,13 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 <Button 
                   onClick={handleRegister} 
                   disabled={loading}
-                  className="w-full gap-2"
+                  className="w-full gap-2 auth-button-animated"
                   data-testid="button-register"
                 >
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
                   <UserPlus className="h-4 w-4" />
                   {loading ? "Creating account..." : "Create Account"}
                 </Button>
@@ -501,10 +509,14 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
               <Button 
                 onClick={handleSolanaConnect} 
                 disabled={loading || !walletDetected}
-                className="w-full gap-2"
+                className="w-full gap-2 auth-button-animated"
                 variant="default"
                 data-testid="button-solana-connect"
               >
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
                 <Wallet className="h-4 w-4" />
                 {loading ? "Connecting..." : "Connect Solana Wallet"}
               </Button>
@@ -523,10 +535,14 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
               <Button 
                 onClick={handleTwitterAuth} 
                 disabled={loading}
-                className="w-full gap-2"
+                className="w-full gap-2 auth-button-animated"
                 variant="outline"
                 data-testid="button-twitter-auth"
               >
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
                 <SiX className="h-4 w-4" />
                 Sign in with X (Coming Soon)
               </Button>
@@ -545,10 +561,14 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
               <Button 
                 onClick={handleGuestLogin} 
                 disabled={loading}
-                className="w-full gap-2"
+                className="w-full gap-2 auth-button-animated"
                 variant="default"
                 data-testid="button-guest-login"
               >
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
                 <User className="h-4 w-4" />
                 {loading ? "Creating guest account..." : "Continue as Guest"}
               </Button>
