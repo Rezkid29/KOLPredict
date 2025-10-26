@@ -229,8 +229,8 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
               <Wallet className="h-4 md:h-5 w-4 md:w-5 text-muted-foreground" />
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">Balance</span>
-                <span className="text-sm md:text-lg font-semibold tabular-nums" data-testid="text-balance">
-                  {balance.toFixed(2)} <span className="text-white">PTS</span>
+                <span className="text-sm md:text-lg font-semibold tabular-nums text-white" data-testid="text-balance">
+                  {balance.toFixed(2)} PTS
                 </span>
               </div>
             </div>
