@@ -40,6 +40,10 @@ export default function Messages() {
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithParticipants[]>({
     queryKey: ["/api/conversations"],
+    queryFn: async () => {
+      const result = await apiRequest("/api/conversations", "GET");
+      return result as ConversationWithParticipants[];
+    },
     enabled: !!user,
   });
 
