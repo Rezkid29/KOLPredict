@@ -30,9 +30,11 @@ interface Notification {
 interface NavbarProps {
   balance?: number;
   username?: string;
+  walletRef?: React.RefObject<HTMLDivElement>;
+  userBadgeRef?: React.RefObject<HTMLDivElement>;
 }
 
-export function Navbar({ balance = 1000, username }: NavbarProps) {
+export function Navbar({ balance = 1000, username, walletRef, userBadgeRef }: NavbarProps) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
@@ -225,7 +227,7 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
 
           {/* Desktop wallet display */}
           <Link href="/wallet">
-            <div className="hidden sm:flex items-center gap-2 md:gap-3 rounded-lg bg-card border border-card-border px-2 md:px-4 py-2 hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="wallet-display">
+            <div ref={walletRef} className="hidden sm:flex items-center gap-2 md:gap-3 rounded-lg bg-card border border-card-border px-2 md:px-4 py-2 hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="wallet-display">
               <Wallet className="h-4 md:h-5 w-4 md:w-5 text-muted-foreground" />
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">Balance</span>
@@ -248,7 +250,7 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
           
           {username && (
             <Link href={`/profile/${username}`}>
-              <Badge variant="secondary" className="hidden sm:flex px-3 py-2 text-sm hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="badge-username">
+              <Badge ref={userBadgeRef} variant="secondary" className="hidden sm:flex px-3 py-2 text-sm hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="badge-username">
                 {username}
               </Badge>
             </Link>

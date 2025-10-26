@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navbar } from "@/components/navbar";
 import { MarketCard } from "@/components/market-card";
 import { BetModal } from "@/components/bet-modal";
 import { LiveFeed } from "@/components/live-feed";
 import { LiveCarousel } from "@/components/live-carousel";
+import { AppTour } from "@/components/app-tour";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,11 @@ export default function Home() {
   const [liveFeedOpen, setLiveFeedOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const { toast } = useToast();
+
+  // Refs for tour targeting
+  const marketCardRef = useRef<HTMLDivElement>(null);
+  const walletRef = useRef<HTMLDivElement>(null);
+  const userBadgeRef = useRef<HTMLDivElement>(null);
 
   // Connect to WebSocket for real-time updates
   const { isConnected } = useWebSocket();
@@ -177,6 +183,8 @@ export default function Home() {
       <Navbar
         balance={user?.balance ? parseFloat(user.balance) : 1000}
         username={user?.username ?? undefined}
+        walletRef={walletRef}
+        userBadgeRef={userBadgeRef}
       />
 
       {/* Live Bets Carousel */}
@@ -335,13 +343,14 @@ export default function Home() {
                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
                 data-testid="markets-grid"
               >
-                {filteredMarkets.map((market) => (
-                  <MarketCard
-                    key={market.id}
-                    market={market}
-                    onBuy={handleBuy}
-                    onSell={handleSell}
-                  />
+                {filteredMarkets.map((market, index) => (
+                  <div key={market.id} ref={index === 0 ? marketCardRef : null}>
+                    <MarketCard
+                      market={market}
+                      onBuy={handleBuy}
+                      onSell={handleSell}
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -403,6 +412,9 @@ export default function Home() {
         }
         onConfirm={handleConfirmBet}
       />
+
+      {/* App Tour */}
+      <AppTour />
     </div>
   );
 }
