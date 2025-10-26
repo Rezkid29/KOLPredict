@@ -297,10 +297,10 @@ export default function Forum() {
                             <div className="flex items-center gap-2">
                               <Avatar className="h-5 w-5">
                                 <AvatarFallback className="text-xs">
-                                  {thread.user.username?.[0]?.toUpperCase() ?? "U"}
+                                  {thread.user?.username?.[0]?.toUpperCase() ?? "U"}
                                 </AvatarFallback>
                               </Avatar>
-                              <span>{thread.user.username}</span>
+                              <span>{thread.user?.username ?? "Anonymous"}</span>
                             </div>
                             <span>•</span>
                             <span>{format(new Date(thread.createdAt), "MMM d, yyyy")}</span>
@@ -344,12 +344,12 @@ export default function Forum() {
                               <div className="flex items-start gap-2">
                                 <Avatar className="h-8 w-8">
                                   <AvatarFallback className="text-xs">
-                                    {comment.user.username?.[0]?.toUpperCase() ?? "U"}
+                                    {comment.user?.username?.[0]?.toUpperCase() ?? "U"}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-medium">{comment.user.username}</span>
+                                    <span className="text-sm font-medium">{comment.user?.username ?? "Anonymous"}</span>
                                     <span className="text-xs text-muted-foreground">
                                       {format(new Date(comment.createdAt), "MMM d")}
                                     </span>

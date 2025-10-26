@@ -2202,6 +2202,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/conversations/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId!;
+
+      if (!id) {
+        return res.status(400).json({ message: "Conversation ID is required" });
+      }
+
+      // Verify user is a participant in this conversation
+      const userConversations = await storage.getUserConversations(userId);
+      const isParticipant = userConversations.some(conv => conv.id === id);
+
+      if (!isParticipant) {
+        return res.status(403).json({ message: "You are not a participant in this conversation" });
+      }
+
+      await storage.deleteConversation(id, userId);
+      res.json({ message: "Conversation deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+
+      res.status(500).json({ message: "Failed to delete conversation" });
+    }
+  });
+
   // ----------------------------------------------------------------------------
   // Forum Routes
   // ----------------------------------------------------------------------------
@@ -2266,7 +2300,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
       const threads = await storage.getForumThreads(category, limit);
-      res.json(threads);
+      
+      // Enrich threads with user data
+      const enrichedThreads = await Promise.all(
+        threads.map(async (thread) => {
+          const user = await storage.getUser(thread.userId);
+          return {
+            ...thread,
+            user: {
+              username: user?.username ?? null,
+            },
+          };
+        })
+      );
+      
+      res.json(enrichedThreads);
     } catch (error) {
       console.error("Error fetching forum threads:", error);
 
@@ -2398,7 +2446,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const comments = await storage.getForumComments(id, limit);
-      res.json(comments);
+      
+      // Enrich comments with user data
+      const enrichedComments = await Promise.all(
+        comments.map(async (comment) => {
+          const user = await storage.getUser(comment.userId);
+          return {
+            ...comment,
+            user: {
+              username: user?.username ?? null,
+            },
+          };
+        })
+      );
+      
+      res.json(enrichedComments);
     } catch (error) {
       console.error("Error fetching forum comments:", error);
 

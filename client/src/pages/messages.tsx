@@ -43,7 +43,7 @@ export default function Messages() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const { toast } = useToast();
-  
+
   useWebSocket();
 
   const { data: user } = useQuery<User>({
@@ -172,7 +172,7 @@ export default function Messages() {
   };
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
-  const otherUser = selectedConversation 
+  const otherUser = selectedConversation
     ? (selectedConversation.user1Id === user?.id ? selectedConversation.user2 : selectedConversation.user1)
     : null;
 
@@ -287,17 +287,34 @@ export default function Messages() {
                       <p className="text-xs text-muted-foreground">Online</p>
                     </div>
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      setConversationToDelete(selectedConversationId);
-                      setDeleteDialogOpen(true);
-                    }}
-                    data-testid="button-delete-conversation"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="icon" variant="ghost" className="text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Conversation</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this conversation? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            if (selectedConversationId) {
+                              deleteConversationMutation.mutate(selectedConversationId);
+                            }
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
 
                 {/* Messages */}
@@ -408,7 +425,7 @@ export default function Messages() {
               Search for a user to start a conversation
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
