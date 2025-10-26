@@ -225,12 +225,12 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
 
           {/* Desktop wallet display */}
           <Link href="/wallet">
-            <div className="hidden sm:flex items-center gap-3 rounded-lg bg-card border border-card-border px-4 py-2 hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="wallet-display">
-              <Wallet className="h-5 w-5 text-muted-foreground" />
+            <div className="hidden sm:flex items-center gap-2 md:gap-3 rounded-lg bg-card border border-card-border px-2 md:px-4 py-2 hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="wallet-display">
+              <Wallet className="h-4 md:h-5 w-4 md:w-5 text-muted-foreground" />
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">Balance</span>
-                <span className="text-lg font-semibold tabular-nums" data-testid="text-balance">
-                  {balance.toFixed(2)} PTS
+                <span className="text-sm md:text-lg font-semibold tabular-nums" data-testid="text-balance">
+                  {balance.toFixed(2)} <span className="text-white">PTS</span>
                 </span>
               </div>
             </div>
