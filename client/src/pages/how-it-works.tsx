@@ -20,7 +20,7 @@ export default function HowItWorks() {
             <Activity className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium text-primary">Powered by Constant Product AMM</span>
           </div>
-          <h1 className="text-6xl font-display font-bold mb-6 bg-gradient-to-r from-primary via-chart-2 to-chart-4 bg-clip-text text-transparent">
+          <h1 className="text-6xl font-display font-bold mb-6" style={{ color: 'hsl(48 95% 60% / 1)' }}>
             How It Works
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
@@ -44,10 +44,10 @@ export default function HowItWorks() {
               <div className="bg-background/80 rounded-lg p-6 font-mono text-sm border border-primary/10 mb-4">
                 <div className="text-primary font-semibold mb-3">YES Price Calculation:</div>
                 <div className="text-foreground/90 mb-1">
-                  Price(YES) = <span className="text-chart-2">yesPool</span> / (<span className="text-chart-2">yesPool</span> + <span className="text-chart-4">noPool</span>)
+                  Price(YES) = <span style={{ color: 'hsl(69.64deg 70% 60%)' }}>yesPool</span> / (<span style={{ color: 'hsl(69.64deg 70% 60%)' }}>yesPool</span> + <span className="text-chart-4">noPool</span>)
                 </div>
                 <div className="text-foreground/90 mt-4">
-                  Price(NO) = <span className="text-chart-4">noPool</span> / (<span className="text-chart-2">yesPool</span> + <span className="text-chart-4">noPool</span>)
+                  Price(NO) = <span className="text-chart-4">noPool</span> / (<span style={{ color: 'hsl(69.64deg 70% 60%)' }}>yesPool</span> + <span className="text-chart-4">noPool</span>)
                 </div>
                 <div className="text-xs text-muted-foreground mt-4 pt-4 border-t border-primary/10">
                   Prices always sum to 1.00 — representing 100% probability distribution
@@ -56,11 +56,11 @@ export default function HowItWorks() {
             </Card>
 
             <Card className="p-8 border-chart-2/20 bg-gradient-to-br from-card to-card/50">
-              <h3 className="text-2xl font-bold mb-4 text-chart-2">Constant Product</h3>
+              <h3 className="text-2xl font-bold mb-4" style={{ color: 'hsl(69.64deg 70% 60%)' }}>Constant Product</h3>
               <div className="bg-background/80 rounded-lg p-6 font-mono text-sm border border-chart-2/10 mb-4">
-                <div className="text-chart-2 font-semibold mb-3">Invariant Formula:</div>
+                <div className="font-semibold mb-3" style={{ color: 'hsl(69.64deg 70% 60%)' }}>Invariant Formula:</div>
                 <div className="text-2xl font-bold text-center py-4">
-                  k = <span className="text-chart-2">yesPool</span> × <span className="text-chart-4">noPool</span>
+                  k = <span style={{ color: 'hsl(69.64deg 70% 60%)' }}>yesPool</span> × <span className="text-chart-4">noPool</span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-4 pt-4 border-t border-chart-2/10">
                   After every trade, the product k remains constant. This creates natural slippage and price discovery.
@@ -94,7 +94,7 @@ export default function HowItWorks() {
                   <div className="text-foreground/90 mt-2">
                     newNoPool = k / newYesPool
                   </div>
-                  <div className="text-chart-2 font-semibold mt-3">
+                  <div className="font-semibold mt-3" style={{ color: 'hsl(69.64deg 70% 60%)' }}>
                     sharesReceived = noPool - newNoPool
                   </div>
                 </div>
@@ -117,7 +117,7 @@ export default function HowItWorks() {
                   <div className="text-foreground/90 mt-2">
                     newNoPool = k / newYesPool
                   </div>
-                  <div className="text-chart-2 font-semibold mt-3">
+                  <div className="font-semibold mt-3" style={{ color: 'hsl(69.64deg 70% 60%)' }}>
                     payout = newNoPool - noPool
                   </div>
                 </div>
@@ -163,22 +163,22 @@ export default function HowItWorks() {
             </Card>
 
             <Card className="p-6 border-l-4 border-l-chart-2 hover:bg-card/80 transition-colors">
-              <h3 className="text-lg font-bold mb-3 text-chart-2">Real-Time Engine</h3>
+              <h3 className="text-lg font-bold mb-3" style={{ color: 'hsl(69.64deg 70% 60%)' }}>Real-Time Engine</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-chart-2 mt-1">•</span>
+                  <span className="mt-1" style={{ color: 'hsl(69.64deg 70% 60%)' }}>•</span>
                   WebSocket price broadcasting
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-chart-2 mt-1">•</span>
+                  <span className="mt-1" style={{ color: 'hsl(69.64deg 70% 60%)' }}>•</span>
                   Instant bet confirmation
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-chart-2 mt-1">•</span>
+                  <span className="mt-1" style={{ color: 'hsl(69.64deg 70% 60%)' }}>•</span>
                   Live market feed updates
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-chart-2 mt-1">•</span>
+                  <span className="mt-1" style={{ color: 'hsl(69.64deg 70% 60%)' }}>•</span>
                   Sub-100ms latency
                 </li>
               </ul>
@@ -273,7 +273,7 @@ export default function HowItWorks() {
             <div className="grid md:grid-cols-3 gap-8 mb-6">
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-2">Initial Pools</div>
-                <div className="text-2xl font-bold text-chart-2">10,000 YES</div>
+                <div className="text-2xl font-bold" style={{ color: 'hsl(69.64deg 70% 60%)' }}>10,000 YES</div>
                 <div className="text-2xl font-bold text-chart-4">10,000 NO</div>
                 <div className="text-sm text-primary mt-2">Price: 0.50</div>
               </div>
@@ -282,7 +282,7 @@ export default function HowItWorks() {
               </div>
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-2">After $100 YES Buy</div>
-                <div className="text-2xl font-bold text-chart-2">10,100</div>
+                <div className="text-2xl font-bold" style={{ color: 'hsl(69.64deg 70% 60%)' }}>10,100</div>
                 <div className="text-2xl font-bold text-chart-4">9,901</div>
                 <div className="text-sm text-warning mt-2">New Price: 0.505</div>
               </div>
@@ -291,7 +291,7 @@ export default function HowItWorks() {
               <div className="font-mono text-sm space-y-2">
                 <div className="text-muted-foreground">k = 10,000 × 10,000 = 100,000,000</div>
                 <div className="text-foreground/90">newNoPool = 100,000,000 / 10,100 = 9,901</div>
-                <div className="text-chart-2 font-semibold">shares = 10,000 - 9,901 = 99 shares</div>
+                <div className="font-semibold" style={{ color: 'hsl(69.64deg 70% 60%)' }}>shares = 10,000 - 9,901 = 99 shares</div>
                 <div className="text-xs text-muted-foreground mt-4 pt-4 border-t border-primary/10">
                   You spent $100 and received 99 shares (avg price $1.01) due to slippage from price impact
                 </div>
