@@ -39,14 +39,12 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      let template = await fs.readFile(
+      let template = await fs.promises.readFile(
         path.resolve(process.cwd(), "client", "index.html"),
         "utf-8",
       );
 
       template = await vite.transformIndexHtml(url, template);
-
-      const render = (await vite.ssrLoadModule("/src/main.tsx")).render;
 
       res.status(200).set({ "Content-Type": "text/html" }).end(template);
     } catch (e: any) {
