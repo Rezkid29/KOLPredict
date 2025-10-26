@@ -239,6 +239,15 @@ export default function Profile() {
     setBetModalOpen(true);
   };
 
+  const handleConfirmBet = (
+    marketId: string,
+    position: "YES" | "NO",
+    amount: number,
+    action: "buy" | "sell"
+  ) => {
+    placeBetMutation.mutate({ marketId, position, amount, action });
+  };
+
   if (profileLoading || !profileData) {
     return (
       <div className="min-h-screen bg-background">
@@ -731,35 +740,37 @@ export default function Profile() {
       </div>
 
       {/* Bet Modal */}
-      <BetModal
-        open={betModalOpen}
-        onClose={() => setBetModalOpen(false)}
-        market={selectedMarket}
-        userBalance={balance}
-        userYesShares={
-          selectedMarket && currentUser
-            ? (() => {
-                const position = userPositions.find(
-                  (p) =>
-                    p.marketId === selectedMarket.id && p.position === "YES",
-                );
-                return position ? parseFloat(position.shares) : 0;
-              })()
-            : 0
-        }
-        userNoShares={
-          selectedMarket && currentUser
-            ? (() => {
-                const position = userPositions.find(
-                  (p) =>
-                    p.marketId === selectedMarket.id && p.position === "NO",
-                );
-                return position ? parseFloat(position.shares) : 0;
-              })()
-            : 0
-        }
-        onConfirm={handleConfirmBet}
-      />
+      {isOwnProfile && (
+        <BetModal
+          open={betModalOpen}
+          onClose={() => setBetModalOpen(false)}
+          market={selectedMarket}
+          userBalance={balance}
+          userYesShares={
+            selectedMarket && currentUser
+              ? (() => {
+                  const position = userPositions.find(
+                    (p) =>
+                      p.marketId === selectedMarket.id && p.position === "YES",
+                  );
+                  return position ? parseFloat(position.shares) : 0;
+                })()
+              : 0
+          }
+          userNoShares={
+            selectedMarket && currentUser
+              ? (() => {
+                  const position = userPositions.find(
+                    (p) =>
+                      p.marketId === selectedMarket.id && p.position === "NO",
+                  );
+                  return position ? parseFloat(position.shares) : 0;
+                })()
+              : 0
+          }
+          onConfirm={handleConfirmBet}
+        />
+      )}
     </div>
   );
 }
