@@ -256,9 +256,11 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
           
           {username && (
             <Link href={`/profile/${username}`}>
-              <Badge ref={userBadgeRef} variant="secondary" className="hidden sm:flex px-3 py-2 text-sm hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="badge-username">
-                {username}
-              </Badge>
+              <div ref={userBadgeRef}>
+                <Badge variant="secondary" className="hidden sm:flex px-3 py-2 text-sm hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="badge-username">
+                  {username}
+                </Badge>
+              </div>
             </Link>
           )}
 
