@@ -83,7 +83,7 @@ export default function Profile() {
       if (!res.ok) throw new Error("Failed to fetch bets");
       return res.json();
     },
-    enabled: isOwnProfile && !!profileData?.user.id,
+    enabled: !!profileData?.user.id,
   });
 
   const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
