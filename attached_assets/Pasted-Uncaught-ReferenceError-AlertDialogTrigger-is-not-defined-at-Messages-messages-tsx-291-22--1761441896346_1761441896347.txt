@@ -1,0 +1,37 @@
+Uncaught ReferenceError: AlertDialogTrigger is not defined
+    at Messages (messages.tsx:291:22)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=50e4edad:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=50e4edad:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=50e4edad:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=50e4edad:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=50e4edad:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=50e4edad:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=50e4edad:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=50e4edad:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=50e4edad:19137:13)
+chunk-RPCDYKBN.js?v=50e4edad:14032 The above error occurred in the <Messages> component:
+
+    at Messages (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/src/pages/messages.tsx:45:63)
+    at Route (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=50e4edad:323:16)
+    at Switch (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=50e4edad:379:17)
+    at Router
+    at div
+    at Provider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-E7IAXTU4.js?v=50e4edad:38:15)
+    at TooltipProvider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=50e4edad:60:5)
+    at QueryClientProvider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=50e4edad:2805:3)
+    at App (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/src/App.tsx?v=unLIwMXD0lnqMgBPGVskE:92:33)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-RPCDYKBN.js?v=50e4edad:14032
+chunk-RPCDYKBN.js?v=50e4edad:9129 Uncaught ReferenceError: AlertDialogTrigger is not defined
+    at Messages (messages.tsx:291:22)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=50e4edad:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=50e4edad:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=50e4edad:15924:22)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=50e4edad:19753:22)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=50e4edad:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=50e4edad:19137:13)
+    at renderRootSync (chunk-RPCDYKBN.js?v=50e4edad:19116:15)
+    at recoverFromConcurrentError (chunk-RPCDYKBN.js?v=50e4edad:18736:28)
+    at performSyncWorkOnRoot (chunk-RPCDYKBN.js?v=50e4edad:18879:28)
