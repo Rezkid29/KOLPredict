@@ -44,7 +44,7 @@ export default function Landing() {
             <img src={logoImage} alt="KOL Predict Logo" className="h-6 w-6" />
             <span className="text-xl font-display font-bold text-foreground">KOL Predict</span>
           </div>
-          <Button onClick={() => setAuthModalOpen(true)} className="gap-2 auth-button-animated">
+          <Button onClick={() => setAuthModalOpen(true)} className="gap-2 landing-neon-button">
             <span></span>
             <span></span>
             <span></span>
@@ -81,7 +81,7 @@ export default function Landing() {
               <Button 
                 size="lg" 
                 onClick={() => setAuthModalOpen(true)}
-                className="gap-2 text-lg px-8 py-6 auth-button-animated"
+                className="gap-2 text-lg px-8 py-6 landing-neon-button"
               >
                 <span></span>
                 <span></span>
@@ -256,7 +256,7 @@ export default function Landing() {
           <Button 
             size="lg" 
             onClick={() => setAuthModalOpen(true)}
-            className="gap-2 text-lg px-8 py-6 auth-button-animated"
+            className="gap-2 text-lg px-8 py-6 landing-neon-button"
           >
             <span></span>
             <span></span>
