@@ -185,6 +185,11 @@ export default function Home() {
         username={user?.username ?? undefined}
         walletRef={walletRef}
         userBadgeRef={userBadgeRef}
+        tourHelpButton={<AppTour 
+          marketCardRef={marketCardRef}
+          walletRef={walletRef}
+          userBadgeRef={userBadgeRef}
+        />}
       />
 
       {/* Live Bets Carousel */}
@@ -412,9 +417,6 @@ export default function Home() {
         }
         onConfirm={handleConfirmBet}
       />
-
-      {/* App Tour */}
-      <AppTour />
     </div>
   );
 }

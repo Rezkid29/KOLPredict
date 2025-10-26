@@ -32,9 +32,10 @@ interface NavbarProps {
   username?: string;
   walletRef?: React.RefObject<HTMLDivElement>;
   userBadgeRef?: React.RefObject<HTMLDivElement>;
+  tourHelpButton?: React.ReactNode;
 }
 
-export function Navbar({ balance = 1000, username, walletRef, userBadgeRef }: NavbarProps) {
+export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tourHelpButton }: NavbarProps) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
@@ -169,6 +170,11 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef }: Na
               </svg>
             </a>
           </Button>
+
+          {/* Tour Help Button */}
+          <div data-testid="tour-help-button-container">
+            {tourHelpButton}
+          </div>
 
           {/* Notification Bell */}
           <DropdownMenu>

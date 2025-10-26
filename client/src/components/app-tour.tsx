@@ -2,18 +2,18 @@
 import { useRef, useState, useEffect } from "react";
 import { Tour } from "antd";
 import type { TourProps } from "antd";
+import { QuestionOutlined } from "@ant-design/icons";
 import { Button } from "@/components/ui/button";
-import { HelpCircle } from "lucide-react";
 
 interface AppTourProps {
   onComplete?: () => void;
+  marketCardRef?: React.RefObject<HTMLDivElement>;
+  walletRef?: React.RefObject<HTMLDivElement>;
+  userBadgeRef?: React.RefObject<HTMLDivElement>;
 }
 
-export function AppTour({ onComplete }: AppTourProps) {
+export function AppTour({ onComplete, marketCardRef, walletRef, userBadgeRef }: AppTourProps) {
   const [open, setOpen] = useState(false);
-  const marketCardRef = useRef<HTMLDivElement>(null);
-  const walletRef = useRef<HTMLDivElement>(null);
-  const userBadgeRef = useRef<HTMLDivElement>(null);
 
   // Auto-start tour for first-time users
   useEffect(() => {
@@ -69,14 +69,12 @@ export function AppTour({ onComplete }: AppTourProps) {
   return (
     <>
       <Button
-        variant="outline"
-        size="sm"
-        className="gap-2 fixed bottom-6 right-6 z-50 shadow-lg"
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(true)}
         data-testid="tour-trigger-button"
       >
-        <HelpCircle className="h-4 w-4" />
-        Start Tour
+        <QuestionOutlined style={{ fontSize: '20px' }} />
       </Button>
 
       <Tour
@@ -90,10 +88,7 @@ export function AppTour({ onComplete }: AppTourProps) {
         )}
       />
 
-      {/* Hidden refs for tour targeting */}
-      <div ref={marketCardRef} className="tour-target-market-card" />
-      <div ref={walletRef} className="tour-target-wallet" />
-      <div ref={userBadgeRef} className="tour-target-badge" />
+      
     </>
   );
 }
