@@ -21,6 +21,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { User, ConversationWithParticipants, Message } from "@shared/schema";
 import { format } from "date-fns";

@@ -2038,6 +2038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId;
 
+      // Return empty array if user is not authenticated
       if (!userId) {
         return res.json([]);
       }
@@ -2630,9 +2631,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notification Routes
   // ----------------------------------------------------------------------------
 
-  app.get("/api/notifications", requireAuth, async (req, res) => {
+  app.get("/api/notifications", async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      // Return empty array if user is not authenticated
+      if (!userId) {
+        return res.json([]);
+      }
+
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
       const notifications = await storage.getUserNotifications(userId, limit);

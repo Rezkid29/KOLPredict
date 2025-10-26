@@ -113,7 +113,14 @@ export default function Forum() {
 
   const voteThreadMutation = useMutation({
     mutationFn: async ({ threadId, vote }: { threadId: string; vote: "up" | "down" }) => {
-      if (!user) throw new Error("Authentication required");
+      if (!user) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in to vote on threads",
+          variant: "destructive",
+        });
+        throw new Error("Authentication required");
+      }
       return await apiRequest("POST", `/api/forum/threads/${threadId}/vote`, {
         vote,
       });

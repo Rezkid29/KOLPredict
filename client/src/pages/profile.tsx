@@ -51,7 +51,15 @@ export default function Profile() {
     profile: UserProfile;
     isFollowing: boolean;
   }>({
-    queryKey: ["/api/profile", targetUsername],
+    queryKey: ["/api/users", targetUsername, "profile"],
+    queryFn: async () => {
+      if (!targetUsername) throw new Error("No username provided");
+      const res = await fetch(`/api/users/${targetUsername}/profile`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
     enabled: !!targetUsername,
   });
 
