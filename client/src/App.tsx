@@ -14,6 +14,7 @@ import Wallet from "@/pages/wallet";
 import Messages from "@/pages/messages";
 import Forum from "@/pages/forum";
 import Help from "@/pages/help";
+import HowItWorks from "@/pages/how-it-works";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/messages" component={Messages} />
       <Route path="/forum" component={Forum} />
       <Route path="/help" component={Help} />
+      <Route path="/how-it-works" component={HowItWorks} />
       <Route component={NotFound} />
     </Switch>
   );

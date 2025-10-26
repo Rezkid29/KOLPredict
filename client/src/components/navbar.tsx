@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Wallet, Trophy, BarChart3, Menu, X, LogOut, MessageCircle, MessageSquare, HelpCircle, Bell } from "lucide-react";
+import { Wallet, Trophy, BarChart3, Menu, X, LogOut, MessageCircle, MessageSquare, HelpCircle, Bell, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -126,6 +126,18 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                 >
                   <HelpCircle className="h-4 w-4" />
                   Help
+                </Button>
+              </div>
+            </Link>
+            <Link href="/how-it-works">
+              <div data-testid="link-how-it-works">
+                <Button 
+                  variant={location === "/how-it-works" ? "secondary" : "ghost"} 
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Cpu className="h-4 w-4" />
+                  How It Works
                 </Button>
               </div>
             </Link>
@@ -321,6 +333,17 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
                     >
                       <HelpCircle className="h-4 w-4" />
                       Help
+                    </Button>
+                  </Link>
+                  <Link href="/how-it-works">
+                    <Button 
+                      variant={location === "/how-it-works" ? "secondary" : "ghost"} 
+                      className="w-full justify-start gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                      data-testid="mobile-link-how-it-works"
+                    >
+                      <Cpu className="h-4 w-4" />
+                      How It Works
                     </Button>
                   </Link>
                 </nav>
