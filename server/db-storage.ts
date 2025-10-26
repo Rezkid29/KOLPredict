@@ -1842,7 +1842,7 @@ export class DbStorage implements IStorage {
         .limit(1);
 
       if (existingVote.length > 0) {
-        const oldVote = existingVote[0].vote;
+        const oldVote = existingVote[0].voteType;
         
         // If voting the same way, do nothing
         if (oldVote === vote) {
@@ -1871,14 +1871,14 @@ export class DbStorage implements IStorage {
         // Update the vote record
         await tx
           .update(forumThreadVotes)
-          .set({ vote })
+          .set({ voteType: vote })
           .where(eq(forumThreadVotes.id, existingVote[0].id));
       } else {
         // First time voting - insert new vote record
         await tx.insert(forumThreadVotes).values({
           threadId,
           userId,
-          vote,
+          voteType: vote,
         });
 
         // Update vote count
@@ -1920,7 +1920,7 @@ export class DbStorage implements IStorage {
         .limit(1);
 
       if (existingVote.length > 0) {
-        const oldVote = existingVote[0].vote;
+        const oldVote = existingVote[0].voteType;
         
         // If voting the same way, do nothing
         if (oldVote === vote) {
@@ -1949,14 +1949,14 @@ export class DbStorage implements IStorage {
         // Update the vote record
         await tx
           .update(forumCommentVotes)
-          .set({ vote })
+          .set({ voteType: vote })
           .where(eq(forumCommentVotes.id, existingVote[0].id));
       } else {
         // First time voting - insert new vote record
         await tx.insert(forumCommentVotes).values({
           commentId,
           userId,
-          vote,
+          voteType: vote,
         });
 
         // Update vote count

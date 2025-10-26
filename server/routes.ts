@@ -2570,15 +2570,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      if (!id || !vote) {
-        return res.status(400).json({ message: "Thread ID and vote are required" });
+      if (!id) {
+        return res.status(400).json({ message: "Thread ID is required" });
       }
 
-      if (vote !== 'up' && vote !== 'down') {
-        return res.status(400).json({ message: "Vote must be 'up' or 'down'" });
+      // Validate vote parameter
+      const voteValidation = validateVote(vote);
+      if (!voteValidation.valid) {
+        return res.status(400).json({ message: voteValidation.error });
       }
 
-      await storage.voteForumThread(id, userId, vote);
+      await storage.voteForumThread(id, userId, vote as 'up' | 'down');
       res.json({ message: "Vote recorded successfully" });
     } catch (error) {
       console.error("Error voting on forum thread:", error);
@@ -2605,15 +2607,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      if (!id || !vote) {
-        return res.status(400).json({ message: "Comment ID and vote are required" });
+      if (!id) {
+        return res.status(400).json({ message: "Comment ID is required" });
       }
 
-      if (vote !== 'up' && vote !== 'down') {
-        return res.status(400).json({ message: "Vote must be 'up' or 'down'" });
+      // Validate vote parameter
+      const voteValidation = validateVote(vote);
+      if (!voteValidation.valid) {
+        return res.status(400).json({ message: voteValidation.error });
       }
 
-      await storage.voteForumComment(id, userId, vote);
+      await storage.voteForumComment(id, userId, vote as 'up' | 'down');
       res.json({ message: "Vote recorded successfully" });
     } catch (error) {
       console.error("Error voting on forum comment:", error);
