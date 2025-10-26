@@ -2145,12 +2145,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Conversation ID is required" });
       }
 
-      // Verify user is a participant in this conversation
-      const userConversations = await storage.getUserConversations(userId);
-      const isParticipant = userConversations.some(conv => conv.id === id);
+      // First, get the conversation to verify participants
+      const conversation = await db.transaction(async (tx) => {
+        const [conv] = await tx
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, id))
+          .limit(1);
+        return conv;
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Verify user is a participant (either user1 or user2)
+      const isParticipant = conversation.user1Id === userId || conversation.user2Id === userId;
 
       if (!isParticipant) {
-        return res.status(403).json({ message: "You are not a participant in this conversation" });
+        return res.status(403).json({ message: "You are not authorized to view this conversation" });
       }
 
       const messages = await storage.getConversationMessages(id, limit);
@@ -2186,12 +2199,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validation.error });
       }
 
-      // Verify user is a participant in this conversation
-      const userConversations = await storage.getUserConversations(senderId);
-      const isParticipant = userConversations.some(conv => conv.id === id);
+      // First, get the conversation to verify participants
+      const conversation = await db.transaction(async (tx) => {
+        const [conv] = await tx
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, id))
+          .limit(1);
+        return conv;
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Verify user is a participant (either user1 or user2)
+      const isParticipant = conversation.user1Id === senderId || conversation.user2Id === senderId;
 
       if (!isParticipant) {
-        return res.status(403).json({ message: "You are not a participant in this conversation" });
+        return res.status(403).json({ message: "You are not authorized to send messages in this conversation" });
       }
 
       const sanitizedContent = sanitizeInput(content);
@@ -2226,12 +2252,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Conversation ID is required" });
       }
 
-      // Verify user is a participant in this conversation
-      const userConversations = await storage.getUserConversations(userId);
-      const isParticipant = userConversations.some(conv => conv.id === id);
+      // First, get the conversation to verify participants
+      const conversation = await db.transaction(async (tx) => {
+        const [conv] = await tx
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, id))
+          .limit(1);
+        return conv;
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Verify user is a participant (either user1 or user2)
+      const isParticipant = conversation.user1Id === userId || conversation.user2Id === userId;
 
       if (!isParticipant) {
-        return res.status(403).json({ message: "You are not a participant in this conversation" });
+        return res.status(403).json({ message: "You are not authorized to access this conversation" });
       }
 
       await storage.markMessagesAsRead(id, userId);
