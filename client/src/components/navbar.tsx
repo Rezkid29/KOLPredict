@@ -231,6 +231,18 @@ export function Navbar({ balance = 1000, username }: NavbarProps) {
             </Link>
           )}
 
+          {/* Desktop logout button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="hidden md:flex gap-2"
+            onClick={logout}
+            data-testid="button-logout-desktop"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+
           {/* Mobile menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
