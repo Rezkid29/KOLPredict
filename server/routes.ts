@@ -2031,9 +2031,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/conversations", requireAuth, async (req, res) => {
+  app.get("/api/conversations", async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.json([]);
+      }
+      
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
       const conversations = await storage.getUserConversations(userId, limit);
@@ -2198,10 +2203,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forum Routes
   // ----------------------------------------------------------------------------
 
-  app.post("/api/forum/threads", requireAuth, forumPostRateLimiter, async (req, res) => {
+  app.post("/api/forum/threads", forumPostRateLimiter, async (req, res) => {
     try {
       const { title, content, category } = req.body;
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
 
       // Validate title
       const titleValidation = validateThreadTitle(title);
@@ -2332,11 +2341,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/comments", requireAuth, forumPostRateLimiter, async (req, res) => {
+  app.post("/api/forum/threads/:id/comments", forumPostRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { content } = req.body;
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
 
       if (!id) {
         return res.status(400).json({ message: "Thread ID is required" });
@@ -2398,11 +2411,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/threads/:id/vote", requireAuth, voteRateLimiter, async (req, res) => {
+  app.post("/api/forum/threads/:id/vote", voteRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { vote } = req.body;
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
 
       if (!id || !vote) {
         return res.status(400).json({ message: "Thread ID and vote are required" });
@@ -2429,11 +2446,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/forum/comments/:id/vote", requireAuth, voteRateLimiter, async (req, res) => {
+  app.post("/api/forum/comments/:id/vote", voteRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { vote } = req.body;
-      const userId = req.session.userId!;
+      const userId = req.session.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
 
       if (!id || !vote) {
         return res.status(400).json({ message: "Comment ID and vote are required" });
