@@ -26,7 +26,7 @@ import {
   Trophy,
   Activity
 } from "lucide-react";
-import type { BetWithMarket, User, PositionWithMarket, MarketWithKol, UserProfile } from "@shared/schema";
+import type { BetWithMarket, User, PositionWithMarket, MarketWithKol, UserProfile, Activity as ActivityType, Achievement, UserAchievement } from "@shared/schema";
 import logoImage from "/favicon.png";
 
 export default function Profile() {
@@ -63,6 +63,23 @@ export default function Profile() {
   const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
     queryKey: ["/api/positions/user"],
     enabled: isOwnProfile,
+  });
+
+  // Fetch activities
+  const { data: activities = [] } = useQuery<ActivityType[]>({
+    queryKey: ["/api/activities", profileData?.user.id],
+    enabled: !!profileData?.user.id,
+  });
+
+  // Fetch user achievements
+  const { data: userAchievements = [] } = useQuery<(UserAchievement & { achievement: Achievement })[]>({
+    queryKey: ["/api/users", profileData?.user.id, "achievements"],
+    enabled: !!profileData?.user.id,
+  });
+
+  // Fetch all achievements to show locked ones
+  const { data: allAchievements = [] } = useQuery<Achievement[]>({
+    queryKey: ["/api/achievements"],
   });
 
   const followMutation = useMutation({
@@ -405,11 +422,57 @@ export default function Profile() {
                 </p>
               </div>
 
-              <div className="p-16 text-center text-muted-foreground">
-                <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="font-medium mb-1">Coming Soon</p>
-                <p className="text-sm">Activity feed will show recent bets and market updates</p>
-              </div>
+              {activities.length === 0 ? (
+                <div className="p-16 text-center text-muted-foreground">
+                  <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium mb-1">No Activity Yet</p>
+                  <p className="text-sm">Activity feed will show recent bets and market updates</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px]">
+                  <div className="p-5 space-y-3">
+                    {activities.map((activity) => {
+                      const data = JSON.parse(activity.data);
+                      let icon = <Activity className="h-4 w-4" />;
+                      let title = "";
+                      let description = "";
+
+                      if (activity.type === "new_bet") {
+                        icon = <Target className="h-4 w-4 text-primary" />;
+                        title = `Placed a ${data.action} order`;
+                        description = `${data.position} position on "${data.marketTitle}" for ${data.amount} PTS`;
+                      } else if (activity.type === "bet_won") {
+                        icon = <CheckCircle2 className="h-4 w-4 text-success" />;
+                        title = "Won a bet";
+                        description = `Profit: +${data.profit} PTS`;
+                      } else if (activity.type === "bet_lost") {
+                        icon = <XCircle className="h-4 w-4 text-destructive" />;
+                        title = "Lost a bet";
+                        description = `Loss: ${data.profit} PTS`;
+                      }
+
+                      return (
+                        <div
+                          key={activity.id}
+                          className="flex items-start gap-4 p-4 rounded-lg border border-border/60 hover-elevate transition-all"
+                          data-testid={`activity-${activity.id}`}
+                        >
+                          <div className="p-2 rounded-lg bg-muted">
+                            {icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm mb-1">{title}</p>
+                            <p className="text-sm text-muted-foreground">{description}</p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {formatTime(activity.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
             </Card>
           </TabsContent>
 
@@ -549,15 +612,70 @@ export default function Profile() {
               <div className="p-6 border-b border-border/50">
                 <h2 className="text-xl font-semibold mb-1">Achievements</h2>
                 <p className="text-sm text-muted-foreground">
-                  Badges and milestones earned
+                  {userAchievements.length} of {allAchievements.length} unlocked
                 </p>
               </div>
 
-              <div className="p-16 text-center text-muted-foreground">
-                <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="font-medium mb-1">Coming Soon</p>
-                <p className="text-sm">Earn achievements by betting and winning</p>
-              </div>
+              {allAchievements.length === 0 ? (
+                <div className="p-16 text-center text-muted-foreground">
+                  <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium mb-1">No Achievements Available</p>
+                  <p className="text-sm">Achievements will be added soon</p>
+                </div>
+              ) : (
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {allAchievements.map((achievement) => {
+                      const isEarned = userAchievements.some(ua => ua.achievementId === achievement.id);
+                      const earnedData = userAchievements.find(ua => ua.achievementId === achievement.id);
+
+                      return (
+                        <div
+                          key={achievement.id}
+                          className={`p-5 rounded-lg border transition-all ${
+                            isEarned 
+                              ? "border-primary/40 bg-primary/5 hover-elevate" 
+                              : "border-border/60 opacity-60"
+                          }`}
+                          data-testid={`achievement-${achievement.id}`}
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className={`text-4xl ${!isEarned && "grayscale opacity-50"}`}>
+                              {achievement.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="font-semibold text-base mb-1">
+                                  {achievement.name}
+                                </h3>
+                                {isEarned && (
+                                  <Badge className="bg-primary/20 text-primary border-primary/30">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Earned
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {achievement.description}
+                              </p>
+                              {earnedData && (
+                                <p className="text-xs text-muted-foreground">
+                                  Earned {formatTime(earnedData.earnedAt)}
+                                </p>
+                              )}
+                              {!isEarned && (
+                                <Badge variant="outline" className="text-xs mt-2">
+                                  Locked
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

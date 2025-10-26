@@ -389,6 +389,24 @@ export class DbStorage implements IStorage {
             description: `Payout for winning bet on market`
           });
         }
+
+        // Log activity for won/lost bet
+        try {
+          await tx.insert(activities).values({
+            userId: bet.userId,
+            type: won ? "bet_won" : "bet_lost",
+            data: JSON.stringify({
+              betId: bet.id,
+              marketId,
+              position: bet.position,
+              amount: betAmount,
+              profit: profit.toFixed(2),
+              payout: won ? payout.toFixed(2) : "0.00",
+            }),
+          });
+        } catch (error) {
+          console.error(`Error logging activity for bet ${bet.id}:`, error);
+        }
       }
 
       console.log(`✅ Settled ${pendingBets.length} bets for market ${marketId} with outcome: ${outcome}`);

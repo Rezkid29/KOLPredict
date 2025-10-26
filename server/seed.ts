@@ -1,5 +1,5 @@
 import { dbStorage } from "./db-storage";
-import type { InsertKol, InsertMarket, InsertUser } from "@shared/schema";
+import type { InsertKol, InsertMarket, InsertUser, InsertAchievement, InsertFaq } from "@shared/schema";
 
 async function seed() {
   console.log("🌱 Seeding database...");
@@ -131,6 +131,162 @@ async function seed() {
 
       const createdMarket = await dbStorage.createMarket(market);
       console.log(`✅ Created market for ${kol.name}: ${createdMarket.title}`);
+    }
+
+    // Seed achievements
+    const achievements: InsertAchievement[] = [
+      {
+        name: "First Bet",
+        description: "Place your first bet on any market",
+        icon: "🎯",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_bets", threshold: 1 }),
+      },
+      {
+        name: "Betting Enthusiast",
+        description: "Place 10 bets",
+        icon: "🔥",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_bets", threshold: 10 }),
+      },
+      {
+        name: "High Roller",
+        description: "Place 50 bets",
+        icon: "💎",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_bets", threshold: 50 }),
+      },
+      {
+        name: "First Win",
+        description: "Win your first bet",
+        icon: "🏆",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_wins", threshold: 1 }),
+      },
+      {
+        name: "Winning Streak",
+        description: "Win 5 bets in a row",
+        icon: "🔥",
+        category: "streak",
+        requirement: JSON.stringify({ type: "win_streak", threshold: 5 }),
+      },
+      {
+        name: "Profitable Trader",
+        description: "Earn 100 PTS in total profit",
+        icon: "💰",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_profit", threshold: 100 }),
+      },
+      {
+        name: "Market Master",
+        description: "Earn 500 PTS in total profit",
+        icon: "👑",
+        category: "betting",
+        requirement: JSON.stringify({ type: "total_profit", threshold: 500 }),
+      },
+      {
+        name: "Volume Trader",
+        description: "Trade 1000 PTS total volume",
+        icon: "📊",
+        category: "volume",
+        requirement: JSON.stringify({ type: "total_volume", threshold: 1000 }),
+      },
+      {
+        name: "Social Butterfly",
+        description: "Get 10 followers",
+        icon: "🦋",
+        category: "social",
+        requirement: JSON.stringify({ type: "followers", threshold: 10 }),
+      },
+      {
+        name: "Influencer",
+        description: "Get 50 followers",
+        icon: "⭐",
+        category: "social",
+        requirement: JSON.stringify({ type: "followers", threshold: 50 }),
+      },
+    ];
+
+    for (const achievement of achievements) {
+      try {
+        await dbStorage.createAchievement(achievement);
+        console.log(`✅ Created achievement: ${achievement.name}`);
+      } catch (error) {
+        console.log(`ℹ️  Achievement "${achievement.name}" already exists`);
+      }
+    }
+
+    // Seed FAQs
+    const faqs: InsertFaq[] = [
+      {
+        question: "What is KOL Market?",
+        answer: "KOL Market is a prediction market platform where you can bet on the performance of Key Opinion Leaders (KOLs). Trade on outcomes related to follower growth, engagement rates, and other social media metrics.",
+        category: "getting_started",
+        order: 1,
+      },
+      {
+        question: "How do I place a bet?",
+        answer: "Browse the available markets on the home page. Click on a market you're interested in, choose YES or NO position, enter your bet amount, and click Buy. Your bet will be placed immediately.",
+        category: "betting",
+        order: 2,
+      },
+      {
+        question: "What are YES and NO positions?",
+        answer: "When you buy YES, you're betting that the market outcome will be true. When you buy NO, you're betting it will be false. Prices adjust based on supply and demand using an automated market maker.",
+        category: "betting",
+        order: 3,
+      },
+      {
+        question: "How does pricing work?",
+        answer: "Markets use a constant product automated market maker (AMM). Prices adjust dynamically based on betting activity. The more people bet on one side, the more expensive that position becomes.",
+        category: "betting",
+        order: 4,
+      },
+      {
+        question: "When do markets resolve?",
+        answer: "Each market has a resolution date. Markets automatically resolve based on real KOL data scraped from kolscan.io. Winners receive 1 PTS per share, while losers receive nothing.",
+        category: "betting",
+        order: 5,
+      },
+      {
+        question: "What is the platform fee?",
+        answer: "We charge a 2% fee on buy orders to maintain the platform and ensure liquidity. There are no fees on sell orders.",
+        category: "betting",
+        order: 6,
+      },
+      {
+        question: "Can I sell my position before resolution?",
+        answer: "Yes! You can sell your shares at any time before the market resolves. The sell price depends on current market conditions and may be higher or lower than your purchase price.",
+        category: "betting",
+        order: 7,
+      },
+      {
+        question: "How do I deposit SOL?",
+        answer: "Go to the Wallet page and connect your Solana wallet. You'll receive a unique deposit address. Send SOL to this address and it will be credited to your account after confirmation.",
+        category: "technical",
+        order: 8,
+      },
+      {
+        question: "How do I withdraw SOL?",
+        answer: "Go to the Wallet page, enter your destination Solana address and withdrawal amount, then submit. Withdrawals are processed automatically within minutes.",
+        category: "technical",
+        order: 9,
+      },
+      {
+        question: "What are KOLs?",
+        answer: "KOLs (Key Opinion Leaders) are influential figures on social media. We track their performance metrics like follower count, engagement rate, and trading success on kolscan.io.",
+        category: "kols",
+        order: 10,
+      },
+    ];
+
+    for (const faq of faqs) {
+      try {
+        await dbStorage.createFaq(faq);
+        console.log(`✅ Created FAQ: ${faq.question}`);
+      } catch (error) {
+        console.log(`ℹ️  FAQ already exists`);
+      }
     }
 
     console.log("🎉 Database seeded successfully!");

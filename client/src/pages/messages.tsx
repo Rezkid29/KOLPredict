@@ -1,0 +1,251 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Navbar } from "@/components/navbar";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Send, MessageCircle } from "lucide-react";
+import type { User, ConversationWithParticipants, Message } from "@shared/schema";
+import { format } from "date-fns";
+
+export default function Messages() {
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messageInput, setMessageInput] = useState("");
+  const { toast } = useToast();
+
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/user"],
+  });
+
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithParticipants[]>({
+    queryKey: ["/api/conversations"],
+    enabled: !!user,
+  });
+
+  const { data: messages = [] } = useQuery<Message[]>({
+    queryKey: ["/api/conversations", selectedConversationId, "messages"],
+    enabled: !!selectedConversationId,
+    refetchInterval: 3000, // Poll every 3 seconds for new messages
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!selectedConversationId || !user) return;
+      return await apiRequest(`/api/conversations/${selectedConversationId}/messages`, "POST", {
+        senderId: user.id,
+        content,
+      });
+    },
+    onSuccess: () => {
+      setMessageInput("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send message",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const markAsReadMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      if (!user) return;
+      return await apiRequest(`/api/conversations/${conversationId}/read`, "POST", {
+        userId: user.id,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    },
+  });
+
+  const handleSendMessage = () => {
+    if (!messageInput.trim()) return;
+    sendMessageMutation.mutate(messageInput.trim());
+  };
+
+  const handleSelectConversation = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    markAsReadMutation.mutate(conversationId);
+  };
+
+  const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+  const otherUser = selectedConversation 
+    ? (selectedConversation.user1.userId === user?.id ? selectedConversation.user2 : selectedConversation.user1)
+    : null;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username ?? undefined} />
+
+      <div className="container mx-auto px-4 py-10">
+        <div className="mb-8">
+          <h1 className="text-3xl font-display font-bold mb-2" data-testid="text-page-title">Messages</h1>
+          <p className="text-muted-foreground">Connect with other traders</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-16rem)]">
+          {/* Conversations List */}
+          <Card className="lg:col-span-1 overflow-hidden border-border/60 flex flex-col">
+            <div className="p-5 border-b border-border/50">
+              <h2 className="font-semibold">Conversations</h2>
+            </div>
+
+            {conversationsLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="animate-pulse text-muted-foreground">Loading...</div>
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <MessageCircle className="h-12 w-12 mb-4 opacity-50" />
+                <p className="font-medium mb-1">No conversations yet</p>
+                <p className="text-sm">Start a conversation from a user's profile</p>
+              </div>
+            ) : (
+              <ScrollArea className="flex-1">
+                <div className="p-2 space-y-1">
+                  {conversations.map((conversation) => {
+                    const other = conversation.user1.userId === user?.id ? conversation.user2 : conversation.user1;
+                    const hasUnread = conversation.unreadCount > 0;
+
+                    return (
+                      <div
+                        key={conversation.id}
+                        onClick={() => handleSelectConversation(conversation.id)}
+                        className={`p-4 rounded-lg cursor-pointer transition-all hover-elevate ${
+                          selectedConversationId === conversation.id
+                            ? "bg-primary/10 border-primary/20"
+                            : "border-transparent"
+                        } border`}
+                        data-testid={`conversation-${conversation.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-12 w-12 ring-2 ring-border">
+                            <AvatarImage src={other.avatarUrl ?? undefined} alt={other.username ?? "User"} />
+                            <AvatarFallback>{other.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className={`font-medium text-sm truncate ${hasUnread && "font-bold"}`}>
+                                {other.username}
+                              </p>
+                              {hasUnread && (
+                                <Badge className="bg-primary">
+                                  {conversation.unreadCount}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {format(new Date(conversation.lastMessageAt), "MMM d, h:mm a")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </Card>
+
+          {/* Chat Interface */}
+          <Card className="lg:col-span-2 overflow-hidden border-border/60 flex flex-col">
+            {!selectedConversationId ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <MessageCircle className="h-16 w-16 mb-4 opacity-50" />
+                <p className="font-medium mb-1">Select a conversation</p>
+                <p className="text-sm">Choose a conversation from the list to start messaging</p>
+              </div>
+            ) : (
+              <>
+                {/* Chat Header */}
+                <div className="p-5 border-b border-border/50 flex items-center gap-3">
+                  <Avatar className="h-10 w-10 ring-2 ring-border">
+                    <AvatarImage src={otherUser?.avatarUrl ?? undefined} alt={otherUser?.username ?? "User"} />
+                    <AvatarFallback>{otherUser?.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h2 className="font-semibold">{otherUser?.username}</h2>
+                    <p className="text-xs text-muted-foreground">Online</p>
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <ScrollArea className="flex-1 p-5">
+                  {messages.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      <p className="text-sm">No messages yet. Say hello!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {messages.map((message) => {
+                        const isOwnMessage = message.senderId === user?.id;
+
+                        return (
+                          <div
+                            key={message.id}
+                            className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+                            data-testid={`message-${message.id}`}
+                          >
+                            <div
+                              className={`max-w-[70%] p-3 rounded-lg ${
+                                isOwnMessage
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted"
+                              }`}
+                            >
+                              <p className="text-sm">{message.content}</p>
+                              <p className={`text-xs mt-1 ${isOwnMessage ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                                {format(new Date(message.createdAt), "h:mm a")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+
+                {/* Message Input */}
+                <div className="p-5 border-t border-border/50">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Type a message..."
+                      value={messageInput}
+                      onChange={(e) => setMessageInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      className="flex-1"
+                      data-testid="input-message"
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                      className="gap-2"
+                      data-testid="button-send"
+                    >
+                      <Send className="h-4 w-4" />
+                      Send
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

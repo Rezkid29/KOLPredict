@@ -12,6 +12,7 @@ import { createDepositMonitor } from "./solana-deposit-monitor";
 import { createWithdrawalProcessor } from "./solana-withdrawal-processor";
 import { addDays } from "date-fns";
 import rateLimit from "express-rate-limit";
+import { achievementChecker } from "./achievement-checker";
 
 // We'll initialize these after the broadcast function is created
 let depositMonitor: ReturnType<typeof createDepositMonitor>;
@@ -834,6 +835,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: action as "buy" | "sell",
         slippageTolerance: validatedSlippage,
       });
+
+      // Log activity
+      try {
+        const marketWithKol = await storage.getMarketWithKol(marketId);
+        await storage.createActivity({
+          userId: actualUserId,
+          type: "new_bet",
+          data: JSON.stringify({
+            betId: result.bet.id,
+            marketId,
+            marketTitle: marketWithKol?.title,
+            position: position,
+            amount: parseFloat(amount),
+            action,
+          }),
+        });
+      } catch (error) {
+        console.error("Error logging activity:", error);
+      }
+
+      // Check and award achievements
+      try {
+        await achievementChecker.checkAndAwardAchievements(actualUserId);
+      } catch (error) {
+        console.error("Error checking achievements:", error);
+      }
 
       // Broadcast update via WebSocket
       try {

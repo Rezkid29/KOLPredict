@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Navbar } from "@/components/navbar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,7 @@ export default function Leaderboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username} />
+      <Navbar balance={user?.balance ? parseFloat(user.balance) : 1000} username={user?.username ?? undefined} />
 
       <div className="container mx-auto px-4 py-10">
         {/* Header */}
@@ -160,19 +161,21 @@ export default function Leaderboard() {
                           </div>
                         </td>
                         <td className="p-5">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-11 w-11 ring-2 ring-border/50 group-hover:ring-primary/30 transition-all">
-                              <AvatarFallback className="bg-primary/10 text-primary font-semibold text-base">
-                                {entry.username[0].toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col gap-1">
-                              <span className="font-semibold" data-testid={`text-username-${entry.rank}`}>
-                                {entry.username}
-                              </span>
-                              {getTierBadge(entry.rank)}
+                          <Link href={`/profile/${entry.username ?? ""}`}>
+                            <div className="flex items-center gap-3 cursor-pointer hover-elevate active-elevate-2 rounded-lg -m-2 p-2 transition-all">
+                              <Avatar className="h-11 w-11 ring-2 ring-border/50 group-hover:ring-primary/30 transition-all">
+                                <AvatarFallback className="bg-primary/10 text-primary font-semibold text-base">
+                                  {entry.username?.[0]?.toUpperCase() ?? "U"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col gap-1">
+                                <span className="font-semibold" data-testid={`text-username-${entry.rank}`}>
+                                  {entry.username ?? "Unknown"}
+                                </span>
+                                {getTierBadge(entry.rank)}
+                              </div>
                             </div>
-                          </div>
+                          </Link>
                         </td>
                         <td className="p-5 text-right">
                           <span

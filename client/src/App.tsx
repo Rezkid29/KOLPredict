@@ -12,6 +12,9 @@ import Portfolio from "@/pages/portfolio";
 import Profile from "@/pages/profile";
 import Leaderboard from "@/pages/leaderboard";
 import Wallet from "@/pages/wallet";
+import Messages from "@/pages/messages";
+import Forum from "@/pages/forum";
+import Help from "@/pages/help";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -22,6 +25,9 @@ function Router() {
       <Route path="/profile/:username" component={Profile} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/wallet" component={Wallet} />
+      <Route path="/messages" component={Messages} />
+      <Route path="/forum" component={Forum} />
+      <Route path="/help" component={Help} />
       <Route component={NotFound} />
     </Switch>
   );
