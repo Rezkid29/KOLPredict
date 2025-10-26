@@ -74,6 +74,50 @@ The platform is built with a focus on real-time data, automated market dynamics,
 
 ## Recent Changes
 
+### October 26, 2025 - Social Features Security Enhancements
+Enhanced security and reliability of all social features (messaging, forum, follows) with comprehensive validation and abuse prevention:
+
+**Input Validation (server/validation.ts)**:
+- Created comprehensive validation utilities for all social endpoints
+- Message validation: 1000 character limit, XSS prevention via sanitization
+- Thread title validation: 200 character limit
+- Thread content validation: 5000 character limit  
+- Comment validation: 2000 character limit
+- Category validation: Whitelist-based checking
+- `sanitizeInput()` function removes control characters and trims whitespace
+
+**Rate Limiting (server/routes.ts)**:
+- Message sending: 10 messages per minute per IP
+- Follow/unfollow actions: 20 actions per minute per IP
+- Forum posts/comments: 5 posts per minute per IP
+- Voting: 30 votes per minute per IP
+- All limits configured to balance abuse prevention with legitimate usage
+
+**Security Measures**:
+- All social endpoints require authentication via `requireAuth` middleware
+- Input sanitization prevents XSS attacks by removing control characters
+- Duplicate follow prevention via unique database constraint on (followerId, followingId)
+- Proper error handling with consistent error messages for validation failures
+- Rate limit headers included in responses for client transparency
+
+**Frontend Improvements**:
+- Fixed forum threads query endpoint (malformed URL with query parameters)
+- Added null-safe user statistics display in messages page
+- Proper loading states and error messages on all social pages
+- Error boundaries prevent crashes from validation errors
+
+**Testing (server/tests/social-security.test.ts)**:
+- Comprehensive unit tests for all validation functions
+- XSS prevention test cases
+- Edge case handling (unicode, whitespace, length limits)
+- Rate limiting configuration verification
+
+**Architecture Review**:
+- Architect review confirmed no blocking security defects
+- Validation is comprehensive with proper length constraints
+- Rate limits appropriately configured
+- Frontend properly guards against null values
+
 ### October 24, 2025 - Market System Robustness Improvements
 Enhanced prediction market system with data validation, improved settlement logic, and better error handling:
 
