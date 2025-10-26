@@ -1,0 +1,59 @@
+Create a tour of the these three components{<div className="market-item">
+<span className="user">@InsyderRookie</span>
+<span className="status">LIVE</span>
+<span className="question">Will Insyder have a positive USD Gain on tomorrow's leaderboard?</span>
+<div className="performance">
+<span>Performance</span>
+<span>6h 40m</span>
+</div>
+<div className="bet-options">
+<span className="yes-option">YES - $0.50 (50.0% chance)</span>
+<span className="no-option">NO - $0.50 (50.0% chance)</span>
+</div>
+<div className="price-trend">24-Hr Price Trend: 6.7%</div>
+<div className="followers">Followers: 261.5K</div>
+<div className="engagement-rate">Eng Rate: 8.9% (+0.2%)</div>
+<div className="actions">
+<button className="buy-button">Buy</button>
+<button className="sell-button">Sell</button>
+<button className="details-button">Details</button>
+</div>
+
+</div> <div className="market-item"> <span className="user">@CoastyRookie</span> <span className="status">LIVE</span> <span className="question">Will Coasty reach rank #3 or better by tomorrow?</span> <div className="performance"> <span>Ranking</span> <span>6h 40m</span> </div> <div className="bet-options"> <span className="yes-option">YES - $0.50 (50.0% chance)</span> <span className="no-option">NO - $0.50 (50.0% chance)</span> </div> <div className="price-trend">24-Hr Price Trend: -3.0%</div> <div className="followers">Followers: 269.7K</div> <div className="engagement-rate">Eng Rate: 9.5% (+0.4%)</div> <div className="actions"> <button className="buy-button">Buy</button> <button className="sell-button">Sell</button> <button className="details-button">Details</button> </div> </div> <!-- Repeat similar structure for other entries like Monki, clukz, DJ.Σn, etc. -->}, {<div className="hidden sm:flex items-center gap-2 md:gap-3 rounded-lg bg-card border border-card-border px-2 md:px-4 py-2 hover-elevate active-elevate-2 transition-all cursor-pointer" data-testid="wallet-display"> <Wallet className="h-4 md:h-5 w-4 md:w-5 text-muted-foreground" /> <div className="flex flex-col"> <span className="text-xs text-muted-foreground">Balance</span> <span className="text-sm md:text-lg font-semibold tabular-nums text-white" data-testid="text-balance"> 1000.00 PTS </span> </div> </div>}, { <Badge className="gap-1.5" data-testid="badge-dad"> dad </Badge>} using import React, { useRef, useState } from 'react'; import { Button, Tour } from 'antd'; import type { TourProps } from 'antd';
+const App: React.FC = () => {
+const ref = useRef(null);
+
+const [open, setOpen] = useState<boolean>(false);
+
+const steps: TourProps['steps'] = [
+{
+title: 'Center',
+description: 'Displayed in the center of screen.',
+target: null,
+},
+{
+title: 'Right',
+description: 'On the right of target.',
+placement: 'right',
+target: () => ref.current,
+},
+{
+title: 'Top',
+description: 'On the top of target.',
+placement: 'top',
+target: () => ref.current,
+},
+];
+
+return (
+<>
+<Button type="primary" onClick={() => setOpen(true)} ref={ref}>
+Begin Tour
+</Button>
+
+  <Tour open={open} onClose={() => setOpen(false)} steps={steps} />
+</>
+);
+};
+
+export default App;
