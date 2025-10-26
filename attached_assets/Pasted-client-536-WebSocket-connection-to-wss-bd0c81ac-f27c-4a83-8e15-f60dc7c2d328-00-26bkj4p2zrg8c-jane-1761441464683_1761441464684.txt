@@ -1,0 +1,34 @@
+client:536 WebSocket connection to 'wss://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/?token=C3tsabVvyyGU' failed: 
+client:536 Uncaught (in promise) SyntaxError: Failed to construct 'WebSocket': The URL 'wss://localhost:undefined/?token=C3tsabVvyyGU' is invalid.
+    at setupWebSocket (client:536:19)
+    at fallback (client:509:16)
+    at WebSocket.<anonymous> (client:555:7)
+chunk-RPCDYKBN.js?v=50e4edad:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+queryClient.ts:33 
+ GET https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/api/notifications 401 (Unauthorized)
+forum.tsx:300 Uncaught TypeError: Cannot read properties of undefined (reading 'username')
+    at forum.tsx:300:48
+    at Array.map (<anonymous>)
+    at Forum (forum.tsx:242:35)
+forum.tsx:300 Uncaught TypeError: Cannot read properties of undefined (reading 'username')
+    at forum.tsx:300:48
+    at Array.map (<anonymous>)
+    at Forum (forum.tsx:242:35)
+chunk-RPCDYKBN.js?v=50e4edad:14032 The above error occurred in the <Forum> component:
+
+    at Forum (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/src/pages/forum.tsx:43:35)
+    at Route (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.repli…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=50e4edad:323:16)
+    at Switch (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.repli…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=50e4edad:379:17)
+    at Router
+    at div
+    at Provider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.repli…unner/workspace/node_modules/.vite/deps/chunk-E7IAXTU4.js?v=50e4edad:38:15)
+    at TooltipProvider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.repli…rkspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=50e4edad:60:5)
+    at QueryClientProvider (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.repli…rkspace/node_modules/.vite/deps/@tanstack_react-query.js?v=50e4edad:2805:3)
+    at App (https://bd0c81ac-f27c-4a83-8e15-f60dc7c2d328-00-26bkj4p2zrg8c.janeway.replit.dev/src/App.tsx?v=vqDPV67COp7ty5028EXUG:92:33)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+chunk-RPCDYKBN.js?v=50e4edad:9129 Uncaught TypeError: Cannot read properties of undefined (reading 'username')
+    at forum.tsx:300:48
+    at Array.map (<anonymous>)
+    at Forum (forum.tsx:242:35)
