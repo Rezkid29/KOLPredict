@@ -21,7 +21,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { User, ConversationWithParticipants, Message } from "@shared/schema";
 import { format } from "date-fns";
@@ -172,6 +171,14 @@ export default function Messages() {
   };
 
   const handleCreateConversation = (otherUserId: string) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to start a conversation",
+        variant: "destructive",
+      });
+      return;
+    }
     createConversationMutation.mutate(otherUserId);
   };
 
