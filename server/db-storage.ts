@@ -658,15 +658,15 @@ export class DbStorage implements IStorage {
 
       } else {
         // Selling - lock and read user position
-        const [userPosition] = await tx
+        const userPositions = await tx
           .select()
           .from(positions)
           .where(
-            sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
+            sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND UPPER(${positions.position}) = ${params.position.toUpperCase()}`
           )
-          .for('update')
-          .limit(1);
+          .for('update');
 
+        const userPosition = userPositions.length > 0 ? userPositions[0] : null;
         const currentShares = userPosition ? parseFloat(userPosition.shares) : 0;
         averageCost = userPosition ? parseFloat(userPosition.averagePrice) : 0;
 
@@ -795,13 +795,14 @@ export class DbStorage implements IStorage {
       }
 
       // STEP 5: Update user position
-      const existingPosition = await tx
+      const existingPositions = await tx
         .select()
         .from(positions)
         .where(
-          sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND ${positions.position} = ${params.position}`
-        )
-        .limit(1);
+          sql`${positions.userId} = ${params.userId} AND ${positions.marketId} = ${params.marketId} AND UPPER(${positions.position}) = ${params.position.toUpperCase()}`
+        );
+      
+      const existingPosition = existingPositions.length > 0 ? [existingPositions[0]] : [];
 
       if (existingPosition.length > 0) {
         const pos = existingPosition[0];
