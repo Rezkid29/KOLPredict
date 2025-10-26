@@ -1,0 +1,220 @@
+After analyzing the codebase and console logs, here are all the potential bugs I've identified in the social features:
+
+Critical Issues
+1. AlertDialog Component Error (ACTIVE BUG)
+Cannot read properties of null (reading 'useMemo')
+at AlertDialog
+Location: client/src/pages/messages.tsx:291
+Issue: Multiple React instances or incorrect import of AlertDialog component
+Edge Cases:
+
+Happens when trying to delete conversations
+React version mismatch between dependencies
+2. Rate Limiter Trust Proxy Warning (ACTIVE BUG)
+ValidationError: The Express 'trust proxy' setting is true, which allows anyone to trivially bypass IP-based rate limiting
+Location: server/routes.ts - All rate limiters
+Issue: Rate limiting can be bypassed by spoofing IP addresses
+Edge Cases:
+
+Malicious users can spam endpoints by changing X-Forwarded-For header
+All forum posting, messaging, voting limits are bypassable
+3. Authentication Issues
+Location: Multiple endpoints returning 401
+
+POST /api/conversations 401 :: {"message":"Authentication required"}
+POST /api/forum/threads/{id}/vote 401
+Issue: Session cookies not being sent/saved properly
+Edge Cases:
+
+Guest users can't perform ANY social actions
+Registered users lose authentication between requests
+Session not persisting after login
+4. Profile Not Found for "me" Route
+GET /api/users/im/profile 404 :: {"message":"User profile not found"}
+Issue: Route expects username but receiving "im" instead of "me"
+Edge Cases:
+
+User clicks "Profile" in navbar and sees 404
+Profile page crashes for current user
+Data Integrity Issues
+5. Missing Profile Creation on User Registration
+Location: server/routes.ts - /api/auth/register, /api/auth/guest
+Issue: User profile is not created when user signs up
+Edge Cases:
+
+New users can't access profile features
+Follow counts will fail
+Social features break for new accounts
+6. Conversation Participant Data Structure Issues
+Location: server/db-storage.ts:getUserConversations
+Issue: Complex nested data structure for participants may return null values
+Edge Cases:
+
+If user2Profile doesn't exist, avatarUrl is null
+Username might be null for deleted users
+Frontend crashes when rendering null values
+7. Unread Message Count Inefficiency
+Location: server/db-storage.ts:getUserConversations
+Issue: N+1 query problem - separate query for each conversation's unread count
+Edge Cases:
+
+Slow loading with many conversations
+Database timeout with 50+ conversations
+Race Conditions
+8. Concurrent Follow/Unfollow
+Location: server/db-storage.ts:followUser, unfollowUser
+Issue: No transaction isolation on follower count updates
+Edge Cases:
+
+Rapid follow/unfollow causes incorrect counts
+Multiple users following simultaneously corrupt counts
+followersCount/followingCount can become negative
+9. Concurrent Message Sending
+Location: server/db-storage.ts:createMessage
+Issue: lastMessageAt update race condition
+Edge Cases:
+
+Two messages sent simultaneously may have wrong order in conversation list
+lastMessageAt might be older message timestamp
+10. Forum Vote Race Condition
+Location: server/db-storage.ts:voteForumThread, voteForumComment
+Issue: No atomic vote checking/inserting
+Edge Cases:
+
+User can vote multiple times by clicking rapidly
+Vote counts can be inflated
+Upvotes/downvotes desynchronized
+Validation Gaps
+11. Missing Length Validation on Bio/Avatar
+Location: server/routes.ts:PUT /api/users/:id/profile
+Issue: No validation on bio/avatarUrl before calling updateUserProfile
+Edge Cases:
+
+Users can submit extremely long bios (crashes frontend)
+Malicious URLs in avatarUrl
+SQL injection attempts in bio field
+12. Thread/Comment Content Not Sanitized After Validation
+Location: server/routes.ts - forum endpoints
+Issue: validateThreadContent validates but doesn't sanitize
+Edge Cases:
+
+XSS through markdown/HTML in content
+Control characters break UI
+Unicode exploits
+13. Missing Pagination on Activities
+Location: server/db-storage.ts:getUserActivities
+Issue: Default limit of 20 but no offset pagination
+Edge Cases:
+
+Users with >20 activities can't see older ones
+No way to load more activities
+Frontend assumes all activities fit on one page
+Foreign Key & Data Consistency
+14. Orphaned Data on User Deletion
+Location: All social tables
+Issue: No cascade delete configured
+Edge Cases:
+
+Deleting user leaves orphaned messages, comments, threads
+Conversations reference deleted users
+Activities point to non-existent users
+15. Missing Conversation Existence Check
+Location: server/routes.ts:POST /api/conversations/:id/messages
+Issue: No validation that conversation exists before creating message
+Edge Cases:
+
+Can send messages to deleted conversations
+Can create messages with invalid conversationId
+Database foreign key violation
+16. Thread Lock Not Enforced
+Location: server/routes.ts:POST /api/forum/threads/:id/comments
+Issue: No check if thread.isLocked before allowing comments
+Edge Cases:
+
+Users can comment on locked threads
+Moderator locks don't work
+Spam continues after thread locked
+Session & Cookie Issues
+17. Session Save Not Awaited Consistently
+Location: server/routes.ts - Some auth endpoints
+Issue: Only some endpoints await req.session.save()
+Edge Cases:
+
+Session might not persist before response sent
+User appears logged in but isn't
+Intermittent authentication failures
+18. No Session Expiration Handling
+Location: Entire codebase
+Issue: No code to handle expired sessions gracefully
+Edge Cases:
+
+User gets 401 mid-session after timeout
+No automatic re-authentication prompt
+Lost form data when session expires
+Frontend Bugs
+19. Null Safety Issues in Messages Page
+Location: client/src/pages/messages.tsx
+Issue: Optional chaining not used consistently
+Edge Cases:
+
+Crashes when conversation.user1 is null
+avatarUrl might be undefined causing broken images
+username display shows "undefined"
+20. Forum Comment Mutation Missing ThreadId
+Location: client/src/pages/forum.tsx:createCommentMutation
+Issue: Uses selectedThreadId from state instead of parameter
+Edge Cases:
+
+If state changes between click and mutation, wrong thread gets comment
+Race condition with rapid thread switching
+Comment appears on wrong thread
+21. Delete Conversation Not Removing from UI
+Location: client/src/pages/messages.tsx:deleteConversationMutation
+Issue: Invalidates queries but doesn't update selected conversation state
+Edge Cases:
+
+After deleting, user still sees deleted conversation
+Trying to send message to deleted conversation
+UI desync with backend state
+Missing Features That Cause Bugs
+22. No Duplicate Message Prevention
+Location: Message sending
+Issue: No debouncing or duplicate detection
+Edge Cases:
+
+Double-clicking Send sends duplicate messages
+Network retry sends message twice
+User confusion and spam
+23. No Notification Mark As Read on View
+Location: Notification display
+Issue: Notifications don't auto-mark as read
+Edge Cases:
+
+Notification count never decreases
+User can't tell what's new
+Badge shows wrong count
+24. No Conversation Preview Text
+Location: server/db-storage.ts:getUserConversations
+Issue: Doesn't include last message content
+Edge Cases:
+
+Conversation list shows no context
+User can't remember what conversation is about
+Need to click every conversation to see content
+25. No Online Status Tracking
+Location: Messaging system
+Issue: Shows "Online" but doesn't track actual status
+Edge Cases:
+
+All users appear online always
+No way to know if recipient will see message
+Fake online status misleading
+Most Critical Fixes Needed:
+Fix AlertDialog import/React version mismatch
+Fix rate limiter trust proxy configuration
+Ensure profiles are created on user registration
+Add transaction isolation to follow counts
+Validate thread.isLocked before allowing comments
+Add XSS sanitization after validation
+Fix session persistence across all auth endpoints
+Would you like me to provide fixes for any of these issues?
