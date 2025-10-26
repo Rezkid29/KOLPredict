@@ -24,9 +24,10 @@ function Router() {
   // Redirect to landing if not authenticated and trying to access protected routes
   useEffect(() => {
     const protectedRoutes = ['/markets', '/profile', '/leaderboard', '/wallet', '/messages', '/forum', '/help', '/how-it-works'];
-    const isProtectedRoute = protectedRoutes.some(route => location.startsWith(route)) || location === '/';
+    const isProtectedRoute = protectedRoutes.some(route => location.startsWith(route));
     
-    if (!userId && isProtectedRoute) {
+    // Only redirect if not authenticated AND trying to access protected routes (excluding landing page)
+    if (!userId && isProtectedRoute && location !== '/') {
       setLocation('/');
     }
   }, [userId, location, setLocation]);

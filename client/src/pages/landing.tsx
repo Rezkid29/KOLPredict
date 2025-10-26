@@ -24,8 +24,15 @@ export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const handleAuthSuccess = (userId: string) => {
+    // Store userId in localStorage to sync with useAuth hook
+    localStorage.setItem("userId", userId);
+    // Trigger storage event for other components
+    window.dispatchEvent(new Event("storage"));
     setAuthModalOpen(false);
-    setLocation("/markets");
+    // Small delay to ensure state updates propagate
+    setTimeout(() => {
+      setLocation("/markets");
+    }, 100);
   };
 
   return (

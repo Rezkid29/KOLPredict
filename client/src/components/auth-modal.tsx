@@ -31,17 +31,17 @@ async function retryWithBackoff<T>(
   baseDelay: number = RETRY_DELAY
 ): Promise<T> {
   let lastError: any;
-  
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (error: any) {
       lastError = error;
-      
+
       if (error.code === 4001) {
         throw error;
       }
-      
+
       if (attempt < maxAttempts) {
         const delayMs = baseDelay * Math.pow(2, attempt - 1);
         console.log(`Attempt ${attempt} failed, retrying in ${delayMs}ms...`);
@@ -49,7 +49,7 @@ async function retryWithBackoff<T>(
       }
     }
   }
-  
+
   throw lastError;
 }
 
@@ -93,24 +93,39 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: "Welcome back!",
-          description: `Logged in as ${loginUsername}`,
-        });
-        onSuccess(data.userId);
-        onClose();
-        setLoginUsername("");
+        
+        if (data.userId) {
+          // Store userId in localStorage before calling onSuccess
+          localStorage.setItem("userId", data.userId);
+          window.dispatchEvent(new Event("storage"));
+
+          toast({
+            title: "Welcome back!",
+            description: `Logged in as ${loginUsername}`,
+          });
+          onSuccess(data.userId);
+          onClose();
+          setLoginUsername("");
+        } else {
+          toast({
+            title: "Error",
+            description: "Login failed: User ID not found.",
+            variant: "destructive",
+          });
+        }
       } else {
+        const errorData = await response.json().catch(() => ({}));
         toast({
           title: "Error",
-          description: "User not found. Please register first.",
+          description: errorData.message || "User not found. Please register first.",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         title: "Error",
-        description: "Failed to login. Please try again.",
+        description: error.message || "Failed to login. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -145,25 +160,39 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: "Account created!",
-          description: `Welcome ${registerUsername}! You've been given 1000 PTS to start trading.`,
-        });
-        onSuccess(data.userId);
-        onClose();
-        setRegisterUsername("");
+        
+        if (data.userId) {
+          // Store userId in localStorage before calling onSuccess
+          localStorage.setItem("userId", data.userId);
+          window.dispatchEvent(new Event("storage"));
+
+          toast({
+            title: "Account created!",
+            description: `Welcome ${registerUsername}! You've been given 1000 PTS to start trading.`,
+          });
+          onSuccess(data.userId);
+          onClose();
+          setRegisterUsername("");
+        } else {
+          toast({
+            title: "Error",
+            description: "Registration failed: User ID not found.",
+            variant: "destructive",
+          });
+        }
       } else {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         toast({
           title: "Error",
           description: data.message || "Username already exists",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Registration error:", error);
       toast({
         title: "Error",
-        description: "Failed to register. Please try again.",
+        description: error.message || "Failed to register. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -178,23 +207,38 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: "Welcome!",
-          description: "Signed in as guest. You've been given 1000 PTS to start trading.",
-        });
-        onSuccess(data.userId);
-        onClose();
+        
+        if (data.userId) {
+          // Store userId in localStorage before calling onSuccess
+          localStorage.setItem("userId", data.userId);
+          window.dispatchEvent(new Event("storage"));
+
+          toast({
+            title: "Welcome!",
+            description: "Signed in as guest. You've been given 1000 PTS to start trading.",
+          });
+          onSuccess(data.userId);
+          onClose();
+        } else {
+          toast({
+            title: "Error",
+            description: "Guest sign-in failed: User ID not found.",
+            variant: "destructive",
+          });
+        }
       } else {
+        const errorData = await response.json().catch(() => ({}));
         toast({
           title: "Error",
-          description: "Failed to create guest account.",
+          description: errorData.message || "Failed to create guest account.",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Guest login error:", error);
       toast({
         title: "Error",
-        description: "Failed to sign in as guest. Please try again.",
+        description: error.message || "Failed to sign in as guest. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -244,9 +288,9 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
       const resp = await connectWallet();
       const publicKey = resp.publicKey.toString();
-      
+
       const message = `Sign this message to authenticate with KOL Predict.\n\nWallet: ${publicKey}\nNonce: ${nonce}`;
-      
+
       const signMessage = async () => {
         const encodedMessage = new TextEncoder().encode(message);
         return await withTimeout(
@@ -273,40 +317,48 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          
+
           if (response.status === 429) {
             throw new Error("Too many authentication attempts. Please wait a minute and try again.");
           }
-          
+
           const errorMessage = errorData.message || "Failed to verify wallet signature";
           const errorCode = errorData.errorCode;
-          
+
           if (errorCode) {
             console.error(`Authentication error [${errorCode}]:`, errorMessage);
           }
-          
+
           throw new Error(errorMessage);
         }
 
         return response;
       };
 
-      const response = await retryWithBackoff(verifySignature, 2);
-      const data = await response.json();
-      
-      // Store the wallet address for disconnect detection
-      localStorage.setItem("solanaWalletAddress", publicKey);
-      
-      toast({
-        title: "Wallet connected!",
-        description: `Welcome ${data.username}. You've been given 1000 PTS to start trading.`,
-      });
-      
-      onSuccess(data.userId);
-      onClose();
+      const verifyResponse = await retryWithBackoff(verifySignature, 2);
+      const verifyData = await verifyResponse.json();
+
+      if (verifyData.userId) {
+        // Store userId and wallet address in localStorage before calling onSuccess
+        localStorage.setItem("userId", verifyData.userId);
+        if (verifyData.walletAddress) {
+          localStorage.setItem("solanaWalletAddress", verifyData.walletAddress);
+        }
+        window.dispatchEvent(new Event("storage"));
+
+        toast({
+          title: "Success",
+          description: "Connected with Solana wallet",
+        });
+        onSuccess(verifyData.userId);
+        onClose();
+      } else {
+        throw new Error("Failed to verify signature: User ID not found in response.");
+      }
+
     } catch (error: any) {
       console.error("Solana auth error:", error);
-      
+
       if (error.code === 4001) {
         toast({
           title: "Connection cancelled",
@@ -441,11 +493,11 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                   </AlertDescription>
                 </Alert>
               )}
-              
+
               <div className="text-sm text-muted-foreground text-center">
                 Connect your Solana wallet to get started
               </div>
-              
+
               <Button 
                 onClick={handleSolanaConnect} 
                 disabled={loading || !walletDetected}
@@ -456,7 +508,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 <Wallet className="h-4 w-4" />
                 {loading ? "Connecting..." : "Connect Solana Wallet"}
               </Button>
-              
+
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
@@ -478,7 +530,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 <SiX className="h-4 w-4" />
                 Sign in with X (Coming Soon)
               </Button>
-              
+
               <p className="text-xs text-muted-foreground text-center">
                 Supports Phantom, Solflare, and other Solana wallets
               </p>
