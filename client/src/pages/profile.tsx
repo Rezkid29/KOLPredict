@@ -9,6 +9,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BetModal } from "@/components/bet-modal";
+import { EditBioModal } from "@/components/edit-bio-modal";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient as globalQueryClient } from "@/lib/queryClient";
 import { 
@@ -24,7 +25,8 @@ import {
   UserMinus,
   Users,
   Trophy,
-  Activity
+  Activity,
+  Edit
 } from "lucide-react";
 import type { BetWithMarket, User, PositionWithMarket, MarketWithKol, UserProfile, Activity as ActivityType, Achievement, UserAchievement } from "@shared/schema";
 import logoImage from "/favicon.png";
@@ -32,6 +34,7 @@ import logoImage from "/favicon.png";
 export default function Profile() {
   const { username } = useParams<{ username: string }>();
   const [betModalOpen, setBetModalOpen] = useState(false);
+  const [bioModalOpen, setBioModalOpen] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -329,14 +332,32 @@ export default function Profile() {
               </Avatar>
 
               <div>
-                <h1 className="text-3xl font-display font-bold mb-2" data-testid="text-username">
-                  {targetUsername}
-                </h1>
-                {profileData.profile.bio && (
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-3xl font-display font-bold" data-testid="text-username">
+                    {targetUsername}
+                  </h1>
+                  {isOwnProfile && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBioModalOpen(true)}
+                      className="gap-2"
+                      data-testid="button-edit-bio"
+                    >
+                      <Edit className="h-3 w-3" />
+                      Edit Bio
+                    </Button>
+                  )}
+                </div>
+                {profileData.profile.bio ? (
                   <p className="text-muted-foreground mb-4 max-w-lg" data-testid="text-bio">
                     {profileData.profile.bio}
                   </p>
-                )}
+                ) : isOwnProfile ? (
+                  <p className="text-muted-foreground mb-4 max-w-lg italic" data-testid="text-bio-empty">
+                    No bio yet. Click "Edit Bio" to add one.
+                  </p>
+                ) : null}
                 <div className="flex items-center gap-6 text-sm">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-muted-foreground" />
@@ -848,6 +869,16 @@ export default function Profile() {
               : 0
           }
           onConfirm={handleConfirmBet}
+        />
+      )}
+
+      {/* Edit Bio Modal */}
+      {isOwnProfile && currentUser && (
+        <EditBioModal
+          open={bioModalOpen}
+          onClose={() => setBioModalOpen(false)}
+          userId={currentUser.id}
+          currentBio={profileData?.profile.bio || null}
         />
       )}
     </div>
