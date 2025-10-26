@@ -64,7 +64,7 @@ export default function Forum() {
   const createThreadMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Authentication required");
-      return await apiRequest("/api/forum/threads", "POST", {
+      return await apiRequest("POST", "/api/forum/threads", {
         title: newThreadTitle,
         content: newThreadContent,
         category: newThreadCategory,
@@ -93,7 +93,7 @@ export default function Forum() {
     mutationFn: async () => {
       if (!user) throw new Error("Authentication required");
       if (!selectedThreadId) throw new Error("No thread selected");
-      return await apiRequest(`/api/forum/threads/${selectedThreadId}/comments`, "POST", {
+      return await apiRequest("POST", `/api/forum/threads/${selectedThreadId}/comments`, {
         content: newCommentContent,
       });
     },
@@ -114,7 +114,7 @@ export default function Forum() {
   const voteThreadMutation = useMutation({
     mutationFn: async ({ threadId, vote }: { threadId: string; vote: "up" | "down" }) => {
       if (!user) throw new Error("Authentication required");
-      return await apiRequest(`/api/forum/threads/${threadId}/vote`, "POST", {
+      return await apiRequest("POST", `/api/forum/threads/${threadId}/vote`, {
         vote,
       });
     },

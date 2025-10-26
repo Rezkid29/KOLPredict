@@ -41,8 +41,8 @@ export default function Messages() {
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithParticipants[]>({
     queryKey: ["/api/conversations"],
     queryFn: async () => {
-      const result = await apiRequest("/api/conversations", "GET");
-      return result as ConversationWithParticipants[];
+      const result = await apiRequest("GET", "/api/conversations");
+      return result.json();
     },
     enabled: !!user,
   });
@@ -68,10 +68,10 @@ export default function Messages() {
 
   const createConversationMutation = useMutation({
     mutationFn: async (otherUserId: string) => {
-      const result = await apiRequest("/api/conversations", "POST", {
+      const result = await apiRequest("POST", "/api/conversations", {
         otherUserId,
       });
-      return result as unknown as ConversationWithParticipants;
+      return result.json();
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
@@ -95,7 +95,7 @@ export default function Messages() {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!selectedConversationId) return;
-      return await apiRequest(`/api/conversations/${selectedConversationId}/messages`, "POST", {
+      return await apiRequest("POST", `/api/conversations/${selectedConversationId}/messages`, {
         content,
       });
     },
@@ -115,7 +115,7 @@ export default function Messages() {
 
   const markAsReadMutation = useMutation({
     mutationFn: async (conversationId: string) => {
-      return await apiRequest(`/api/conversations/${conversationId}/read`, "PUT", {});
+      return await apiRequest("PUT", `/api/conversations/${conversationId}/read`, {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
