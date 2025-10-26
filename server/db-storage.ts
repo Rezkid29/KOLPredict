@@ -1858,7 +1858,7 @@ export class DbStorage implements IStorage {
         }
 
         // User is changing their vote - remove old vote count and add new one
-        if (oldVote === 'up') {
+        if (oldVote === 'up' && vote === 'down') {
           await tx
             .update(forumThreads)
             .set({ 
@@ -1866,7 +1866,7 @@ export class DbStorage implements IStorage {
               downvotes: sql`${forumThreads.downvotes} + 1`
             })
             .where(eq(forumThreads.id, threadId));
-        } else {
+        } else if (oldVote === 'down' && vote === 'up') {
           await tx
             .update(forumThreads)
             .set({ 
@@ -1936,7 +1936,7 @@ export class DbStorage implements IStorage {
         }
 
         // User is changing their vote - remove old vote count and add new one
-        if (oldVote === 'up') {
+        if (oldVote === 'up' && vote === 'down') {
           await tx
             .update(forumComments)
             .set({ 
@@ -1944,7 +1944,7 @@ export class DbStorage implements IStorage {
               downvotes: sql`${forumComments.downvotes} + 1`
             })
             .where(eq(forumComments.id, commentId));
-        } else {
+        } else if (oldVote === 'down' && vote === 'up') {
           await tx
             .update(forumComments)
             .set({ 
