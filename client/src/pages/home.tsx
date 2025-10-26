@@ -176,7 +176,7 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <Navbar
         balance={user?.balance ? parseFloat(user.balance) : 1000}
-        username={user?.username}
+        username={user?.username ?? undefined}
       />
 
       {/* Live Bets Carousel */}

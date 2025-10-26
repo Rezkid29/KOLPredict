@@ -885,6 +885,8 @@ export class DbStorage implements IStorage {
           totalVolume: (parseFloat(market.totalVolume) + betAmount).toFixed(2),
           currentYesPrice: yesPrice.toFixed(4), // Use the calculated price
           currentNoPrice: noPrice.toFixed(4),   // Use the calculated price
+          yesPrice: yesPrice.toFixed(4),        // Update legacy field for backwards compatibility
+          noPrice: noPrice.toFixed(4),          // Update legacy field for backwards compatibility
         })
         .where(eq(markets.id, params.marketId));
 
