@@ -223,6 +223,14 @@ export default function Home() {
                   PTS
                 </span>
               </div>
+              <div className="px-5 py-3 rounded-lg bg-card/80 backdrop-blur-sm border border-card-border shadow-sm hover-elevate transition-all">
+                <span className="text-sm text-muted-foreground">
+                  CA:{" "}
+                </span>
+                <span className="text-sm font-bold tabular-nums text-white">
+                  null
+                </span>
+              </div>
             </div>
           </div>
         </div>
