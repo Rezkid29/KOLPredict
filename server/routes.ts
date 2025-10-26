@@ -33,6 +33,9 @@ let withdrawalProcessor: ReturnType<typeof createWithdrawalProcessor>;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
+  // Trust proxy to correctly identify client IP addresses for rate limiting
+  app.set('trust proxy', true);
+
   // Seed database if empty
   try {
     const kols = await storage.getAllKols();
@@ -190,10 +193,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create new user
       const user = await storage.createUser({ username });
-      
+
       // Set session
       req.session.userId = user.id;
-      
+
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
       res.status(500).json({ message: "Failed to create user" });
@@ -1756,15 +1759,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(profileData);
     } catch (error) {
       console.error("Error fetching user profile:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch user profile" });
     }
   });
@@ -1786,15 +1789,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedProfile);
     } catch (error) {
       console.error("Error updating user profile:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to update user profile" });
     }
   });
@@ -1820,15 +1823,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(follow);
     } catch (error) {
       console.error("Error following user:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to follow user" });
     }
   });
@@ -1846,15 +1849,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Successfully unfollowed user" });
     } catch (error) {
       console.error("Error unfollowing user:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to unfollow user" });
     }
   });
@@ -1872,15 +1875,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(followers);
     } catch (error) {
       console.error("Error fetching followers:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch followers" });
     }
   });
@@ -1898,15 +1901,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(following);
     } catch (error) {
       console.error("Error fetching following:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch following" });
     }
   });
@@ -1923,15 +1926,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ isFollowing });
     } catch (error) {
       console.error("Error checking follow status:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to check follow status" });
     }
   });
@@ -1953,15 +1956,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(activities);
     } catch (error) {
       console.error("Error fetching user activities:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch user activities" });
     }
   });
@@ -1979,15 +1982,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(activities);
     } catch (error) {
       console.error("Error fetching following activities:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch following activities" });
     }
   });
@@ -2018,15 +2021,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(conversation);
     } catch (error) {
       console.error("Error creating/getting conversation:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to create/get conversation" });
     }
   });
@@ -2034,26 +2037,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/conversations", async (req, res) => {
     try {
       const userId = req.session.userId;
-      
+
       if (!userId) {
         return res.json([]);
       }
-      
+
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
       const conversations = await storage.getUserConversations(userId, limit);
       res.json(conversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch conversations" });
     }
   });
@@ -2080,15 +2083,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch messages" });
     }
   });
@@ -2127,15 +2130,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(message);
     } catch (error) {
       console.error("Error sending message:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to send message" });
     }
   });
@@ -2161,15 +2164,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Messages marked as read" });
     } catch (error) {
       console.error("Error marking messages as read:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to mark messages as read" });
     }
   });
@@ -2186,15 +2189,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ count });
     } catch (error) {
       console.error("Error fetching unread message count:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch unread message count" });
     }
   });
@@ -2207,7 +2210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { title, content, category } = req.body;
       const userId = req.session.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -2244,15 +2247,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(thread);
     } catch (error) {
       console.error("Error creating forum thread:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to create forum thread" });
     }
   });
@@ -2266,15 +2269,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(threads);
     } catch (error) {
       console.error("Error fetching forum threads:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch forum threads" });
     }
   });
@@ -2296,15 +2299,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(thread);
     } catch (error) {
       console.error("Error fetching forum thread:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch forum thread" });
     }
   });
@@ -2328,15 +2331,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedThread);
     } catch (error) {
       console.error("Error updating forum thread:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to update forum thread" });
     }
   });
@@ -2346,7 +2349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { content } = req.body;
       const userId = req.session.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -2372,15 +2375,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(comment);
     } catch (error) {
       console.error("Error creating forum comment:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to create forum comment" });
     }
   });
@@ -2398,15 +2401,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(comments);
     } catch (error) {
       console.error("Error fetching forum comments:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch forum comments" });
     }
   });
@@ -2416,7 +2419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { vote } = req.body;
       const userId = req.session.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -2433,15 +2436,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Vote recorded successfully" });
     } catch (error) {
       console.error("Error voting on forum thread:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to vote on forum thread" });
     }
   });
@@ -2451,7 +2454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { vote } = req.body;
       const userId = req.session.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -2468,15 +2471,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Vote recorded successfully" });
     } catch (error) {
       console.error("Error voting on forum comment:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to vote on forum comment" });
     }
   });
@@ -2504,15 +2507,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(achievement);
     } catch (error) {
       console.error("Error creating achievement:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to create achievement" });
     }
   });
@@ -2523,15 +2526,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(achievements);
     } catch (error) {
       console.error("Error fetching achievements:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch achievements" });
     }
   });
@@ -2548,15 +2551,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(achievements);
     } catch (error) {
       console.error("Error fetching user achievements:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch user achievements" });
     }
   });
@@ -2574,15 +2577,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(notifications);
     } catch (error) {
       console.error("Error fetching notifications:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
@@ -2608,15 +2611,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Notification marked as read" });
     } catch (error) {
       console.error("Error marking notification as read:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to mark notification as read" });
     }
   });
@@ -2629,15 +2632,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "All notifications marked as read" });
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to mark all notifications as read" });
     }
   });
@@ -2654,15 +2657,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ count });
     } catch (error) {
       console.error("Error fetching unread notification count:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch unread notification count" });
     }
   });
@@ -2689,15 +2692,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(faq);
     } catch (error) {
       console.error("Error creating FAQ:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to create FAQ" });
     }
   });
@@ -2710,15 +2713,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(faqs);
     } catch (error) {
       console.error("Error fetching FAQs:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to fetch FAQs" });
     }
   });
@@ -2742,15 +2745,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedFaq);
     } catch (error) {
       console.error("Error updating FAQ:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to update FAQ" });
     }
   });
@@ -2767,15 +2770,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "FAQ deleted successfully" });
     } catch (error) {
       console.error("Error deleting FAQ:", error);
-      
+
       if (error instanceof ValidationError) {
         return res.status(400).json({ message: error.message });
       }
-      
+
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
-      
+
       res.status(500).json({ message: "Failed to delete FAQ" });
     }
   });

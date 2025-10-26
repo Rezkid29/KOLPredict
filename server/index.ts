@@ -9,6 +9,9 @@ import helmet from "helmet";
 const app = express();
 const MemoryStore = createMemoryStore(session);
 
+// Trust proxy for correct IP detection behind Replit's proxy
+app.set('trust proxy', true);
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: false, // Disabled for Vite dev server

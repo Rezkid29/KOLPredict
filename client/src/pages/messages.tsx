@@ -11,7 +11,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Send, MessageCircle, Plus, Search, Loader2 } from "lucide-react";
+import { Send, MessageCircle, Plus, Search, Loader2, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { User, ConversationWithParticipants, Message } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -30,6 +40,8 @@ export default function Messages() {
   const [messageInput, setMessageInput] = useState("");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const { toast } = useToast();
   
   useWebSocket();
@@ -119,6 +131,29 @@ export default function Messages() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    },
+  });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      return await apiRequest("DELETE", `/api/conversations/${conversationId}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setSelectedConversationId(null);
+      setDeleteDialogOpen(false);
+      setConversationToDelete(null);
+      toast({
+        title: "Conversation deleted",
+        description: "The conversation has been removed",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete conversation",
+        variant: "destructive",
+      });
     },
   });
 
@@ -241,15 +276,28 @@ export default function Messages() {
             ) : (
               <>
                 {/* Chat Header */}
-                <div className="p-5 border-b border-border/50 flex items-center gap-3">
-                  <Avatar className="h-10 w-10 ring-2 ring-border">
-                    <AvatarImage src={otherUser?.avatarUrl ?? undefined} alt={otherUser?.username ?? "User"} />
-                    <AvatarFallback>{otherUser?.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h2 className="font-semibold">{otherUser?.username}</h2>
-                    <p className="text-xs text-muted-foreground">Online</p>
+                <div className="p-5 border-b border-border/50 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 ring-2 ring-border">
+                      <AvatarImage src={otherUser?.avatarUrl ?? undefined} alt={otherUser?.username ?? "User"} />
+                      <AvatarFallback>{otherUser?.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h2 className="font-semibold">{otherUser?.username}</h2>
+                      <p className="text-xs text-muted-foreground">Online</p>
+                    </div>
                   </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      setConversationToDelete(selectedConversationId);
+                      setDeleteDialogOpen(true);
+                    }}
+                    data-testid="button-delete-conversation"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
 
                 {/* Messages */}
@@ -325,6 +373,31 @@ export default function Messages() {
           </Card>
         </div>
       </div>
+
+      {/* Delete Conversation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Conversation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this conversation? This will permanently remove all messages and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (conversationToDelete) {
+                  deleteConversationMutation.mutate(conversationToDelete);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* New Conversation Dialog */}
       <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>

@@ -164,6 +164,7 @@ export interface IStorage {
   getConversationMessages(conversationId: string, limit?: number): Promise<Message[]>;
   markMessagesAsRead(conversationId: string, userId: string): Promise<void>;
   getUnreadMessageCount(userId: string): Promise<number>;
+  deleteConversation(conversationId: string, userId: string): Promise<void>;
 
   // Forum
   createForumThread(thread: InsertForumThread): Promise<ForumThread>;
