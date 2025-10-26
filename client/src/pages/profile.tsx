@@ -471,7 +471,7 @@ export default function Profile() {
                 </p>
               </div>
 
-              {activities.length === 0 ? (
+              {bets.length === 0 && activities.length === 0 ? (
                 <div className="p-16 text-center text-muted-foreground">
                   <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="font-medium mb-1">No Activity Yet</p>
@@ -480,6 +480,54 @@ export default function Profile() {
               ) : (
                 <ScrollArea className="h-[500px]">
                   <div className="p-5 space-y-3">
+                    {/* Show recent bets */}
+                    {bets.slice(0, 10).map((bet) => (
+                      <div
+                        key={bet.id}
+                        onClick={() => handleBetClick(bet.market)}
+                        className="flex items-start gap-4 p-4 rounded-lg border border-border/60 hover-elevate transition-all cursor-pointer"
+                        data-testid={`activity-bet-${bet.id}`}
+                      >
+                        <div className={`p-2 rounded-lg ${
+                          bet.position === "YES" ? "bg-success/10" : "bg-destructive/10"
+                        }`}>
+                          {bet.position === "YES" ? (
+                            <TrendingUp className="h-4 w-4 text-success" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4 text-destructive" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium text-sm">
+                              {bet.position} bet on {bet.market.kol.name}
+                            </p>
+                            {getStatusBadge(bet.status)}
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
+                            {bet.market.title}
+                          </p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="font-medium">{bet.shares} shares</span>
+                            <span>•</span>
+                            <span className="font-medium">{parseFloat(bet.amount).toFixed(2)} PTS</span>
+                            {(bet.profit !== null && bet.profit !== undefined && parseFloat(bet.profit) !== 0) && (
+                              <>
+                                <span>•</span>
+                                <span className={`font-bold ${parseFloat(bet.profit) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                  {parseFloat(bet.profit) >= 0 ? '+' : ''}{parseFloat(bet.profit).toFixed(2)} PTS
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {formatTime(bet.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Show other activities */}
                     {activities.map((activity) => {
                       const data = JSON.parse(activity.data);
                       let icon = <Activity className="h-4 w-4" />;
@@ -643,7 +691,7 @@ export default function Profile() {
                               <div className="text-muted-foreground">
                                 Total: <span className="font-medium text-foreground tabular-nums">{parseFloat(bet.amount).toFixed(2)}</span> PTS
                               </div>
-                              {(bet.profit !== null && bet.profit !== undefined && parseFloat(bet.profit) !== 0) && (
+                              {bet.profit !== null && bet.profit !== undefined && parseFloat(bet.profit) !== 0 && (
                                 <div className={parseFloat(bet.profit) >= 0 ? "text-success font-bold" : "text-destructive font-bold"}>
                                   P&L: <span className="font-semibold tabular-nums">
                                     {parseFloat(bet.profit) >= 0 ? '+' : ''}{parseFloat(bet.profit).toFixed(2)}
