@@ -340,4 +340,23 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Live Carousel Animation */
+  @keyframes carousel-scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .live-carousel-track {
+    will-change: transform;
+  }
+
+  /* Pause animation on hover for better UX */
+  .live-carousel-wrapper:hover .live-carousel-track {
+    animation-play-state: paused;
+  }
 }

@@ -4,6 +4,7 @@ import { Navbar } from "@/components/navbar";
 import { MarketCard } from "@/components/market-card";
 import { BetModal } from "@/components/bet-modal";
 import { LiveFeed } from "@/components/live-feed";
+import { LiveCarousel } from "@/components/live-carousel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -178,6 +179,9 @@ export default function Home() {
         username={user?.username}
       />
 
+      {/* Live Bets Carousel */}
+      <LiveCarousel bets={bets} />
+
       {/* Hero Section */}
       <section className="relative overflow-hidden border-b border-border/50 bg-gradient-to-br from-background via-primary/5 to-background">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.1),rgba(255,255,255,0))]" />
@@ -238,9 +242,9 @@ export default function Home() {
 
       {/* Main Content */}
       <section className="container mx-auto px-4 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-8">
           {/* Markets Column */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6">
             {/* Search and Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
@@ -328,7 +332,7 @@ export default function Home() {
               </div>
             ) : (
               <div
-                className="grid grid-cols-1 md:grid-cols-2 gap-5"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
                 data-testid="markets-grid"
               >
                 {filteredMarkets.map((market) => (
@@ -341,13 +345,6 @@ export default function Home() {
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Live Feed Column - Desktop */}
-          <div className="hidden lg:block lg:col-span-1">
-            <div className="sticky top-24">
-              <LiveFeed bets={bets} />
-            </div>
           </div>
         </div>
       </section>
