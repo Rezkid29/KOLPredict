@@ -25,7 +25,7 @@ export default function Landing() {
 
   const handleAuthSuccess = (userId: string) => {
     setAuthModalOpen(false);
-    setLocation("/");
+    setLocation("/markets");
   };
 
   return (

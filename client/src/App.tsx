@@ -26,7 +26,7 @@ function Router() {
     const protectedRoutes = ['/markets', '/profile', '/leaderboard', '/wallet', '/messages', '/forum', '/help', '/how-it-works'];
     const isProtectedRoute = protectedRoutes.some(route => location.startsWith(route)) || location === '/';
     
-    if (!userId && isProtectedRoute && location !== '/') {
+    if (!userId && isProtectedRoute) {
       setLocation('/');
     }
   }, [userId, location, setLocation]);
