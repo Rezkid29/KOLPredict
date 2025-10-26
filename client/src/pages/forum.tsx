@@ -37,8 +37,8 @@ export default function Forum() {
     queryKey: ["/api/user"],
   });
 
-  const threadsUrl = category === "all" 
-    ? "/api/forum/threads" 
+  const threadsUrl = category === "all"
+    ? "/api/forum/threads"
     : `/api/forum/threads?category=${category}`;
 
   const { data: threads = [], isLoading: threadsLoading } = useQuery<(ForumThread & { user: { username: string | null } })[]>({
@@ -90,11 +90,17 @@ export default function Forum() {
   });
 
   const createCommentMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Authentication required");
-      if (!selectedThreadId) throw new Error("No thread selected");
-      return await apiRequest("POST", `/api/forum/threads/${selectedThreadId}/comments`, {
-        content: newCommentContent,
+    mutationFn: async ({ threadId, content }: { threadId: string; content: string }) => {
+      if (!user) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in to comment on threads",
+          variant: "destructive",
+        });
+        throw new Error("Authentication required");
+      }
+      return await apiRequest("POST", `/api/forum/threads/${threadId}/comments`, {
+        content,
       });
     },
     onSuccess: () => {

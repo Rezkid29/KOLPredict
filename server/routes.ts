@@ -194,8 +194,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new user
       const user = await storage.createUser({ username });
 
-      // Set session
+      // Set session and save it
       req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
@@ -216,8 +222,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Set session
+      // Set session and save it
       req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({ userId: user.id, username: user.username });
     } catch (error) {
@@ -235,8 +247,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isGuest: true,
       });
 
-      // Set session
+      // Set session and save it
       req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({ 
         userId: user.id, 

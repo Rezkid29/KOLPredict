@@ -4,7 +4,7 @@ import { getUserId } from "@/hooks/use-auth";
 function appendUserId(url: string): string {
   const userId = getUserId();
   if (!userId) return url;
-  
+
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}userId=${userId}`;
 }
