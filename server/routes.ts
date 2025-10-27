@@ -30,7 +30,7 @@ import {
 let depositMonitor: ReturnType<typeof createDepositMonitor>;
 let withdrawalProcessor: ReturnType<typeof createWithdrawalProcessor>;
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<{ httpServer: Server; startBackgroundServices: () => void }> {
   const httpServer = createServer(app);
 
   // Seed database if empty
@@ -1814,25 +1814,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Market prices now update organically through real bet placements via placeBetWithLocking
   // No artificial simulation needed
 
-  // Start automatic KOL metrics updates every 30 minutes
-  console.log("Starting automatic KOL metrics updates...");
-  metricsUpdater.startAutoUpdate(30);
-
-  // Start automatic market resolution every 5 minutes
-  console.log("Starting automatic market resolution...");
-  marketResolver.startAutoResolution(5);
-
-  // Start daily scheduler for scraping and market generation
-  console.log("Starting daily scheduler...");
-  scheduler.startAllSchedules();
-
-  // Start Solana deposit monitor
-  console.log("Starting Solana deposit monitor...");
-  depositMonitor.start();
-
-  // Start Solana withdrawal processor
-  console.log("Starting Solana withdrawal processor...");
-  withdrawalProcessor.start();
+  // DEFERRED: Start background services after server is listening to prevent Railway timeout
+  // These will be started in the server callback in index.ts
+  console.log("Background services will be started after server is listening...");
 
   // Set up callback for market resolutions to broadcast via WebSocket
   const originalResolveExpiredMarkets = marketResolver.resolveExpiredMarkets.bind(marketResolver);
@@ -3043,5 +3027,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  return httpServer;
+  // Export function to start background services (called after server is listening)
+  function startBackgroundServices() {
+    console.log("🚀 Starting background services...");
+    
+    // Start automatic KOL metrics updates every 30 minutes
+    console.log("Starting automatic KOL metrics updates...");
+    metricsUpdater.startAutoUpdate(30);
+
+    // Start automatic market resolution every 5 minutes
+    console.log("Starting automatic market resolution...");
+    marketResolver.startAutoResolution(5);
+
+    // Start daily scheduler for scraping and market generation
+    console.log("Starting daily scheduler...");
+    scheduler.startAllSchedules();
+
+    // Start Solana deposit monitor
+    console.log("Starting Solana deposit monitor...");
+    depositMonitor.start();
+
+    // Start Solana withdrawal processor
+    console.log("Starting Solana withdrawal processor...");
+    withdrawalProcessor.start();
+    
+    console.log("✅ All background services started");
+  }
+
+  return { httpServer, startBackgroundServices };
 }

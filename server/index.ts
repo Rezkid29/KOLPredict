@@ -93,7 +93,7 @@ app.use((req, res, next) => {
     // Run database migrations
     await runMigrations();
 
-    const server = await registerRoutes(app);
+    const { httpServer: server, startBackgroundServices } = await registerRoutes(app);
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -121,9 +121,23 @@ app.use((req, res, next) => {
     // this serves both the API and the client.
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || '5175', 10);
+    
+    // Start listening immediately to prevent Railway timeout
     server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
       console.log("✅ Server started successfully");
+      
+      // Set keep-alive timeouts to prevent Railway connection issues
+      server.keepAliveTimeout = 65000; // 65 seconds
+      server.headersTimeout = 66000; // 66 seconds
+      
+      console.log("✅ Server is ready to accept connections");
+      
+      // Start background services AFTER server is listening
+      // This prevents Railway timeout during Puppeteer initialization
+      setTimeout(() => {
+        startBackgroundServices();
+      }, 1000);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
