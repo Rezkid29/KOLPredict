@@ -1391,7 +1391,7 @@ export class DbStorage implements IStorage {
     const newProfile: InsertUserProfile = {
       userId: user.id,
       bio: null,
-      avatarUrl: null,
+      avatarUrl: `https://api.dicebear.com/9.x/notionists/svg?seed=${user.username || user.id}`,
     };
 
     const result = await db.insert(userProfiles).values(newProfile).returning();

@@ -327,7 +327,7 @@ export default function Profile() {
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="flex items-start gap-6">
               <Avatar className="h-24 w-24 ring-4 ring-border" data-testid="avatar-profile">
-                <AvatarImage src={profileData.profile.avatarUrl ?? undefined} alt={targetUsername ?? "User"} />
+                <AvatarImage src={profileData.profile.avatarUrl ?? `https://api.dicebear.com/9.x/notionists/svg?seed=${targetUsername || profileData.user.id}`} alt={targetUsername ?? "User"} />
                 <AvatarFallback className="text-2xl">{targetUsername?.[0]?.toUpperCase()}</AvatarFallback>
               </Avatar>
 

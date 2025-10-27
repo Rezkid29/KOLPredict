@@ -1,15 +1,15 @@
 import cron, { type ScheduledTask } from 'node-cron';
-import { kolScraper } from './kol-scraper';
 import type { IStorage } from './storage';
 import type { InsertKol, Kol, InsertMarket, Market } from '@shared/schema';
+import { kolScraperV2, KOLScraperV2 } from './kol-scraper-v2';
 
 interface KOLData {
   rank: string;
   username: string;
-  xHandle: string;
-  winsLosses: string;
-  solGain: string;
-  usdGain: string;
+  xHandle: string | null;
+  winsLosses: string | null;
+  solGain: string | null;
+  usdGain: string | null;
 }
 
 export class KolscanScraperService {
@@ -20,7 +20,8 @@ export class KolscanScraperService {
     this.storage = storage;
   }
 
-  parseWinsLosses(winsLosses: string): { wins: number; losses: number } {
+  parseWinsLosses(winsLosses: string | null): { wins: number | null; losses: number | null } {
+    if (!winsLosses) return { wins: null, losses: null };
     const match = winsLosses.match(/^(\d+)\/(\d+)$/);
     if (match) {
       return {
@@ -28,7 +29,7 @@ export class KolscanScraperService {
         losses: parseInt(match[2], 10),
       };
     }
-    return { wins: 0, losses: 0 };
+    return { wins: null, losses: null };
   }
 
   parseSolGain(solGain: string): number {
@@ -42,10 +43,10 @@ export class KolscanScraperService {
 
   async transformScrapedKol(scrapedData: KOLData): Promise<InsertKol> {
     const { wins, losses } = this.parseWinsLosses(scrapedData.winsLosses);
-    const totalTrades = wins + losses;
-    const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+    const totalTrades = (wins || 0) + (losses || 0);
+    const winRate = totalTrades > 0 ? ((wins || 0) / totalTrades) * 100 : 0;
 
-    const solGain = this.parseSolGain(scrapedData.solGain);
+    const solGain = this.parseSolGain(scrapedData.solGain || '0');
     
     let tier: string;
     if (solGain >= 1000) tier = 'Elite';
@@ -53,12 +54,12 @@ export class KolscanScraperService {
     else if (solGain >= 100) tier = 'Rising';
     else tier = 'Rookie';
 
-    const handle = scrapedData.xHandle || scrapedData.username.toLowerCase().replace(/\s+/g, '');
+    const handle = scrapedData.xHandle ? scrapedData.xHandle.replace('@', '').toLowerCase() : scrapedData.username.toLowerCase().replace(/\s+/g, '');
     
     return {
       name: scrapedData.username,
       handle: handle,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${handle}`,
+      avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=${handle}`,
       followers: Math.floor(Math.random() * 50000) + 10000,
       engagementRate: winRate.toFixed(2),
       tier,
@@ -67,8 +68,8 @@ export class KolscanScraperService {
       kolscanRank: scrapedData.rank,
       kolscanWins: wins,
       kolscanLosses: losses,
-      kolscanSolGain: scrapedData.solGain,
-      kolscanUsdGain: scrapedData.usdGain,
+      kolscanSolGain: scrapedData.solGain || null,
+      kolscanUsdGain: scrapedData.usdGain || null,
       lastScrapedAt: new Date(),
       scrapedFromKolscan: true,
     };
@@ -81,7 +82,7 @@ export class KolscanScraperService {
 
     for (const scrapedKol of scrapedKols) {
       try {
-        const handle = scrapedKol.xHandle || scrapedKol.username.toLowerCase().replace(/\s+/g, '');
+        const handle = scrapedKol.xHandle ? scrapedKol.xHandle.replace('@', '').toLowerCase() : scrapedKol.username.toLowerCase().replace(/\s+/g, '');
         const existingKol = await this.storage.getKolByHandle(handle);
 
         const kolData = await this.transformScrapedKol(scrapedKol);
@@ -109,7 +110,7 @@ export class KolscanScraperService {
     const markets: InsertMarket[] = [];
     const currentSolGain = this.parseSolGain(kol.kolscanSolGain || '0');
 
-    const solGainThresholds = [50, 100, 250, 500];
+    const solGainThresholds = [15, 20, 25, 30, 35, 40, 45, 50];
     const threshold = solGainThresholds.find(t => t > currentSolGain) || 1000;
 
     const marketTypes = [
@@ -141,7 +142,8 @@ export class KolscanScraperService {
         kolId: kol.id,
         title: marketType.title,
         description: marketType.description,
-        outcome: marketType.outcome,
+        // Status field must be 'pending' for live/open markets
+        outcome: 'pending',
         resolvesAt,
         marketType: 'kolscan',
         requiresXApi: false,
@@ -206,10 +208,18 @@ export class KolscanScraperService {
     console.log('='.repeat(70));
 
     try {
-      await kolScraper.init();
-      const scrapedKols = await kolScraper.scrapeLeaderboard();
+      await kolScraperV2.init();
+      const leaderboardData = await kolScraperV2.scrapeLeaderboard();
+      const scrapedKols = leaderboardData.map(entry => ({
+        rank: entry.summary.rank,
+        username: entry.summary.username,
+        xHandle: entry.summary.xHandle,
+        winsLosses: entry.summary.winsLosses,
+        solGain: entry.summary.solGain,
+        usdGain: entry.summary.usdGain,
+      }));
       console.log(`📊 Scraped ${scrapedKols.length} KOLs from kolscan`);
-
+      
       const importedKols = await this.importOrUpdateKols(scrapedKols);
       
       const marketsCreated = await this.generateMarkets(importedKols);
@@ -230,7 +240,7 @@ export class KolscanScraperService {
       console.error('❌ Import & generation failed:', error);
       throw error;
     } finally {
-      await kolScraper.close();
+      await kolScraperV2.close();
     }
   }
 

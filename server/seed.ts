@@ -31,7 +31,7 @@ async function seed() {
       {
         name: "Sarah Chen",
         handle: "sarahchen",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=sarah`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=sarah`,
         followers: 125000,
         engagementRate: "4.8",
         tier: "Elite",
@@ -41,7 +41,7 @@ async function seed() {
       {
         name: "Alex Morgan",
         handle: "alexmorgan",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=alex`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=alex`,
         followers: 89000,
         engagementRate: "3.2",
         tier: "Rising",
@@ -51,7 +51,7 @@ async function seed() {
       {
         name: "Jordan Lee",
         handle: "jordanlee",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=jordan`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=jordan`,
         followers: 210000,
         engagementRate: "5.6",
         tier: "Elite",
@@ -61,7 +61,7 @@ async function seed() {
       {
         name: "Taylor Swift",
         handle: "taylorswift",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=taylor`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=taylor`,
         followers: 340000,
         engagementRate: "6.2",
         tier: "Legendary",
@@ -71,7 +71,7 @@ async function seed() {
       {
         name: "Chris Evans",
         handle: "chrisevans",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=chris`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=chris`,
         followers: 56000,
         engagementRate: "2.9",
         tier: "Growing",
@@ -81,7 +81,7 @@ async function seed() {
       {
         name: "Emma Watson",
         handle: "emmawatson",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=emma`,
+        avatar: `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=emma`,
         followers: 178000,
         engagementRate: "4.1",
         tier: "Elite",
