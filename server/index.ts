@@ -123,6 +123,7 @@ app.use((req, res, next) => {
     // this serves both the API and the client.
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || '5175', 10);
+    const enableBackgroundServices = process.env.ENABLE_BACKGROUND_SERVICES === 'true';
     
     // Start listening immediately to prevent Railway timeout
     server.listen(port, "0.0.0.0", () => {
@@ -135,11 +136,15 @@ app.use((req, res, next) => {
       
       console.log("✅ Server is ready to accept connections");
       
-      // Start background services AFTER server is listening
-      // This prevents Railway timeout during Puppeteer initialization
-      setTimeout(() => {
-        startBackgroundServices();
-      }, 1000);
+      if (enableBackgroundServices) {
+        // Start background services AFTER server is listening
+        // This prevents Railway timeout during Puppeteer initialization
+        setTimeout(() => {
+          startBackgroundServices();
+        }, 1000);
+      } else {
+        console.log("ℹ️ Background services disabled via ENABLE_BACKGROUND_SERVICES=false");
+      }
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
