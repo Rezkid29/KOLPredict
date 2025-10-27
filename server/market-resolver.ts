@@ -1,8 +1,8 @@
 import { dbStorage as storage } from "./db-storage";
 import { socialMediaClient } from "./social-api-client";
 import { xApiClient } from "./x-api-client";
-import { KOLScraper } from "./kol-scraper";
-import { KOLDataParser } from "./kol-data-parser";
+import { KOLScraperV2 } from "./kol-scraper-v2";
+import { KOLDataParser, type RawKOLData } from "./kol-data-parser";
 import type { Market, Bet, Kol, ScrapedKol } from "@shared/schema";
 
 export interface MarketResolution {
@@ -19,7 +19,7 @@ export class MarketResolver {
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
   private async getFreshKolData(limit: number = 20): Promise<ScrapedKol[]> {
-    const dedicatedScraper = new KOLScraper();
+    const dedicatedScraper = new KOLScraperV2();
     try {
       console.log('🔄 Performing on-demand scrape for fresh KOL data...');
       await dedicatedScraper.init();
@@ -27,8 +27,8 @@ export class MarketResolver {
       console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
 
       // Log the structured data for debugging
-      console.log("Structured KOL Data:", freshData.map(kol => {
-        const parsed = KOLDataParser.parseRawKOLData(kol);
+      console.log("Structured KOL Data:", freshData.map((kol: { summary: RawKOLData; profileUrl: string | null }) => {
+        const parsed = KOLDataParser.parseRawKOLData(kol.summary);
         return {
           rank: parsed.rank,
           username: parsed.username,
@@ -41,8 +41,8 @@ export class MarketResolver {
         };
       }));
 
-      return freshData.slice(0, limit).map(kol => {
-        const parsed = KOLDataParser.parseRawKOLData(kol);
+      return freshData.slice(0, limit).map((kol: { summary: RawKOLData; profileUrl: string | null }) => {
+        const parsed = KOLDataParser.parseRawKOLData(kol.summary);
         return {
           id: '',
           rank: parsed.rank,
@@ -52,6 +52,17 @@ export class MarketResolver {
           losses: parsed.losses ?? null,
           solGain: parsed.solGain ?? null,
           usdGain: parsed.usdGain ?? null,
+          // Optional timeframes and metrics default to null in fresh leaderboard-only scrape
+          pnl1d: null,
+          pnl7d: null,
+          pnl30d: null,
+          winRate1d: null,
+          winRate7d: null,
+          winRate30d: null,
+          totalTrades1d: null,
+          totalTrades7d: null,
+          totalTrades30d: null,
+          profileUrl: kol.profileUrl ?? null,
           scrapedAt: new Date(),
         };
       });
@@ -932,6 +943,10 @@ export class MarketResolver {
       this.resolutionInterval = null;
       console.log("Auto-resolution stopped");
     }
+  }
+
+  isAutoResolutionRunning(): boolean {
+    return this.resolutionInterval !== null;
   }
 
   async resolveAllMarkets(): Promise<MarketResolution[]> {

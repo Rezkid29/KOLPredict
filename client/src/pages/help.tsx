@@ -37,9 +37,56 @@ export default function Help() {
             Help Center
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Find answers to common questions about KOL Market
+            Find answers to common questions about KOLPredict
           </p>
         </div>
+
+        {/* Odds & Pricing Overview */}
+        <Card className="p-6 mb-10 bg-muted/30 border border-border/60">
+          <h2 className="text-xl font-semibold mb-3">Odds & Pricing Overview</h2>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>
+              Initial odds are data-driven. Markets start with prices derived from signals, not a fixed 50/50.
+              YES/NO prices are exposed as <span className="font-medium">currentYesPrice</span> and <span className="font-medium">currentNoPrice</span>.
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Head-to-head markets tilt odds by signals (rank, SOL gain, USD gain, win rate, win/loss ratio).</li>
+              <li>Solo markets tilt by proximity to target (e.g., progress to SOL threshold, top-10 maintain, rank steps to improve).</li>
+              <li>Follower growth starts neutral (50/50) unless additional signals are present.</li>
+              <li>Charts seed the first point from current prices when history is empty and tooltips show $ and %.</li>
+              <li>Cards and modals display the same odds (NO is derived as 1 − YES when needed).</li>
+            </ul>
+            <p>
+              Prices then evolve via the AMM (constant product). Each bet updates pools and moves the price.
+            </p>
+          </div>
+        </Card>
+
+        {/* Market Types Cheat Sheet */}
+        <Card className="p-6 mb-10">
+          <h2 className="text-xl font-semibold mb-4">Market Types Cheat Sheet</h2>
+          <div className="grid md:grid-cols-2 gap-4 text-sm">
+            <div className="p-4 rounded-lg border border-border/60 bg-muted/20">
+              <div className="font-semibold mb-2">Head‑to‑Head</div>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>Rank Flippening: better rank → higher YES probability</li>
+                <li>SOL Gain Flippening: higher SOL gain → higher YES probability</li>
+                <li>USD Gain Flippening: higher USD gain → higher YES probability</li>
+                <li>Win Rate/Win‑Loss Ratio Flippening: better metric → higher YES probability</li>
+              </ul>
+            </div>
+            <div className="p-4 rounded-lg border border-border/60 bg-muted/20">
+              <div className="font-semibold mb-2">Solo</div>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>SOL Gain Threshold: closer to target → higher YES probability</li>
+                <li>Top‑Rank Maintain: deeper inside top‑N → higher YES probability</li>
+                <li>Rank Improvement: fewer steps required → higher YES probability</li>
+                <li>Win‑Loss Ratio Maintain: margin above threshold → higher YES probability</li>
+                <li>Follower Growth: neutral baseline (50/50)</li>
+              </ul>
+            </div>
+          </div>
+        </Card>
 
         {isLoading ? (
           <Card className="p-8">

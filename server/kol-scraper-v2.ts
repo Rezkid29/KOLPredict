@@ -1,11 +1,33 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
+import { Browser, Page, executablePath as puppeteerExecutablePath } from 'puppeteer';
+import { pathToFileURL } from 'url';
+import fs from 'fs';
 import { dbStorage } from "./db-storage";
 import type { InsertScrapedKol } from "@shared/schema";
 import { KOLDataParser, type RawKOLData, type FullKOLData, type KOLDetailedData } from './kol-data-parser';
 
 puppeteer.use(StealthPlugin());
+
+function resolveChromiumExecutablePath(): string | undefined {
+const fromEnv = process.env.CHROMIUM_EXECUTABLE_PATH;
+if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+try {
+const bundled = puppeteerExecutablePath?.();
+if (bundled && fs.existsSync(bundled)) return bundled;
+} catch {}
+const candidates = [
+'/usr/bin/google-chrome',
+'/usr/bin/google-chrome-stable',
+'/usr/bin/chromium',
+'/usr/bin/chromium-browser',
+'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+];
+for (const p of candidates) {
+if (fs.existsSync(p)) return p;
+}
+return undefined;
+}
 
 export class KOLScraperV2 {
 private browser?: Browser;
@@ -34,9 +56,16 @@ args: [
 ]
 };
 
-const chromiumPath = process.env.CHROMIUM_EXECUTABLE_PATH || '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium';
+const chromiumPath = resolveChromiumExecutablePath();
+if (chromiumPath) {
 console.log(`Using Chromium from: ${chromiumPath}`);
 launchOptions.executablePath = chromiumPath;
+} else {
+console.log('No valid Chromium path found. Relying on Puppeteer default.');
+}
+/*const chromiumPath = process.env.CHROMIUM_EXECUTABLE_PATH || '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium';
+console.log(`Using Chromium from: ${chromiumPath}`);
+launchOptions.executablePath = chromiumPath;*/
 
 this.browser = await puppeteer.launch(launchOptions);
 this.leaderboardPage = await this.browser.newPage();
@@ -94,25 +123,38 @@ if (profileLink) {
 profileUrl = profileLink.getAttribute('href');
 }
 
-// Extract username from <h1> inside the profile link
+// Extract username using multiple robust selectors near the profile link
 let username = 'Unknown';
-const usernameEl = row.querySelector('h1');
-if (usernameEl && usernameEl.textContent) {
-username = usernameEl.textContent.trim();
+const nameCandidates = [
+  profileLink?.querySelector('h1, h2, [class*="name"], [class*="username"]'),
+  row.querySelector('h1, h2, [class*="name"], [class*="username"]'),
+];
+for (const cand of nameCandidates) {
+  const text = cand?.textContent?.trim();
+  if (text && /[A-Za-z]/.test(text) && !text.startsWith('@') && text.length <= 50) {
+    username = text;
+    break;
+  }
+}
+if (username === 'Unknown') {
+  // Fallback heuristic: first line-like token with letters, excluding prices/stats
+  const tokens = (fullText || '').split('\n').map(t => t.trim()).filter(Boolean);
+  const pick = tokens.find(t => /[A-Za-z]/.test(t) && !t.includes('Sol') && !t.includes('$') && !/\d+\s*\/\s*\d+/.test(t) && !/^\d+$/.test(t));
+  if (pick) username = pick;
 }
 
-// Extract X handle - look for the paragraph next to Twitter logo
+// Extract X handle from common locations (twitter/x links or text near icons)
 let xHandle: string | null = null;
-const twitterLogo = row.querySelector('img[alt="twitter logo"]');
-if (twitterLogo) {
-// The handle should be in a <p> element that's a sibling
-const handleEl = twitterLogo.nextElementSibling;
-if (handleEl && handleEl.tagName === 'P') {
-const handleText = handleEl.textContent?.trim();
-if (handleText) {
-xHandle = handleText;
+const handleLink = row.querySelector('a[href*="twitter.com"], a[href*="x.com"]') as HTMLAnchorElement | null;
+if (handleLink) {
+  const href = handleLink.getAttribute('href') || '';
+  const m = href.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{3,15})/);
+  if (m) xHandle = m[1];
 }
-}
+if (!xHandle) {
+  const maybeHandle = row.querySelector('[class*="handle"], [class*="twitter"], [class*="x-"]');
+  const txt = maybeHandle?.textContent?.trim().replace('@', '');
+  if (txt && /^[A-Za-z0-9_]{3,15}$/.test(txt)) xHandle = txt;
 }
 
 // Extract wins/losses - look for pattern like "123/45" in the text
@@ -296,7 +338,7 @@ try {
 await this.init();
 const leaderboardEntries = await this.scrapeLeaderboard();
 
-const limitedEntries = leaderboardEntries.slice(0, 3);
+const limitedEntries = leaderboardEntries.slice(0, 20);
 console.log(`Found ${leaderboardEntries.length} KOLs. Processing ${limitedEntries.length} for testing...`);
 
 for (const entry of limitedEntries) {
@@ -400,7 +442,16 @@ await scraper.close();
 }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const __isDirectRun = (() => {
+try {
+const argHref = pathToFileURL(process.argv[1]).href;
+return import.meta.url === argHref;
+} catch {
+return false;
+}
+})();
+
+if (__isDirectRun) {
 main().catch(err => console.error('Error running main:', err));
 }
 

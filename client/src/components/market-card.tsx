@@ -18,8 +18,11 @@ interface MarketCardProps {
 
 export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const yesPrice = parseFloat(market.yesPrice);
-  const noPrice = parseFloat(market.noPrice);
+  // Prefer new CPMM prices, fallback to legacy if needed, then to 0.5
+  const rawYes = parseFloat((market as any).currentYesPrice ?? market.yesPrice ?? '0.5');
+  const rawNo = parseFloat((market as any).currentNoPrice ?? market.noPrice ?? '0.5');
+  const yesPrice = Number.isFinite(rawYes) ? rawYes : 0.5;
+  const noPrice = Number.isFinite(rawNo) ? rawNo : (1 - yesPrice);
   const engagement = parseFloat(market.engagement);
 
   const { data: priceHistory = [] } = useQuery<PriceHistoryPoint[]>({
@@ -30,6 +33,11 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
       return response.json();
     },
   });
+
+  const seededData: PriceHistoryPoint[] =
+    priceHistory.length > 0
+      ? priceHistory
+      : [{ time: new Date().toLocaleTimeString(), yesPrice, noPrice }];
 
   const getCategoryDisplay = (category?: string | null) => {
     switch (category) {
@@ -144,7 +152,7 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
               </Badge>
             )}
           </div>
-          <PerformanceChart data={priceHistory} color="hsl(var(--primary))" />
+          <PerformanceChart data={seededData} color="hsl(var(--primary))" />
         </div>
 
         {/* KOL metrics */}

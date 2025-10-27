@@ -38,8 +38,10 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
 
   if (!market) return null;
 
-  const yesPrice = parseFloat(market.yesPrice);
-  const noPrice = parseFloat(market.noPrice);
+  const rawYes = parseFloat((market as any).currentYesPrice ?? market.yesPrice ?? '0.5');
+  const rawNo = parseFloat((market as any).currentNoPrice ?? market.noPrice ?? '0.5');
+  const yesPrice = Number.isFinite(rawYes) ? rawYes : 0.5;
+  const noPrice = Number.isFinite(rawNo) ? rawNo : (1 - yesPrice);
   const currentPrice = position === "YES" ? yesPrice : noPrice;
   const betAmount = parseFloat(amount) || 0;
   const currentShares = position === "YES" ? userYesShares : userNoShares;
@@ -75,10 +77,10 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
     }
   };
 
-  const yesSharePool = parseFloat(market.yesSharePool);
-  const yesCollateralPool = parseFloat(market.yesCollateralPool);
-  const noSharePool = parseFloat(market.noSharePool);
-  const noCollateralPool = parseFloat(market.noCollateralPool);
+  const yesSharePool = parseFloat((market as any).yesSharePool ?? '20000');
+  const yesCollateralPool = parseFloat((market as any).yesCollateralPool ?? (yesPrice * 20000).toString());
+  const noSharePool = parseFloat((market as any).noSharePool ?? '20000');
+  const noCollateralPool = parseFloat((market as any).noCollateralPool ?? (noPrice * 20000).toString());
   
   const estimatedShares = action === "buy" 
     ? calculateAMMShares(amountAfterFee, position, yesSharePool, yesCollateralPool, noSharePool, noCollateralPool)

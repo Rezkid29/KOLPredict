@@ -185,7 +185,8 @@ export default function Home() {
         username={user?.username ?? undefined}
         walletRef={walletRef}
         userBadgeRef={userBadgeRef}
-        tourHelpButton={<AppTour 
+        tourHelpButton={<AppTour
+          userId={user?.id}
           marketCardRef={marketCardRef}
           walletRef={walletRef}
           userBadgeRef={userBadgeRef}

@@ -10,14 +10,18 @@ interface AppTourProps {
   marketCardRef?: React.RefObject<HTMLDivElement>;
   walletRef?: React.RefObject<HTMLDivElement>;
   userBadgeRef?: React.RefObject<HTMLDivElement>;
+  userId?: string;
 }
 
-export function AppTour({ onComplete, marketCardRef, walletRef, userBadgeRef }: AppTourProps) {
+export function AppTour({ onComplete, marketCardRef, walletRef, userBadgeRef, userId }: AppTourProps) {
   const [open, setOpen] = useState(false);
+
+  const makeKey = () => (userId ? `hasSeenTour:${userId}` : "hasSeenTour:anon");
 
   // Auto-start tour for first-time users
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem("hasSeenTour");
+    const key = makeKey();
+    const hasSeenTour = localStorage.getItem(key);
     if (!hasSeenTour) {
       // Delay to ensure DOM elements are rendered
       const timer = setTimeout(() => {
@@ -25,11 +29,11 @@ export function AppTour({ onComplete, marketCardRef, walletRef, userBadgeRef }: 
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [userId]);
 
   const handleClose = () => {
     setOpen(false);
-    localStorage.setItem("hasSeenTour", "true");
+    localStorage.setItem(makeKey(), "true");
     onComplete?.();
   };
 
@@ -43,19 +47,19 @@ export function AppTour({ onComplete, marketCardRef, walletRef, userBadgeRef }: 
     {
       title: "Live Market Cards 📊",
       description: "Each card shows a live prediction market. You can see the KOL's name, market question, current YES/NO prices, performance metrics, and trading buttons. Click 'Buy' to purchase YES shares or 'Sell' to purchase NO shares.",
-      target: () => marketCardRef.current,
+      target: marketCardRef?.current ? () => marketCardRef.current as HTMLElement : null,
       placement: "bottom",
     },
     {
       title: "Your Wallet Balance 💰",
       description: "This shows your current points balance. You start with 1000 PTS. Use these points to trade on markets and grow your portfolio!",
-      target: () => walletRef.current,
+      target: walletRef?.current ? () => walletRef.current as HTMLElement : null,
       placement: "bottom",
     },
     {
       title: "Your Profile Badge 👤",
       description: "Click here to view your profile, track your trading history, see your positions, and check your performance on the leaderboard.",
-      target: () => userBadgeRef.current,
+      target: userBadgeRef?.current ? () => userBadgeRef.current as HTMLElement : null,
       placement: "bottomLeft",
     },
     {

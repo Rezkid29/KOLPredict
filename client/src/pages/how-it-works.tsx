@@ -18,14 +18,14 @@ export default function HowItWorks() {
         <div className="text-center mb-20">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-6">
             <Activity className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Powered by Constant Product AMM</span>
+            <span className="text-sm font-medium text-primary">Data‑Driven Odds • Constant Product AMM</span>
           </div>
           <h1 className="text-6xl font-display font-bold mb-6" style={{ color: 'hsl(48 95% 60% / 1)' }}>
             How It Works
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            A real-time prediction market using automated market making with constant product formulas. 
-            Every bet adjusts prices dynamically through <span className="text-primary font-semibold">k = yesPool × noPool</span>
+            Markets begin with <span className="font-semibold">data‑driven initial odds</span> (not fixed 50/50) and evolve via a
+            constant product AMM. Every bet adjusts prices through <span className="text-primary font-semibold">k = yesPool × noPool</span>.
           </p>
         </div>
 
@@ -52,6 +52,14 @@ export default function HowItWorks() {
                 <div className="text-xs text-muted-foreground mt-4 pt-4 border-t border-primary/10">
                   Prices always sum to 1.00 — representing 100% probability distribution
                 </div>
+              </div>
+              <div className="bg-background/80 rounded-lg p-6 text-sm border border-primary/10">
+                <div className="text-primary font-semibold mb-2">Initial Odds (currentYesPrice/currentNoPrice)</div>
+                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                  <li>Head‑to‑head: rank, SOL gain, USD gain, win rate, win/loss ratio</li>
+                  <li>Solo: progress to threshold (SOL), top‑10 maintain, rank‑improvement steps, ratio margin</li>
+                  <li>Follower growth starts at 50/50</li>
+                </ul>
               </div>
             </Card>
 
@@ -203,6 +211,37 @@ export default function HowItWorks() {
                   <span className="text-chart-4 mt-1">•</span>
                   Instant payout distribution
                 </li>
+              </ul>
+            </Card>
+          </div>
+        </div>
+
+        {/* Market Types → Signals */}
+        <div className="mb-20">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <BarChart3 className="h-6 w-6 text-primary" />
+            </div>
+            <h2 className="text-4xl font-display font-bold">Market Types and Signals</h2>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6 text-sm">
+            <Card className="p-6 border border-border/60">
+              <h3 className="font-semibold mb-2">Head‑to‑Head</h3>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>Rank Flippening — better rank → higher YES</li>
+                <li>SOL Gain Flippening — higher SOL gain → higher YES</li>
+                <li>USD Gain Flippening — higher USD gain → higher YES</li>
+                <li>Win Rate/Win‑Loss Ratio Flippening — stronger stat → higher YES</li>
+              </ul>
+            </Card>
+            <Card className="p-6 border border-border/60">
+              <h3 className="font-semibold mb-2">Solo</h3>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>SOL Gain Threshold — closer to target → higher YES</li>
+                <li>Top‑Rank Maintain — deeper inside top‑N → higher YES</li>
+                <li>Rank Improvement — fewer steps to target → higher YES</li>
+                <li>Win‑Loss Ratio Maintain — margin above threshold → higher YES</li>
+                <li>Follower Growth — neutral baseline (50/50)</li>
               </ul>
             </Card>
           </div>

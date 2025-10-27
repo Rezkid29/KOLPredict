@@ -1298,7 +1298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Manual trigger for market resolution
+  // Manual trigger for expired market resolution only
   app.post("/api/admin/resolve-markets", async (req, res) => {
     try {
       const resolutions = await marketResolver.resolveExpiredMarkets();
@@ -1314,14 +1314,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ 
-        message: "Market resolution completed", 
+      res.json({
+        message: "Expired market resolution completed",
         resolved: resolutions.length,
         resolutions,
       });
     } catch (error) {
       console.error("Error resolving markets:", error);
       res.status(500).json({ message: "Failed to resolve markets" });
+    }
+  });
+
+  // Manual trigger for resolving ALL markets (force resolution)
+  app.post("/api/admin/resolve-all-markets", async (req, res) => {
+    try {
+      const resolutions = await marketResolver.resolveAllMarkets();
+
+      for (const resolution of resolutions) {
+        const market = await storage.getMarketWithKol(resolution.marketId);
+        if (market) {
+          broadcast({
+            type: 'MARKET_RESOLVED',
+            market,
+            resolution,
+          });
+        }
+      }
+
+      res.json({
+        message: "All markets force resolution completed",
+        resolved: resolutions.length,
+        resolutions,
+      });
+    } catch (error) {
+      console.error("Error resolving all markets:", error);
+      res.status(500).json({ message: "Failed to resolve all markets" });
     }
   });
 
@@ -1449,12 +1476,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Resolve ALL markets and generate new ones
+  // Resolve ALL markets and generate new ones (one-time operation)
   app.post("/api/admin/reset-markets", async (req, res) => {
     try {
       console.log('\n' + '='.repeat(70));
-      console.log('MARKET RESET: Resolving all markets and generating new ones');
+      console.log('ONE-TIME MARKET RESET: Temporarily pausing auto-resolution and scheduler, resolving all markets, and generating new ones');
       console.log('='.repeat(70));
+
+      // Temporarily stop the scheduler and auto-resolution to prevent conflicts during reset
+      const wasSchedulerRunning = scheduler.getStatus().marketGeneration.running;
+      const wasAutoResolutionRunning = marketResolver.isAutoResolutionRunning();
+
+      if (wasSchedulerRunning) {
+        scheduler.stopMarketGenerationSchedule();
+        console.log('⏸️  Market generation scheduler temporarily paused');
+      }
+
+      if (wasAutoResolutionRunning) {
+        marketResolver.stopAutoResolution();
+        console.log('⏸️  Auto-resolution temporarily paused');
+      }
 
       const resolutions = await marketResolver.resolveAllMarkets();
 
@@ -1478,15 +1519,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`MARKET RESET COMPLETED: ${resolutions.length} resolved, ${generationResult.created} new markets created`);
       console.log('='.repeat(70) + '\n');
 
-      res.json({ 
-        message: "Market reset completed", 
+      // Restart the scheduler and auto-resolution (resumes normal operations)
+      if (wasSchedulerRunning) {
+        scheduler.startMarketGenerationSchedule();
+        console.log('▶️  Market generation scheduler resumed (daily schedule continues)');
+      }
+
+      if (wasAutoResolutionRunning) {
+        marketResolver.startAutoResolution(5);
+        console.log('▶️  Auto-resolution resumed (5-minute intervals continue)');
+      }
+
+      res.json({
+        message: "One-time market reset completed - normal operations resumed",
         resolved: resolutions.length,
         generated: generationResult.created,
+        schedulerResumed: wasSchedulerRunning,
+        autoResolutionResumed: wasAutoResolutionRunning,
         resolutions,
       });
     } catch (error) {
       console.error("Error resetting markets:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to reset markets",
         error: error instanceof Error ? error.message : 'Unknown error'
       });

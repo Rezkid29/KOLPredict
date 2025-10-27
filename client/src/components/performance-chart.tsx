@@ -28,14 +28,16 @@ export function PerformanceChart({ data, color = "hsl(var(--success))" }: Perfor
         <Tooltip
           content={({ active, payload }) => {
             if (active && payload && payload.length) {
+              const yp = Number(payload[0].payload.yesPrice) || 0;
+              const np = Number(payload[0].payload.noPrice) || 0;
               return (
                 <div className="rounded-lg border border-border bg-background px-3 py-2 shadow-lg">
                   <div className="text-xs text-muted-foreground mb-1">{payload[0].payload.time}</div>
                   <div className="text-sm font-semibold text-success tabular-nums">
-                    YES: ${Number(payload[0].payload.yesPrice).toFixed(2)}
+                    YES: ${yp.toFixed(2)} ({(yp * 100).toFixed(0)}%)
                   </div>
                   <div className="text-sm font-semibold text-destructive tabular-nums">
-                    NO: ${Number(payload[0].payload.noPrice).toFixed(2)}
+                    NO: ${np.toFixed(2)} ({(np * 100).toFixed(0)}%)
                   </div>
                 </div>
               );
