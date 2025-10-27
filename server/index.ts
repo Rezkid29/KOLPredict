@@ -58,6 +58,8 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
+app.get("/healthz", (_req, res) => {res.status(200).send("ok");});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
