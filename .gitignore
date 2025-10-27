@@ -7,3 +7,4 @@ vite.config.ts.*
 .env
 .gitignore
 .config
+semgrep_rules.json
