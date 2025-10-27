@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { createServer, type Server } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrate";
@@ -92,10 +93,21 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    // Run database migrations
-    await runMigrations();
+    const staticOnly = process.env.STATIC_ONLY === "true";
+    let server: Server;
+    let startBackgroundServices: () => void = () => {};
 
-    const { httpServer: server, startBackgroundServices } = await registerRoutes(app);
+    if (staticOnly) {
+      console.log("ℹ️ Static-only mode enabled; skipping migrations and API routes");
+      server = createServer(app);
+    } else {
+      // Run database migrations
+      await runMigrations();
+
+      const routes = await registerRoutes(app);
+      server = routes.httpServer;
+      startBackgroundServices = routes.startBackgroundServices;
+    }
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -123,7 +135,7 @@ app.use((req, res, next) => {
     // this serves both the API and the client.
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || '5175', 10);
-    const enableBackgroundServices = process.env.ENABLE_BACKGROUND_SERVICES === 'true';
+    const enableBackgroundServices = !staticOnly && process.env.ENABLE_BACKGROUND_SERVICES === 'true';
     
     // Start listening immediately to prevent Railway timeout
     server.listen(port, "0.0.0.0", () => {
