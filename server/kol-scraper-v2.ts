@@ -451,8 +451,8 @@ return false;
 }
 })();
 
-if (__isDirectRun) {
-main().catch(err => console.error('Error running main:', err));
+if (__isDirectRun && process.env.SCRAPER_STANDALONE === 'true') {
+  main().catch(err => console.error('Error running main:', err));
 }
 
 export const kolScraperV2 = new KOLScraperV2();

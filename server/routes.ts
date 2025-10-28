@@ -34,14 +34,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   const httpServer = createServer(app);
 
   // Seed database if empty
-  try {
-    const kols = await storage.getAllKols();
-    if (kols.length === 0) {
-      console.log("Database is empty, running seed...");
-      await seed();
+  if (process.env.SEED_ON_BOOT === 'true') {
+    try {
+      const kols = await storage.getAllKols();
+      if (kols.length === 0) {
+        console.log("Database is empty, running seed...");
+        await seed();
+      }
+    } catch (error) {
+      console.error("Error checking/seeding database:", error);
     }
-  } catch (error) {
-    console.error("Error checking/seeding database:", error);
   }
 
   // WebSocket server for real-time updates
