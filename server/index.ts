@@ -101,6 +101,7 @@ app.use((req, res, next) => {
       console.log("ℹ️ Static-only mode enabled; skipping migrations and API routes");
       server = createServer(app);
     } else {
+      console.log("SEED_ON_BOOT=", process.env.SEED_ON_BOOT);
       // Run database migrations
       await runMigrations();
 
