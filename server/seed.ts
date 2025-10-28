@@ -297,15 +297,3 @@ console.log("🎉 Database seeded successfully!");
 }
 
 export { seed };
-
-// Run seed only when executed directly (npm run seed)
-// When imported from other modules, this won't execute.
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
-if (isMainModule) {
-  seed()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-}
