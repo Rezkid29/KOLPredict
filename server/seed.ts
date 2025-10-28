@@ -285,20 +285,21 @@ async function seed() {
         await dbStorage.createFaq(faq);
         console.log(`✅ Created FAQ: ${faq.question}`);
       } catch (error) {
-        console.log(`ℹ️  FAQ already exists`);
+        console.error(`Error creating FAQ: ${error}`);
       }
     }
 
-    console.log("🎉 Database seeded successfully!");
-  } catch (error) {
-    console.error("❌ Error seeding database:", error);
-    throw error;
-  }
+console.log("🎉 Database seeded successfully!");
+} catch (error) {
+  console.error(`Error seeding database: ${error}`);
+  throw error;
+}
 }
 
 export { seed };
 
-// Run seed if this file is executed directly
+// Run seed only when executed directly (npm run seed)
+// When imported from other modules, this won't execute.
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   seed()
