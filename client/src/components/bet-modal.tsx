@@ -108,15 +108,15 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md" data-testid="modal-bet">
+      <DialogContent className="w-[92vw] max-w-md md:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6" data-testid="modal-bet">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
               <TrendingUp className="h-5 w-5 text-primary" />
             </div>
-            <span className="text-xl">Place Bet</span>
+            <span className="text-lg sm:text-xl">Place Bet</span>
           </DialogTitle>
-          <DialogDescription className="text-base">
+          <DialogDescription className="text-sm sm:text-base">
             {market.title}
           </DialogDescription>
         </DialogHeader>
@@ -142,7 +142,7 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
           {/* YES/NO Position Selection */}
           <div className="space-y-3">
             <Label>Choose Your Position</Label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={() => setPosition("YES")}
                 className={`p-4 rounded-lg border-2 transition-all ${
@@ -153,11 +153,11 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
                 data-testid="button-position-yes"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-lg">YES</span>
+                  <span className="font-bold text-base sm:text-lg">YES</span>
                   <ThumbsUp className={`h-5 w-5 ${position === "YES" ? "text-success" : "text-muted-foreground"}`} />
                 </div>
                 <div className="text-left">
-                  <div className="text-2xl font-bold">${yesPrice.toFixed(2)}</div>
+                  <div className="text-xl sm:text-2xl font-bold">${yesPrice.toFixed(2)}</div>
                   <div className="text-xs text-muted-foreground">{yesProbability}% chance</div>
                 </div>
               </button>
@@ -172,11 +172,11 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
                 data-testid="button-position-no"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-lg">NO</span>
+                  <span className="font-bold text-base sm:text-lg">NO</span>
                   <ThumbsDown className={`h-5 w-5 ${position === "NO" ? "text-destructive" : "text-muted-foreground"}`} />
                 </div>
                 <div className="text-left">
-                  <div className="text-2xl font-bold">${noPrice.toFixed(2)}</div>
+                  <div className="text-xl sm:text-2xl font-bold">${noPrice.toFixed(2)}</div>
                   <div className="text-xs text-muted-foreground">{noProbability}% chance</div>
                 </div>
               </button>
@@ -217,7 +217,7 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder={action === "buy" ? "Enter amount" : "Enter shares"}
-                className={`text-lg font-semibold ${action === "buy" ? "pl-7" : ""}`}
+                className={`font-semibold text-base sm:text-lg ${action === "buy" ? "pl-7" : ""}`}
                 data-testid="input-amount"
               />
             </div>
@@ -227,7 +227,7 @@ export function BetModal({ open, onClose, market, userBalance, userYesShares = 0
           {action === "buy" && (
             <div className="space-y-2">
               <Label>Quick Amount</Label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {presetAmounts.map((preset) => (
                   <Button
                     key={preset}
