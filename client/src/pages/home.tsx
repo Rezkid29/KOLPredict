@@ -5,6 +5,7 @@ import { MarketCard } from "@/components/market-card";
 import { BetModal } from "@/components/bet-modal";
 import { LiveFeed } from "@/components/live-feed";
 import { LiveCarousel } from "@/components/live-carousel";
+import { DailyHighlights } from "@/components/analytics/DailyHighlights";
 import { AppTour } from "@/components/app-tour";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -253,6 +254,11 @@ export default function Home() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Daily Highlights (Analytics) */}
+      <section className="container mx-auto px-4 py-10">
+        <DailyHighlights />
       </section>
 
       {/* Main Content */}
