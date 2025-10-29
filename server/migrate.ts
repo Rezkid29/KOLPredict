@@ -101,6 +101,43 @@ export async function runMigrations() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
 
+      -- User profiles required by social/messaging UI
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL UNIQUE REFERENCES users(id),
+        bio TEXT,
+        avatar_url TEXT,
+        total_bets INTEGER NOT NULL DEFAULT 0,
+        total_wins INTEGER NOT NULL DEFAULT 0,
+        total_losses INTEGER NOT NULL DEFAULT 0,
+        total_volume DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+        profit_loss DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+        win_rate DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+        roi DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        followers_count INTEGER NOT NULL DEFAULT 0,
+        following_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      -- Conversations and messages for direct messaging
+      CREATE TABLE IF NOT EXISTS conversations (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user1_id VARCHAR NOT NULL REFERENCES users(id),
+        user2_id VARCHAR NOT NULL REFERENCES users(id),
+        last_message_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id VARCHAR NOT NULL REFERENCES conversations(id),
+        sender_id VARCHAR NOT NULL REFERENCES users(id),
+        content TEXT NOT NULL,
+        read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS kol_metrics_history (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         kol_id VARCHAR NOT NULL REFERENCES kols(id),

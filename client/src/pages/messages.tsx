@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navbar } from "@/components/navbar";
 import { Card } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 import { Send, MessageCircle, Plus, Search, Loader2, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -40,19 +40,32 @@ export default function Messages() {
     queryKey: ["/api/user"],
   });
 
+  // Require real server session for messaging
+  const { data: meProfile } = useQuery<any>({
+    queryKey: ["/api/users/me/profile"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: !!user,
+  });
+  const hasSession = !!meProfile;
+
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithParticipants[]>({
     queryKey: ["/api/conversations"],
     queryFn: async () => {
       const result = await apiRequest("GET", "/api/conversations");
       return result.json();
     },
-    enabled: !!user,
+    enabled: !!user && hasSession,
   });
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", selectedConversationId, "messages"],
-    enabled: !!selectedConversationId,
+    enabled: !!selectedConversationId && hasSession,
   });
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedConversationId, messages]);
 
   const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -150,13 +163,19 @@ export default function Messages() {
   });
 
   const handleSendMessage = () => {
+    if (!hasSession) {
+      toast({ title: "Session expired", description: "Please sign in again to send messages.", variant: "destructive" });
+      return;
+    }
     if (!messageInput.trim()) return;
     sendMessageMutation.mutate(messageInput.trim());
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
-    markAsReadMutation.mutate(conversationId);
+    if (hasSession) {
+      markAsReadMutation.mutate(conversationId);
+    }
   };
 
   const handleCreateConversation = (otherUserId: string) => {
@@ -201,7 +220,13 @@ export default function Messages() {
               </Button>
             </div>
 
-            {conversationsLoading ? (
+            {!hasSession ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <MessageCircle className="h-12 w-12 mb-4 opacity-50" />
+                <p className="font-medium mb-1">Login required</p>
+                <p className="text-sm">Please sign in to view and send messages</p>
+              </div>
+            ) : conversationsLoading ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="animate-pulse text-muted-foreground">Loading...</div>
               </div>
@@ -275,8 +300,8 @@ export default function Messages() {
             {!selectedConversationId ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                 <MessageCircle className="h-16 w-16 mb-4 opacity-50" />
-                <p className="font-medium mb-1">Select a conversation</p>
-                <p className="text-sm">Choose a conversation from the list to start messaging</p>
+                <p className="font-medium mb-1">{hasSession ? "Select a conversation" : "Login required"}</p>
+                <p className="text-sm">{hasSession ? "Choose a conversation from the list to start messaging" : "Please sign in to use messaging"}</p>
               </div>
             ) : (
               <>
@@ -313,7 +338,7 @@ export default function Messages() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {messages.map((message) => {
+                      {[...messages].reverse().map((message) => {
                         const isOwnMessage = message.senderId === user?.id;
 
                         return (
@@ -337,6 +362,7 @@ export default function Messages() {
                           </div>
                         );
                       })}
+                      <div ref={messagesEndRef} />
                     </div>
                   )}
                 </ScrollArea>
@@ -355,12 +381,12 @@ export default function Messages() {
                         }
                       }}
                       className="flex-1"
-                      disabled={sendMessageMutation.isPending}
+                      disabled={sendMessageMutation.isPending || !hasSession}
                       data-testid="input-message"
                     />
                     <Button
                       onClick={handleSendMessage}
-                      disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                      disabled={!messageInput.trim() || sendMessageMutation.isPending || !hasSession}
                       className="gap-2"
                       data-testid="button-send"
                     >

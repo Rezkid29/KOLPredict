@@ -2203,26 +2203,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ message: "Conversation ID is required" });
       }
 
-      // First, get the conversation to verify participants
-      const conversation = await db.transaction(async (tx) => {
-        const [conv] = await tx
-          .select()
-          .from(conversations)
-          .where(eq(conversations.id, id))
-          .limit(1);
-        return conv;
-      });
-
+      // Verify user is a participant by looking up user's conversations
+      const userConversations = await storage.getUserConversations(userId, 1000);
+      const conversation = userConversations.find((c) => c.id === id);
       if (!conversation) {
         return res.status(404).json({ message: "Conversation not found" });
       }
 
-      // Verify user is a participant (either user1 or user2)
-      const isParticipant = conversation.user1Id === userId || conversation.user2Id === userId;
-
-      if (!isParticipant) {
-        return res.status(403).json({ message: "You are not authorized to view this conversation" });
-      }
+      // If we found it in user's conversations, user is a participant
 
       const messages = await storage.getConversationMessages(id, limit);
       res.json(messages);
@@ -2257,26 +2245,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ message: validation.error });
       }
 
-      // First, get the conversation to verify participants
-      const conversation = await db.transaction(async (tx) => {
-        const [conv] = await tx
-          .select()
-          .from(conversations)
-          .where(eq(conversations.id, id))
-          .limit(1);
-        return conv;
-      });
-
+      // Verify sender is a participant by looking up sender's conversations
+      const senderConversations = await storage.getUserConversations(senderId, 1000);
+      const conversation = senderConversations.find((c) => c.id === id);
       if (!conversation) {
         return res.status(404).json({ message: "Conversation not found" });
       }
 
-      // Verify user is a participant (either user1 or user2)
-      const isParticipant = conversation.user1Id === senderId || conversation.user2Id === senderId;
-
-      if (!isParticipant) {
-        return res.status(403).json({ message: "You are not authorized to send messages in this conversation" });
-      }
+      // If we found it in user's conversations, user is a participant
 
       const sanitizedContent = sanitizeInput(content);
       const message = await storage.createMessage({
@@ -2284,6 +2260,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         senderId,
         content: sanitizedContent,
       });
+
+      try {
+        broadcast({ type: 'NEW_MESSAGE', conversationId: id, message });
+      } catch (e) {
+        console.error('Error broadcasting NEW_MESSAGE:', e);
+      }
 
       res.json(message);
     } catch (error) {
@@ -2310,28 +2292,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ message: "Conversation ID is required" });
       }
 
-      // First, get the conversation to verify participants
-      const conversation = await db.transaction(async (tx) => {
-        const [conv] = await tx
-          .select()
-          .from(conversations)
-          .where(eq(conversations.id, id))
-          .limit(1);
-        return conv;
-      });
-
+      // Verify user is a participant by looking up user's conversations
+      const userConversations = await storage.getUserConversations(userId, 1000);
+      const conversation = userConversations.find((c) => c.id === id);
       if (!conversation) {
         return res.status(404).json({ message: "Conversation not found" });
       }
 
-      // Verify user is a participant (either user1 or user2)
-      const isParticipant = conversation.user1Id === userId || conversation.user2Id === userId;
-
-      if (!isParticipant) {
-        return res.status(403).json({ message: "You are not authorized to access this conversation" });
-      }
+      // If we found it in user's conversations, user is a participant
 
       await storage.markMessagesAsRead(id, userId);
+
+      try {
+        broadcast({ type: 'MESSAGE_READ', conversationId: id, userId });
+      } catch (e) {
+        console.error('Error broadcasting MESSAGE_READ:', e);
+      }
+
       res.json({ message: "Messages marked as read" });
     } catch (error) {
       console.error("Error marking messages as read:", error);
