@@ -246,7 +246,7 @@ export default function Home() {
                   CA:{" "}
                 </span>
                 <span className="text-sm font-bold tabular-nums text-white">
-                  null
+                  HwDzKYj6ZL5PNFtyhgp96EFHSUjiVG7W4j3tmbL4pump
                 </span>
               </div>
             </div>
