@@ -268,7 +268,7 @@ export default function Messages() {
                       >
                         <div className="flex items-center gap-3">
                           <Avatar className="h-12 w-12 ring-2 ring-border">
-                            <AvatarImage src={other.avatarUrl ?? `https://api.dicebear.com/9.x/notionists/svg?seed=${other.username || other.id}`} alt={other.username} />
+                            <AvatarImage src={`https://api.dicebear.com/9.x/notionists/svg?seed=${other.username || 'user'}`} alt={other.username} />
                             <AvatarFallback>{other.username[0]?.toUpperCase() ?? "U"}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
@@ -309,7 +309,7 @@ export default function Messages() {
                 <div className="p-5 border-b border-border/50 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 ring-2 ring-border">
-                      <AvatarImage src={otherUser?.avatarUrl ?? `https://api.dicebear.com/9.x/notionists/svg?seed=${otherUser?.username || otherUser?.id}`} alt={otherUser?.username ?? "User"} />
+                      <AvatarImage src={`https://api.dicebear.com/9.x/notionists/svg?seed=${otherUser?.username || 'user'}`} alt={otherUser?.username ?? "User"} />
                       <AvatarFallback>{otherUser?.username?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
                     </Avatar>
                     <div>

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { dbStorage as storage, ValidationError, NotFoundError } from "./db-storage";
+import { insertUserSchema } from "@shared/schema";
 import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
@@ -196,7 +197,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const refUser = await storage.getUser(ref);
         if (refUser) referrerId = refUser.id;
       }
-      const user = await storage.createUser({ username, referrerId });
+      const user = await storage.createUser(
+        insertUserSchema.parse({
+          username,
+          ...(referrerId ? { referrerId } : {}),
+        })
+      );
 
       // Create user profile
       await storage.ensureUserProfile(user.id);
@@ -254,7 +260,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const refUser = await storage.getUser(ref);
         if (refUser) referrerId = refUser.id;
       }
-      const user = await storage.createUser({ username: guestUsername, authProvider: "guest", isGuest: true, referrerId });
+      const user = await storage.createUser(
+        insertUserSchema.parse({
+          username: guestUsername,
+          authProvider: "guest",
+          isGuest: true,
+          ...(referrerId ? { referrerId } : {}),
+        })
+      );
 
       // Create user profile
       await storage.ensureUserProfile(user.id);
@@ -433,12 +446,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       if (!user) {
         console.log(`Creating new user for wallet: ${publicKey.substring(0, 8)}...`);
-        user = await storage.createUser({
-          walletAddress: publicKey,
-          authProvider: "solana",
-          isGuest: false,
-          username: `Wallet_${publicKey.substring(0, 8)}`,
-        });
+        user = await storage.createUser(
+          insertUserSchema.parse({
+            username: `Wallet_${publicKey.substring(0, 8)}`,
+            walletAddress: publicKey,
+            authProvider: "solana",
+            isGuest: false,
+          })
+        );
         console.log(`New user created: ${user.id}, username: ${user.username}`);
       } else {
         console.log(`Existing user authenticated: ${user.id}, username: ${user.username}`);

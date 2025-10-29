@@ -1,7 +1,6 @@
 import { dbStorage as storage } from './db-storage';
 import { addDays } from 'date-fns';
 import type { InsertMarket } from '@shared/schema';
-import { sql } from 'drizzle-orm';
 
 async function generateWinLossRatioMarkets() {
   console.log('🎯 Generating Win/Loss Ratio Head-to-Head Markets...\n');
@@ -10,11 +9,9 @@ async function generateWinLossRatioMarkets() {
   console.log(`📊 Found ${scrapedKolsData.length} scraped KOLs\n`);
 
   const validKOLs = scrapedKolsData.filter(k => {
-    if (!k.winsLosses) return false;
-    const [winsStr, lossesStr] = k.winsLosses.split('/');
-    const wins = parseInt(winsStr);
-    const losses = parseInt(lossesStr);
-    return !isNaN(wins) && !isNaN(losses) && losses > 0;
+    const wins = k.wins;
+    const losses = k.losses;
+    return wins !== null && losses !== null && losses > 0;
   });
 
   console.log(`✅ ${validKOLs.length} KOLs have valid win/loss data\n`);
@@ -37,29 +34,25 @@ async function generateWinLossRatioMarkets() {
 
     const [kolA, kolB] = availableKOLs.slice(0, 2);
     
-    const winsLossesA = kolA.winsLosses;
-    const winsLossesB = kolB.winsLosses;
-    
-    const [winsAStr, lossesAStr] = winsLossesA!.split('/');
-    const [winsBStr, lossesBStr] = winsLossesB!.split('/');
-    const winsA = parseInt(winsAStr);
-    const lossesA = parseInt(lossesAStr);
-    const winsB = parseInt(winsBStr);
-    const lossesB = parseInt(lossesBStr);
+    const winsA = kolA.wins!;
+    const lossesA = kolA.losses!;
+    const winsB = kolB.wins!;
+    const lossesB = kolB.losses!;
     
     const ratioA = (winsA / lossesA).toFixed(2);
     const ratioB = (winsB / lossesB).toFixed(2);
 
-    const kolARecord = await storage.getKolByUsername(kolA.username);
+    const kolAHandle = kolA.xHandle ?? undefined;
+    const kolARecord = kolAHandle ? await storage.getKolByHandle(kolAHandle) : undefined;
     if (!kolARecord) {
-      console.error(`❌ Could not find KOL ${kolA.username} in database`);
+      console.error(`❌ Could not find KOL handle ${kolA.xHandle} in database`);
       continue;
     }
 
     const market: InsertMarket = {
       kolId: kolARecord.id,
       title: `Will ${kolA.username} have a higher win/loss ratio than ${kolB.username} on tomorrow's leaderboard?`,
-      description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${winsLossesA}) vs ${kolB.username} with ${ratioB} (${winsLossesB})`,
+      description: `Win/Loss ratio comparison: ${kolA.username} has ${ratioA} (${winsA}/${lossesA}) vs ${kolB.username} with ${ratioB} (${winsB}/${lossesB})`,
       outcome: 'pending',
       resolvesAt: addDays(new Date(), 1),
       marketType: 'winloss_ratio_flippening',
@@ -76,15 +69,15 @@ async function generateWinLossRatioMarkets() {
       kolB: kolB.username,
       xHandle: null,
       currentFollowers: null,
-      currentRankA: kolA.rank || null,
-      currentRankB: kolB.rank || null,
+      currentRankA: String(kolA.rank ?? ''),
+      currentRankB: String(kolB.rank ?? ''),
       currentUsd: null,
       currentSolA: null,
       currentSolB: null,
       currentUsdA: null,
       currentUsdB: null,
-      currentWinsLossesA: winsLossesA || null,
-      currentWinsLossesB: winsLossesB || null,
+      currentWinsLossesA: `${winsA}/${lossesA}`,
+      currentWinsLossesB: `${winsB}/${lossesB}`,
       threshold: null,
       timeframeDays: null,
     });
@@ -94,8 +87,8 @@ async function generateWinLossRatioMarkets() {
 
     console.log(`\n✅ MARKET ${i + 1} CREATED`);
     console.log(`   Title: ${createdMarket.title}`);
-    console.log(`   ${kolA.username}: ${ratioA} ratio (${winsLossesA})`);
-    console.log(`   ${kolB.username}: ${ratioB} ratio (${winsLossesB})`);
+    console.log(`   ${kolA.username}: ${ratioA} ratio (${winsA}/${lossesA})`);
+    console.log(`   ${kolB.username}: ${ratioB} ratio (${winsB}/${lossesB})`);
     console.log(`   Market ID: ${createdMarket.id}`);
 
     createdMarkets.push({

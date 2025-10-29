@@ -36,7 +36,7 @@ export default defineConfig({
     allowedHosts: [
       '.replit.dev',
       '.repl.co',
-      /\.janeway\.replit\.dev$/,
+      '.janeway.replit.dev',
     ],
     fs: {
       strict: true,

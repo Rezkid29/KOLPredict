@@ -4,88 +4,45 @@ import type { InsertScrapedKol } from "@shared/schema";
 // This simulates real data from kolscan.io leaderboard
 // Format matches exactly what the scraper would collect
 export async function seedRealisticKolscanData() {
-  const mockKolscanData: InsertScrapedKol[] = [
-    {
-      rank: "1",
-      username: "Ansem",
-      xHandle: "@blknoiz06",
-      winsLosses: "234/108",
-      solGain: "1250.50",
-      usdGain: "2847500.00",
-    },
-    {
-      rank: "2",
-      username: "Crypto Rover",
-      xHandle: "@rovercrc",
-      winsLosses: "193/74",
-      solGain: "845.30",
-      usdGain: "1923800.00",
-    },
-    {
-      rank: "3",
-      username: "Altcoin Daily",
-      xHandle: "@altcoindaily",
-      winsLosses: "196/102",
-      solGain: "723.80",
-      usdGain: "1654200.00",
-    },
-    {
-      rank: "4",
-      username: "Crypto Cobain",
-      xHandle: "@cryptocobain",
-      winsLosses: "156/67",
-      solGain: "628.40",
-      usdGain: "1432900.00",
-    },
-    {
-      rank: "5",
-      username: "Lark Davis",
-      xHandle: "@thecryptolark",
-      winsLosses: "164/81",
-      solGain: "564.20",
-      usdGain: "1287600.00",
-    },
-    {
-      rank: "6",
-      username: "Byzantine General",
-      xHandle: "@generalbitcoin",
-      winsLosses: "131/58",
-      solGain: "507.10",
-      usdGain: "1156300.00",
-    },
-    {
-      rank: "7",
-      username: "Elliotrades",
-      xHandle: "@elliotrades",
-      winsLosses: "177/99",
-      solGain: "457.80",
-      usdGain: "1043700.00",
-    },
-    {
-      rank: "8",
-      username: "Miles Deutscher",
-      xHandle: "@milesdeutscher",
-      winsLosses: "144/57",
-      solGain: "433.20",
-      usdGain: "987400.00",
-    },
-    {
-      rank: "9",
-      username: "Crypto Banter",
-      xHandle: "@cryptobanter",
-      winsLosses: "158/76",
-      solGain: "384.50",
-      usdGain: "876200.00",
-    },
-    {
-      rank: "10",
-      username: "Crypto Kaleo",
-      xHandle: "@cryptokaleo",
-      winsLosses: "136/62",
-      solGain: "327.30",
-      usdGain: "745800.00",
-    },
+  const baseData = [
+    { rank: "1", username: "Ansem", xHandle: "@blknoiz06", winsLosses: "234/108", solGain: "1250.50", usdGain: "2847500.00" },
+    { rank: "2", username: "Crypto Rover", xHandle: "@rovercrc", winsLosses: "193/74", solGain: "845.30", usdGain: "1923800.00" },
+    { rank: "3", username: "Altcoin Daily", xHandle: "@altcoindaily", winsLosses: "196/102", solGain: "723.80", usdGain: "1654200.00" },
+    { rank: "4", username: "Crypto Cobain", xHandle: "@cryptocobain", winsLosses: "156/67", solGain: "628.40", usdGain: "1432900.00" },
+    { rank: "5", username: "Lark Davis", xHandle: "@thecryptolark", winsLosses: "164/81", solGain: "564.20", usdGain: "1287600.00" },
+    { rank: "6", username: "Byzantine General", xHandle: "@generalbitcoin", winsLosses: "131/58", solGain: "507.10", usdGain: "1156300.00" },
+    { rank: "7", username: "Elliotrades", xHandle: "@elliotrades", winsLosses: "177/99", solGain: "457.80", usdGain: "1043700.00" },
+    { rank: "8", username: "Miles Deutscher", xHandle: "@milesdeutscher", winsLosses: "144/57", solGain: "433.20", usdGain: "987400.00" },
+    { rank: "9", username: "Crypto Banter", xHandle: "@cryptobanter", winsLosses: "158/76", solGain: "384.50", usdGain: "876200.00" },
+    { rank: "10", username: "Crypto Kaleo", xHandle: "@cryptokaleo", winsLosses: "136/62", solGain: "327.30", usdGain: "745800.00" },
   ];
+
+  const mockKolscanData: InsertScrapedKol[] = baseData.map((d) => {
+    const [wStr, lStr] = d.winsLosses.split("/");
+    const wins = parseInt(wStr, 10);
+    const losses = parseInt(lStr, 10);
+    return {
+      rank: parseInt(d.rank, 10),
+      username: d.username,
+      xHandle: d.xHandle.replace(/^@/, ""),
+      wins: Number.isFinite(wins) ? wins : null,
+      losses: Number.isFinite(losses) ? losses : null,
+      solGain: d.solGain,
+      usdGain: d.usdGain,
+      // Optional metrics left null for demo
+      pnl1d: null,
+      pnl7d: null,
+      pnl30d: null,
+      winRate1d: null,
+      winRate7d: null,
+      winRate30d: null,
+      totalTrades1d: null,
+      totalTrades7d: null,
+      totalTrades30d: null,
+      profileUrl: null,
+      scrapedAt: new Date(),
+    };
+  });
 
   console.log("\n" + "=".repeat(70));
   console.log("SEEDING REALISTIC KOLSCAN DATA");

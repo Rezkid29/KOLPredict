@@ -196,14 +196,28 @@ export class KOLScraperService {
   }
 
   toInsertSchema(data: KOLData[]): InsertScrapedKol[] {
-    return data.map(kol => ({
-      rank: kol.rank,
-      username: kol.username,
-      xHandle: kol.xHandle || null,
-      winsLosses: kol.winsLosses || null,
-      solGain: kol.solGain || null,
-      usdGain: kol.usdGain || null,
-    }));
+    return data.map(kol => {
+      let wins: number | null = null;
+      let losses: number | null = null;
+      if (kol.winsLosses) {
+        const [wStr, lStr] = kol.winsLosses.split('/');
+        const w = parseInt(wStr, 10);
+        const l = parseInt(lStr, 10);
+        wins = Number.isFinite(w) ? w : null;
+        losses = Number.isFinite(l) ? l : null;
+      }
+
+      const rankNum = typeof kol.rank === 'string' ? parseInt(kol.rank, 10) : kol.rank;
+      return {
+        rank: Number.isFinite(rankNum as number) ? (rankNum as number) : 0,
+        username: kol.username,
+        xHandle: kol.xHandle ? kol.xHandle.replace(/^@/, '') : null,
+        wins,
+        losses,
+        solGain: kol.solGain ?? null,
+        usdGain: kol.usdGain ?? null,
+      };
+    });
   }
 
   async close(): Promise<void> {

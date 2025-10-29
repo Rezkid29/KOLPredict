@@ -1,18 +1,16 @@
 import { dbStorage } from "./db-storage";
-import type { InsertKol, InsertMarket, InsertUser, InsertAchievement, InsertFaq } from "@shared/schema";
+import { insertUserSchema, type InsertKol, type InsertMarket, type InsertAchievement, type InsertFaq } from "@shared/schema";
 
 async function seed() {
   console.log("🌱 Seeding database...");
 
   try {
     // Create default user
-    const defaultUser: InsertUser = {
-      username: "trader1",
-    };
-
     let user;
     try {
-      user = await dbStorage.createUser(defaultUser);
+      user = await dbStorage.createUser(
+        insertUserSchema.parse({ username: "trader1" })
+      );
       console.log("✅ Created default user:", user.username);
     } catch (error) {
       console.log("ℹ️  Default user already exists");
@@ -117,12 +115,12 @@ async function seed() {
         // Seed pools to achieve target price
         // For 50/50 odds: yesPrice = yesCollateral/yesShares = 0.5
         // Set yesShares = 20000, yesCollateral = 10000
-        yesSharePool: 20000,
-        yesCollateralPool: 10000,
-        noSharePool: 20000,
-        noCollateralPool: 10000,
-        currentYesPrice: 10000 / 20000, // 0.5
-        currentNoPrice: 10000 / 20000, // 0.5
+        yesSharePool: "20000.00",
+        yesCollateralPool: "10000.00",
+        noSharePool: "20000.00",
+        noCollateralPool: "10000.00",
+        currentYesPrice: "0.5000",
+        currentNoPrice: "0.5000",
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
         resolvesAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now

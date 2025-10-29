@@ -242,6 +242,7 @@ export class MemStorage implements IStorage {
       totalBets: 0,
       totalWins: 0,
       totalProfit: "0.00",
+      referrerId: null,
       createdAt: new Date(),
     };
     this.users.set(defaultUser.id, defaultUser);
@@ -350,6 +351,12 @@ export class MemStorage implements IStorage {
         noPool: "100.00",
         yesPrice: yesPrice.toFixed(4),
         noPrice: (1.0 - yesPrice).toFixed(4),
+        yesSharePool: "20000.00",
+        yesCollateralPool: "10000.00",
+        noSharePool: "20000.00",
+        noCollateralPool: "10000.00",
+        currentYesPrice: yesPrice.toFixed(4),
+        currentNoPrice: (1.0 - yesPrice).toFixed(4),
         totalVolume: (Math.random() * 5000).toFixed(2),
         isLive: true,
         resolved: false,
@@ -403,6 +410,7 @@ export class MemStorage implements IStorage {
       twitterHandle: null,
       ...insertUser,
       id,
+      referrerId: insertUser.referrerId ?? null,
       balance: "1000.00",
       solanaDepositAddress: null,
       solanaBalance: "0.000000000",
@@ -535,6 +543,12 @@ export class MemStorage implements IStorage {
       noPool: insertMarket.noPool ?? "100.00",
       yesPrice: insertMarket.yesPrice ?? "0.5000",
       noPrice: insertMarket.noPrice ?? "0.5000",
+      yesSharePool: insertMarket.yesSharePool ?? "20000.00",
+      yesCollateralPool: insertMarket.yesCollateralPool ?? "10000.00",
+      noSharePool: insertMarket.noSharePool ?? "20000.00",
+      noCollateralPool: insertMarket.noCollateralPool ?? "10000.00",
+      currentYesPrice: insertMarket.currentYesPrice ?? "0.5000",
+      currentNoPrice: insertMarket.currentNoPrice ?? "0.5000",
       totalVolume: insertMarket.totalVolume ?? "0.00",
       isLive: insertMarket.isLive ?? true,
       resolved: false,
@@ -638,6 +652,7 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       status: "open",
       profit: null,
+      averageCost: insertBet.averageCost ?? null,
     };
     this.bets.set(id, bet);
     return bet;
@@ -710,6 +725,7 @@ export class MemStorage implements IStorage {
       shares: shares.toFixed(2),
       status: "pending",
       profit: null,
+      averageCost: null,
       createdAt: new Date(),
     };
 
@@ -816,6 +832,7 @@ export class MemStorage implements IStorage {
       totalWins: user.totalWins,
       winRate: user.totalBets > 0 ? (user.totalWins / user.totalBets) * 100 : 0,
       rank: index + 1,
+      avatarUrl: null,
     }));
   }
 
@@ -944,15 +961,26 @@ export class MemStorage implements IStorage {
   // Scraped KOLs methods
   async createScrapedKols(kols: InsertScrapedKol[]): Promise<ScrapedKol[]> {
     const defaultScrapedAt = new Date();
-    const newScrapedKols = kols.map(kol => ({
-      ...kol,
+    const newScrapedKols: ScrapedKol[] = kols.map(kol => ({
       id: randomUUID(),
-      scrapedAt: kol.scrapedAt ?? defaultScrapedAt,
+      rank: kol.rank,
+      username: kol.username,
       xHandle: kol.xHandle ?? null,
       wins: kol.wins ?? null,
       losses: kol.losses ?? null,
       solGain: kol.solGain ?? null,
       usdGain: kol.usdGain ?? null,
+      pnl1d: kol.pnl1d ?? null,
+      pnl7d: kol.pnl7d ?? null,
+      pnl30d: kol.pnl30d ?? null,
+      winRate1d: kol.winRate1d ?? null,
+      winRate7d: kol.winRate7d ?? null,
+      winRate30d: kol.winRate30d ?? null,
+      totalTrades1d: kol.totalTrades1d ?? null,
+      totalTrades7d: kol.totalTrades7d ?? null,
+      totalTrades30d: kol.totalTrades30d ?? null,
+      profileUrl: kol.profileUrl ?? null,
+      scrapedAt: kol.scrapedAt ?? defaultScrapedAt,
     }));
     this.scrapedKols.push(...newScrapedKols);
     return newScrapedKols;
@@ -1225,6 +1253,10 @@ export class MemStorage implements IStorage {
   }
 
   async getUnreadMessageCount(userId: string): Promise<number> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async deleteConversation(conversationId: string, userId: string): Promise<void> {
     throw new Error("MemStorage social methods not implemented - use DbStorage");
   }
 

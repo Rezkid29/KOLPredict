@@ -63,6 +63,7 @@ function MarketHighlight({ market }: { market: MarketWithKol }) {
   const labels = history.map((p) => p.time);
   const yesValues = history.map((p) => p.yesPrice);
   const noValues = history.map((p) => p.noPrice);
+  const volumeValues = history.map((p) => p.volume ?? 0);
 
   const last = yesValues[yesValues.length - 1] ?? 0.5;
   const first = yesValues[0] ?? last;
@@ -81,7 +82,13 @@ function MarketHighlight({ market }: { market: MarketWithKol }) {
         <KpiCard label="YES" value={(last * 100).toFixed(1) + "%"} tone={changePct >= 0 ? "success" : "destructive"} />
         <KpiCard label="NO" value={((1 - last) * 100).toFixed(1) + "%"} />
       </div>
-      <KpiSparkline labels={labels} yesValues={yesValues} noValues={noValues} height={96} />
+      <KpiSparkline
+        labels={labels}
+        yesValues={yesValues}
+        noValues={noValues}
+        volumeValues={volumeValues}
+        height={220}
+      />
       <div className="mt-2 text-xs text-muted-foreground truncate">@{market.kol.handle}</div>
     </Card>
   );

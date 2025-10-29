@@ -1089,8 +1089,33 @@ export class DbStorage implements IStorage {
       intervalMs = 24 * 60 * 60 * 1000;
     }
 
+    const startTime = new Date(now.getTime() - intervals * intervalMs);
+    const betRows = await db
+      .select({ amount: bets.amount, createdAt: bets.createdAt })
+      .from(bets)
+      .where(sql`${bets.marketId} = ${marketId} AND ${bets.createdAt} >= ${startTime}`)
+      .orderBy(bets.createdAt);
+
+    let betIndex = 0;
+
     for (let i = intervals - 1; i >= 0; i--) {
-      const date = new Date(now.getTime() - (i * intervalMs));
+      const bucketEnd = new Date(now.getTime() - (i * intervalMs));
+      const bucketStart = new Date(bucketEnd.getTime() - intervalMs);
+
+      while (betIndex < betRows.length && betRows[betIndex].createdAt < bucketStart) {
+        betIndex++;
+      }
+
+      let cursor = betIndex;
+      let bucketVolume = 0;
+      while (cursor < betRows.length && betRows[cursor].createdAt <= bucketEnd) {
+        const amount = parseFloat(String(betRows[cursor].amount));
+        if (!Number.isNaN(amount)) {
+          bucketVolume += Math.abs(amount);
+        }
+        cursor++;
+      }
+      betIndex = cursor;
 
       const progress = (intervals - i) / intervals;
       const baseYesPrice = 0.5 + (currentYesPrice - 0.5) * progress;
@@ -1100,17 +1125,18 @@ export class DbStorage implements IStorage {
 
       let timeLabel: string;
       if (intervalType === 'minutes') {
-        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+        timeLabel = bucketEnd.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
       } else if (intervalType === 'hours') {
-        timeLabel = date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+        timeLabel = bucketEnd.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
       } else {
-        timeLabel = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        timeLabel = bucketEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       }
 
       history.push({
         time: timeLabel,
         yesPrice: parseFloat(yesPrice.toFixed(4)),
         noPrice: parseFloat(noPrice.toFixed(4)),
+        volume: Number(bucketVolume.toFixed(2)),
       });
     }
 
