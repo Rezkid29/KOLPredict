@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Wallet, Trophy, BarChart3, Menu, X, LogOut, MessageCircle, MessageSquare, HelpCircle, Bell, Cpu } from "lucide-react";
+import { Wallet, Trophy, BarChart3, Menu, X, LogOut, MessageCircle, MessageSquare, HelpCircle, Bell, Cpu, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -93,6 +93,18 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
                 >
                   <Trophy className="h-4 w-4" />
                   Leaderboard
+                </Button>
+              </div>
+            </Link>
+            <Link href="/parlays">
+              <div data-testid="link-parlays">
+                <Button 
+                  variant={location === "/parlays" ? "secondary" : "ghost"} 
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Layers className="h-4 w-4" />
+                  Parlays
                 </Button>
               </div>
             </Link>

@@ -739,6 +739,106 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ----------------------------------------------------------------------------
+  // Parlay (Bundles) Routes
+  // ----------------------------------------------------------------------------
+
+  // Quote a parlay (no auth required)
+  app.post("/api/parlays/quote", async (req, res) => {
+    try {
+      const { legs, stake } = req.body || {};
+      if (!Array.isArray(legs) || legs.length < 2 || legs.length > 3) {
+        return res.status(400).json({ message: "Parlays must have 2-3 legs" });
+      }
+      if (typeof stake !== 'number' || !(stake > 0)) {
+        return res.status(400).json({ message: "Valid stake is required" });
+      }
+      const quote = await storage.quoteParlay(legs, stake);
+      res.json(quote);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to quote parlay" });
+    }
+  });
+
+  // Create a parlay ticket (auth required)
+  app.post("/api/parlays", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { legs, stake } = req.body || {};
+      if (!Array.isArray(legs) || legs.length < 2 || legs.length > 3) {
+        return res.status(400).json({ message: "Parlays must have 2-3 legs" });
+      }
+      if (typeof stake !== 'number' || !(stake > 0)) {
+        return res.status(400).json({ message: "Valid stake is required" });
+      }
+      const ticket = await storage.createParlayTicket(userId, stake, legs);
+      res.json(ticket);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to create parlay" });
+    }
+  });
+
+  // List user's parlay tickets
+  app.get("/api/parlays", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const status = req.query.status as string | undefined;
+      const tickets = await storage.listParlayTickets(userId, status as any);
+      res.json(tickets);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to fetch parlays" });
+    }
+  });
+
+  // Get a single parlay ticket
+  app.get("/api/parlays/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      const ticket = await storage.getParlayTicket(userId, id);
+      if (!ticket) return res.status(404).json({ message: "Parlay not found" });
+      res.json(ticket);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to fetch parlay" });
+    }
+  });
+
+  // Cancel a pending parlay ticket
+  app.post("/api/parlays/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      await storage.cancelParlayTicket(userId, id);
+      res.json({ message: "Parlay canceled" });
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to cancel parlay" });
+    }
+  });
+
   // Preview price impact before placing a bet
   app.post("/api/bets/preview", async (req, res) => {
     try {

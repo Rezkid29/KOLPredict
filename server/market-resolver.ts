@@ -321,6 +321,10 @@ export class MarketResolver {
       let settledBets = 0;
       try {
         settledBets = await storage.settleBetsTransactional(market.id, outcome);
+        // Also settle any parlay legs referencing this market, if supported by storage
+        if ((storage as any).settleParlaysForMarket) {
+          await (storage as any).settleParlaysForMarket(market.id, outcome);
+        }
       } catch (error) {
         console.error(`Failed to settle bets for market ${market.id}:`, error);
         // Market is marked as resolved but bets failed to settle
@@ -328,6 +332,10 @@ export class MarketResolver {
         try {
           await storage.cancelMarket(market.id, "Bet settlement failed");
           await storage.refundMarket(market.id);
+          // Void parlays tied to this market so users are made whole
+          if ((storage as any).voidParlaysForMarket) {
+            await (storage as any).voidParlaysForMarket(market.id);
+          }
         } catch (refundError) {
           console.error(`CRITICAL: Failed to refund market ${market.id} after settlement failure:`, refundError);
         }
@@ -346,6 +354,9 @@ export class MarketResolver {
       try {
         await storage.cancelMarket(market.id, `Unexpected error during resolution: ${error instanceof Error ? error.message : 'Unknown error'}`);
         await storage.refundMarket(market.id);
+        if ((storage as any).voidParlaysForMarket) {
+          await (storage as any).voidParlaysForMarket(market.id);
+        }
       } catch (cancelError) {
         console.error(`CRITICAL: Failed to cancel/refund market ${market.id} after error:`, cancelError);
       }

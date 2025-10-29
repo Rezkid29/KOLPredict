@@ -10,6 +10,7 @@ import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Profile from "@/pages/profile";
 import Leaderboard from "@/pages/leaderboard";
+import Parlays from "@/pages/parlays";
 import Wallet from "@/pages/wallet";
 import Messages from "@/pages/messages";
 import Forum from "@/pages/forum";
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/markets" component={Home} />
       <Route path="/profile/:username" component={Profile} />
       <Route path="/leaderboard" component={Leaderboard} />
+      <Route path="/parlays" component={Parlays} />
       <Route path="/wallet" component={Wallet} />
       <Route path="/messages" component={Messages} />
       <Route path="/forum" component={Forum} />

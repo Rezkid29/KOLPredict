@@ -14,9 +14,10 @@ interface MarketCardProps {
   market: MarketWithKol;
   onBuy: (market: MarketWithKol) => void;
   onSell: (market: MarketWithKol) => void;
+  onAddToParlay?: (market: MarketWithKol, position: "YES" | "NO", price: number) => void;
 }
 
-export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
+export function MarketCard({ market, onBuy, onSell, onAddToParlay }: MarketCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   // Prefer new CPMM prices, fallback to legacy if needed, then to 0.5
   const rawYes = parseFloat((market as any).currentYesPrice ?? market.yesPrice ?? '0.5');
@@ -214,6 +215,33 @@ export function MarketCard({ market, onBuy, onSell }: MarketCardProps) {
             <span className="hidden sm:inline">Details</span>
           </Button>
         </div>
+
+        {onAddToParlay && (
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={market.resolved === true}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToParlay(market, "YES", yesPrice);
+              }}
+            >
+              Add YES
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={market.resolved === true}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToParlay(market, "NO", noPrice);
+              }}
+            >
+              Add NO
+            </Button>
+          </div>
+        )}
       </div>
 
       <MarketDetailsModal

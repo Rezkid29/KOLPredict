@@ -68,6 +68,7 @@ export const markets = pgTable("markets", {
   marketType: text("market_type").default("standard"),
   marketCategory: text("market_category").default("general"),
   requiresXApi: boolean("requires_x_api").notNull().default(false),
+  bundleSafe: boolean("bundle_safe").notNull().default(false),
 });
 
 export const bets = pgTable("bets", {
@@ -93,6 +94,32 @@ export const positions = pgTable("positions", {
   averagePrice: decimal("average_price", { precision: 18, scale: 9 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Parlay (Bundles) tables
+export const parlayTickets = pgTable("parlay_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  stake: decimal("stake", { precision: 12, scale: 2 }).notNull(),
+  combinedOdds: decimal("combined_odds", { precision: 12, scale: 6 }).notNull(),
+  potentialPayout: decimal("potential_payout", { precision: 12, scale: 2 }).notNull(),
+  marginApplied: decimal("margin_applied", { precision: 6, scale: 4 }).notNull().default("0.00"),
+  status: text("status").notNull().default("pending"), // pending, won, lost, cancelled, voided
+  bundleSafe: boolean("bundle_safe").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  settledAt: timestamp("settled_at"),
+});
+
+export const parlayLegs = pgTable("parlay_legs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull().references(() => parlayTickets.id, { onDelete: "cascade" }),
+  marketId: varchar("market_id").notNull().references(() => markets.id),
+  position: text("position").notNull(), // YES or NO
+  entryPrice: decimal("entry_price", { precision: 6, scale: 4 }).notNull(),
+  settlementPrice: decimal("settlement_price", { precision: 6, scale: 4 }),
+  status: text("status").notNull().default("pending"), // pending, won, lost, voided
+  bundleSafe: boolean("bundle_safe").notNull().default(false),
+  resolvedAt: timestamp("resolved_at"),
 });
 
 export const comments = pgTable("comments", {
@@ -298,6 +325,20 @@ export const insertMarketMetadataSchema = createInsertSchema(marketMetadata).omi
   createdAt: true,
 });
 
+// Parlay insert schemas
+export const insertParlayTicketSchema = createInsertSchema(parlayTickets).omit({
+  id: true,
+  createdAt: true,
+  settledAt: true,
+  status: true,
+});
+
+export const insertParlayLegSchema = createInsertSchema(parlayLegs).omit({
+  id: true,
+  resolvedAt: true,
+  status: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -330,6 +371,11 @@ export type FollowerCacheEntry = typeof followerCache.$inferSelect;
 
 export type InsertMarketMetadata = z.infer<typeof insertMarketMetadataSchema>;
 export type MarketMetadata = typeof marketMetadata.$inferSelect;
+
+export type InsertParlayTicket = z.infer<typeof insertParlayTicketSchema>;
+export type ParlayTicket = typeof parlayTickets.$inferSelect;
+export type InsertParlayLeg = z.infer<typeof insertParlayLegSchema>;
+export type ParlayLeg = typeof parlayLegs.$inferSelect;
 
 export type InsertSolanaDeposit = z.infer<typeof insertSolanaDepositSchema>;
 export type SolanaDeposit = typeof solanaDeposits.$inferSelect;

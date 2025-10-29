@@ -25,7 +25,11 @@ import {
   type UserAchievement, type InsertUserAchievement,
   type Faq, type InsertFaq,
   type LeaderboardEntry,
-  type PriceHistoryPoint
+  type PriceHistoryPoint,
+  type ParlayTicket,
+  type InsertParlayTicket,
+  type ParlayLeg,
+  type InsertParlayLeg,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -94,6 +98,21 @@ export interface IStorage {
 
   // Price history
   getMarketPriceHistory(marketId: string, days?: number): Promise<PriceHistoryPoint[]>;
+
+  // Parlays
+  quoteParlay(
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>,
+    stake: number
+  ): Promise<{ combinedOdds: string; potentialPayout: string; marginApplied: string; legs: Array<{ marketId: string; position: "YES"|"NO"; entryPrice: string }> }>;
+  createParlayTicket(
+    userId: string,
+    stake: number,
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>
+  ): Promise<ParlayTicket & { legs: ParlayLeg[] }>;
+  getParlayTicket(userId: string, ticketId: string): Promise<(ParlayTicket & { legs: ParlayLeg[] }) | undefined>;
+  listParlayTickets(userId: string, status?: ParlayTicket["status"]): Promise<Array<ParlayTicket & { legs: ParlayLeg[] }>>;
+  cancelParlayTicket(userId: string, ticketId: string): Promise<void>;
+  settleParlaysForMarket(marketId: string, outcome: "yes" | "no"): Promise<void>;
 
   // Comments
   getMarketComments(marketId: string): Promise<CommentWithUser[]>;
@@ -206,6 +225,7 @@ export class MemStorage implements IStorage {
   private positions: Map<string, Position>;
   private comments: Map<string, Comment>;
   private scrapedKols: ScrapedKol[];
+  private parlayTickets: Map<string, ParlayTicket & { legs: ParlayLeg[] }>;
   private followerCache: Map<string, FollowerCacheEntry>;
   private solanaDeposits: Map<string, SolanaDeposit>;
   private solanaWithdrawals: Map<string, SolanaWithdrawal>;
@@ -223,6 +243,7 @@ export class MemStorage implements IStorage {
     this.solanaDeposits = new Map();
     this.solanaWithdrawals = new Map();
     this.platformFees = new Map();
+    this.parlayTickets = new Map();
     this.initializeMockData();
   }
 
@@ -367,6 +388,7 @@ export class MemStorage implements IStorage {
         marketType: "standard",
         marketCategory: "social",
         requiresXApi: false,
+        bundleSafe: true,
       };
       this.markets.set(market.id, market);
     });
@@ -558,6 +580,7 @@ export class MemStorage implements IStorage {
       marketCategory: insertMarket.marketCategory ?? null,
       requiresXApi: insertMarket.requiresXApi ?? false,
       kolId: insertMarket.kolId ?? null,
+      bundleSafe: insertMarket.bundleSafe ?? false,
     };
     this.markets.set(id, market);
     return market;
@@ -896,6 +919,146 @@ export class MemStorage implements IStorage {
     }
 
     return history;
+  }
+
+  // Parlays (in-memory)
+  private getParlayMargin(): number {
+    const raw = process.env.PARLAY_MARGIN;
+    const val = raw ? parseFloat(raw) : 0.05;
+    if (Number.isFinite(val) && val >= 0 && val <= 0.2) return val;
+    return 0.05;
+  }
+
+  async quoteParlay(
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>,
+    stake: number
+  ): Promise<{ combinedOdds: string; potentialPayout: string; marginApplied: string; legs: Array<{ marketId: string; position: "YES"|"NO"; entryPrice: string }> }> {
+    if (!Array.isArray(legs) || legs.length < 2 || legs.length > 3) {
+      throw new Error("Parlays must have 2-3 legs");
+    }
+    if (!Number.isFinite(stake) || stake <= 0) throw new Error("Invalid stake");
+
+    const seen = new Set<string>();
+    const legsWithPrice: Array<{ marketId: string; position: "YES"|"NO"; entryPrice: string }> = legs.map(({ marketId, position }) => {
+      const m = this.markets.get(marketId);
+      if (!m) throw new Error(`Market ${marketId} not found`);
+      if (m.resolved) throw new Error(`Market ${marketId} already resolved`);
+      if (!m.bundleSafe) throw new Error(`Market ${marketId} not bundle-safe`);
+      if (seen.has(marketId)) throw new Error("Duplicate market in parlay");
+      seen.add(marketId);
+      const price = position === "YES" ? parseFloat(m.currentYesPrice) : parseFloat(m.currentNoPrice);
+      const clamped = Math.min(0.99, Math.max(0.01, price));
+      return { marketId, position, entryPrice: clamped.toFixed(4) };
+    });
+
+    const combinedProb = legsWithPrice.reduce((acc, l) => acc * parseFloat(l.entryPrice), 1);
+    const grossOdds = 1 / combinedProb;
+    const margin = this.getParlayMargin();
+    const netOdds = grossOdds * (1 - margin);
+    const potentialPayout = stake * netOdds;
+
+    return {
+      combinedOdds: netOdds.toFixed(6),
+      potentialPayout: potentialPayout.toFixed(2),
+      marginApplied: margin.toFixed(4),
+      legs: legsWithPrice,
+    };
+  }
+
+  async createParlayTicket(
+    userId: string,
+    stake: number,
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>
+  ): Promise<ParlayTicket & { legs: ParlayLeg[] }> {
+    const user = this.users.get(userId);
+    if (!user) throw new Error("User not found");
+    const balance = parseFloat(user.balance);
+    if (balance < stake) throw new Error("Insufficient balance");
+
+    const quote = await this.quoteParlay(legs, stake);
+    const id = randomUUID();
+    const ticket: ParlayTicket = {
+      id,
+      userId,
+      stake: stake.toFixed(2) as any,
+      combinedOdds: quote.combinedOdds as any,
+      potentialPayout: quote.potentialPayout as any,
+      marginApplied: quote.marginApplied as any,
+      status: "pending",
+      createdAt: new Date(),
+      settledAt: null,
+    } as unknown as ParlayTicket;
+
+    const createdLegs: ParlayLeg[] = quote.legs.map((l) => ({
+      id: randomUUID(),
+      ticketId: id,
+      marketId: l.marketId,
+      position: l.position,
+      entryPrice: l.entryPrice as any,
+      settlementPrice: null,
+      status: "pending",
+      resolvedAt: null,
+    } as unknown as ParlayLeg));
+
+    user.balance = (balance - stake).toFixed(2) as any;
+
+    this.parlayTickets.set(id, { ...ticket, legs: createdLegs });
+    return { ...ticket, legs: createdLegs };
+  }
+
+  async getParlayTicket(userId: string, ticketId: string): Promise<(ParlayTicket & { legs: ParlayLeg[] }) | undefined> {
+    const t = this.parlayTickets.get(ticketId);
+    if (!t || t.userId !== userId) return undefined;
+    return t;
+  }
+
+  async listParlayTickets(userId: string, status?: ParlayTicket["status"]): Promise<Array<ParlayTicket & { legs: ParlayLeg[] }>> {
+    const all = Array.from(this.parlayTickets.values()).filter(t => t.userId === userId);
+    return status ? all.filter(t => t.status === status) : all;
+  }
+
+  async cancelParlayTicket(userId: string, ticketId: string): Promise<void> {
+    const t = this.parlayTickets.get(ticketId);
+    if (!t || t.userId !== userId) throw new Error("Ticket not found");
+    if (t.status !== "pending") throw new Error("Only pending tickets can be canceled");
+    const anyResolved = t.legs.some(l => l.status !== "pending");
+    if (anyResolved) throw new Error("Cannot cancel after any leg has resolved");
+    t.status = "cancelled" as any;
+    const u = this.users.get(userId);
+    if (u) u.balance = (parseFloat(u.balance) + parseFloat(t.stake as any)).toFixed(2) as any;
+  }
+
+  async settleParlaysForMarket(marketId: string, outcome: "yes" | "no"): Promise<void> {
+    const impacted = Array.from(this.parlayTickets.values()).filter(t => t.legs.some(l => l.marketId === marketId && l.status === "pending"));
+    if (impacted.length === 0) return;
+
+    for (const ticket of impacted) {
+      for (const l of ticket.legs) {
+        if (l.marketId !== marketId || l.status !== "pending") continue;
+        const win = (l.position.toLowerCase() === "yes" && outcome === "yes") || (l.position.toLowerCase() === "no" && outcome === "no");
+        l.status = (win ? "won" : "lost") as any;
+        l.settlementPrice = (win ? "1.0000" : "0.0000") as any;
+        l.resolvedAt = new Date();
+      }
+
+      // Compute ticket status
+      const hasLost = ticket.legs.some(l => l.status === ("lost" as any));
+      const allWon = ticket.legs.every(l => l.status === ("won" as any));
+      const hasVoided = ticket.legs.some(l => l.status === ("voided" as any));
+
+      if (hasLost && ticket.status === "pending") {
+        ticket.status = "lost" as any;
+      } else if (allWon && ticket.status === "pending") {
+        ticket.status = "won" as any;
+        ticket.settledAt = new Date();
+        const u = this.users.get(ticket.userId);
+        if (u) u.balance = (parseFloat(u.balance) + parseFloat(ticket.potentialPayout as any)).toFixed(2) as any;
+      } else if (hasVoided && ticket.status === "pending") {
+        ticket.status = "voided" as any;
+        const u = this.users.get(ticket.userId);
+        if (u) u.balance = (parseFloat(u.balance) + parseFloat(ticket.stake as any)).toFixed(2) as any;
+      }
+    }
   }
 
   // Comments

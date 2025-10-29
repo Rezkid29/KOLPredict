@@ -106,6 +106,7 @@ import {
   type Faq,
   type InsertFaq,
 } from "@shared/schema";
+import { parlayTickets, parlayLegs, type ParlayTicket, type ParlayLeg, type InsertParlayTicket, type InsertParlayLeg } from "@shared/schema";
 import type { IStorage } from "./storage";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1141,6 +1142,187 @@ export class DbStorage implements IStorage {
     }
 
     return history;
+  }
+
+  // Parlays (database-backed)
+  private getParlayMargin(): number {
+    const raw = process.env.PARLAY_MARGIN;
+    const val = raw ? parseFloat(raw) : 0.05;
+    if (Number.isFinite(val) && val >= 0 && val <= 0.2) return val;
+    return 0.05;
+  }
+
+  async quoteParlay(
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>,
+    stake: number
+  ): Promise<{ combinedOdds: string; potentialPayout: string; marginApplied: string; legs: Array<{ marketId: string; position: "YES"|"NO"; entryPrice: string }> }> {
+    if (!Array.isArray(legs) || legs.length < 2 || legs.length > 3) {
+      throw new ValidationError("Parlays must have 2-3 legs");
+    }
+    if (!Number.isFinite(stake) || stake <= 0) throw new ValidationError("Invalid stake");
+
+    const seen = new Set<string>();
+    const legsWithPrice: Array<{ marketId: string; position: "YES"|"NO"; entryPrice: string }> = [];
+    for (const { marketId, position } of legs) {
+      const result = await db.select().from(markets).where(eq(markets.id, marketId)).limit(1);
+      const m = result[0];
+      if (!m) throw new NotFoundError(`Market ${marketId} not found`);
+      if (m.resolved) throw new ValidationError(`Market ${marketId} already resolved`);
+      if (!m.bundleSafe) throw new ValidationError(`Market ${marketId} not bundle-safe`);
+      if (seen.has(marketId)) throw new ValidationError("Duplicate market in parlay");
+      seen.add(marketId);
+      const price = position === "YES" ? parseFloat(m.currentYesPrice) : parseFloat(m.currentNoPrice);
+      const clamped = Math.min(0.99, Math.max(0.01, price));
+      legsWithPrice.push({ marketId, position, entryPrice: clamped.toFixed(4) });
+    }
+
+    const combinedProb = legsWithPrice.reduce((acc, l) => acc * parseFloat(l.entryPrice), 1);
+    const grossOdds = 1 / combinedProb;
+    const margin = this.getParlayMargin();
+    const netOdds = grossOdds * (1 - margin);
+    const potentialPayout = stake * netOdds;
+
+    return {
+      combinedOdds: netOdds.toFixed(6),
+      potentialPayout: potentialPayout.toFixed(2),
+      marginApplied: margin.toFixed(4),
+      legs: legsWithPrice,
+    };
+  }
+
+  async createParlayTicket(
+    userId: string,
+    stake: number,
+    legs: Array<{ marketId: string; position: "YES" | "NO" }>
+  ): Promise<ParlayTicket & { legs: ParlayLeg[] }> {
+    return await db.transaction(async (tx) => {
+      const usersResult = await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1);
+      const user = usersResult[0];
+      if (!user) throw new NotFoundError("User not found");
+      const balance = parseFloat(user.balance);
+      if (balance < stake) throw new ValidationError("Insufficient balance");
+
+      const quote = await this.quoteParlay(legs, stake);
+
+      // Deduct stake
+      await tx.update(users).set({ balance: (balance - stake).toFixed(2) }).where(eq(users.id, userId));
+
+      const [ticket] = await tx.insert(parlayTickets).values({
+        userId,
+        stake: stake.toFixed(2),
+        combinedOdds: quote.combinedOdds,
+        potentialPayout: quote.potentialPayout,
+        marginApplied: quote.marginApplied,
+        status: 'pending',
+      } as unknown as InsertParlayTicket).returning();
+
+      const legsToInsert: InsertParlayLeg[] = quote.legs.map((l) => ({
+        ticketId: ticket.id,
+        marketId: l.marketId,
+        position: l.position,
+        entryPrice: l.entryPrice,
+      } as unknown as InsertParlayLeg));
+
+      const createdLegs = await tx.insert(parlayLegs).values(legsToInsert).returning();
+
+      return { ...(ticket as ParlayTicket), legs: createdLegs as ParlayLeg[] };
+    });
+  }
+
+  async getParlayTicket(userId: string, ticketId: string): Promise<(ParlayTicket & { legs: ParlayLeg[] }) | undefined> {
+    const ticketRes = await db.select().from(parlayTickets).where(eq(parlayTickets.id, ticketId)).limit(1);
+    const ticket = ticketRes[0] as ParlayTicket | undefined;
+    if (!ticket || ticket.userId !== userId) return undefined;
+    const legsRes = await db.select().from(parlayLegs).where(eq(parlayLegs.ticketId, ticketId));
+    return { ...ticket, legs: legsRes as ParlayLeg[] };
+  }
+
+  async listParlayTickets(userId: string, status?: ParlayTicket['status']): Promise<Array<ParlayTicket & { legs: ParlayLeg[] }>> {
+    let ticketsRes = await db.select().from(parlayTickets).where(eq(parlayTickets.userId, userId));
+    if (status) ticketsRes = ticketsRes.filter((t: any) => t.status === status);
+    const tickets = ticketsRes as ParlayTicket[];
+    const result: Array<ParlayTicket & { legs: ParlayLeg[] }> = [];
+    for (const t of tickets) {
+      const legsRes = await db.select().from(parlayLegs).where(eq(parlayLegs.ticketId, t.id));
+      result.push({ ...t, legs: legsRes as ParlayLeg[] });
+    }
+    return result;
+  }
+
+  async cancelParlayTicket(userId: string, ticketId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const [ticket] = await tx.select().from(parlayTickets).where(eq(parlayTickets.id, ticketId)).for('update').limit(1);
+      if (!ticket) throw new NotFoundError('Ticket not found');
+      if (ticket.userId !== userId) throw new ValidationError('Unauthorized');
+      if (ticket.status !== 'pending') throw new ValidationError('Only pending tickets can be canceled');
+      const legsRes = await tx.select().from(parlayLegs).where(eq(parlayLegs.ticketId, ticketId));
+      const anyResolved = legsRes.some((l: any) => l.status !== 'pending');
+      if (anyResolved) throw new ValidationError('Cannot cancel after any leg has resolved');
+      // refund stake
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1);
+      const newBalance = (parseFloat(user.balance) + parseFloat(ticket.stake as any)).toFixed(2);
+      await tx.update(users).set({ balance: newBalance }).where(eq(users.id, userId));
+      await tx.update(parlayTickets).set({ status: 'cancelled' }).where(eq(parlayTickets.id, ticketId));
+    });
+  }
+
+  async settleParlaysForMarket(marketId: string, outcome: 'yes' | 'no'): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Find pending legs for this market
+      const legsRes = await tx.select().from(parlayLegs).where(eq(parlayLegs.marketId, marketId));
+      const pendingLegs = (legsRes as any[]).filter(l => l.status === 'pending');
+      if (pendingLegs.length === 0) return;
+
+      const impactedTicketIds = new Set<string>();
+
+      for (const leg of pendingLegs) {
+        const win = (String(leg.position).toLowerCase() === 'yes' && outcome === 'yes') || (String(leg.position).toLowerCase() === 'no' && outcome === 'no');
+        await tx.update(parlayLegs)
+          .set({ status: win ? 'won' : 'lost', settlementPrice: win ? '1.0000' : '0.0000', resolvedAt: new Date() })
+          .where(eq(parlayLegs.id, leg.id));
+        impactedTicketIds.add(leg.ticketId);
+      }
+
+      for (const ticketId of Array.from(impactedTicketIds)) {
+        const legs = await tx.select().from(parlayLegs).where(eq(parlayLegs.ticketId, ticketId));
+        const hasLost = legs.some((l: any) => l.status === 'lost');
+        const allWon = legs.every((l: any) => l.status === 'won');
+        const [ticket] = await tx.select().from(parlayTickets).where(eq(parlayTickets.id, ticketId)).for('update').limit(1);
+        if (!ticket || ticket.status !== 'pending') continue;
+        if (hasLost) {
+          await tx.update(parlayTickets).set({ status: 'lost' }).where(eq(parlayTickets.id, ticketId));
+        } else if (allWon) {
+          await tx.update(parlayTickets).set({ status: 'won', settledAt: new Date() }).where(eq(parlayTickets.id, ticketId));
+          const [user] = await tx.select().from(users).where(eq(users.id, ticket.userId)).for('update').limit(1);
+          const newBalance = (parseFloat(user.balance) + parseFloat(ticket.potentialPayout as any)).toFixed(2);
+          await tx.update(users).set({ balance: newBalance }).where(eq(users.id, ticket.userId));
+        }
+      }
+    });
+  }
+
+  async voidParlaysForMarket(marketId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const legsRes = await tx.select().from(parlayLegs).where(eq(parlayLegs.marketId, marketId));
+      if ((legsRes as any[]).length === 0) return;
+      const impactedTicketIds = new Set<string>((legsRes as any[]).map(l => l.ticketId));
+
+      for (const leg of legsRes as any[]) {
+        if (leg.status === 'pending') {
+          await tx.update(parlayLegs).set({ status: 'voided', resolvedAt: new Date() }).where(eq(parlayLegs.id, leg.id));
+        }
+      }
+
+      for (const ticketId of Array.from(impactedTicketIds)) {
+        const [ticket] = await tx.select().from(parlayTickets).where(eq(parlayTickets.id, ticketId)).for('update').limit(1);
+        if (!ticket || ticket.status !== 'pending') continue;
+        // Refund full stake for simplicity
+        const [user] = await tx.select().from(users).where(eq(users.id, ticket.userId)).for('update').limit(1);
+        const newBalance = (parseFloat(user.balance) + parseFloat(ticket.stake as any)).toFixed(2);
+        await tx.update(users).set({ balance: newBalance }).where(eq(users.id, ticket.userId));
+        await tx.update(parlayTickets).set({ status: 'voided', settledAt: new Date() }).where(eq(parlayTickets.id, ticketId));
+      }
+    });
   }
 
   // Comments

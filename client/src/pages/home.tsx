@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, TrendingUp, Sparkles, Activity } from "lucide-react";
+import { Search, Filter, TrendingUp, Sparkles, Activity, Layers } from "lucide-react";
 import type {
   MarketWithKol,
   BetWithMarket,
@@ -35,6 +35,8 @@ import type {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
+import ParlayBuilder from "@/components/parlay-builder";
+import { useParlayBuilder } from "@/hooks/use-parlay-builder";
 
 export default function Home() {
   const [betModalOpen, setBetModalOpen] = useState(false);
@@ -44,6 +46,7 @@ export default function Home() {
   const [betType, setBetType] = useState<"buy" | "sell">("buy");
   const [searchQuery, setSearchQuery] = useState("");
   const [liveFeedOpen, setLiveFeedOpen] = useState(false);
+  const [parlayOpen, setParlayOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const { toast } = useToast();
 
@@ -54,6 +57,7 @@ export default function Home() {
 
   // Connect to WebSocket for real-time updates
   const { isConnected } = useWebSocket();
+  const parlay = useParlayBuilder();
 
   const { data: markets = [], isLoading: marketsLoading } = useQuery<
     MarketWithKol[]
@@ -79,6 +83,18 @@ export default function Home() {
     setSelectedMarket(market);
     setBetType("buy");
     setBetModalOpen(true);
+  };
+
+  const handleAddToParlay = (market: MarketWithKol, position: "YES" | "NO", price: number) => {
+    const bundleSafe = (market as any).bundleSafe ?? true;
+    parlay.addLeg({
+      marketId: market.id,
+      title: market.title,
+      position,
+      price,
+      bundleSafe,
+    });
+    setParlayOpen(true);
   };
 
   const handleSell = (market: MarketWithKol) => {
@@ -362,6 +378,7 @@ export default function Home() {
                       market={market}
                       onBuy={handleBuy}
                       onSell={handleSell}
+                      onAddToParlay={handleAddToParlay}
                     />
                   </div>
                 ))}
@@ -391,6 +408,48 @@ export default function Home() {
           </SheetHeader>
           <div className="mt-6">
             <LiveFeed bets={bets} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Parlay Builder Floating Button & Sheet */}
+      <Sheet open={parlayOpen} onOpenChange={setParlayOpen}>
+        <SheetTrigger asChild>
+          <Button
+            size="lg"
+            className="lg:hidden fixed bottom-24 right-6 z-40 rounded-full w-16 h-16 shadow-xl shadow-primary/20 border-2 border-primary/20 hover:shadow-2xl hover:shadow-primary/30 transition-all"
+            data-testid="button-mobile-parlay-builder"
+          >
+            <Layers className="h-6 w-6" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="bottom" className="h-[85vh]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" />
+              Build Parlay
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-6">
+            <ParlayBuilder
+              legs={parlay.legs.map(l => ({ marketId: l.marketId, title: l.title, position: l.position, price: l.price }))}
+              onRemove={parlay.removeLeg}
+              stake={parlay.stake}
+              setStake={parlay.setStake}
+              quoting={parlay.loading}
+              quote={parlay.quote}
+              error={parlay.error}
+              onCreate={async () => {
+                try {
+                  const ticket = await parlay.createTicket();
+                  setParlayOpen(false);
+                  queryClient.invalidateQueries({ queryKey: ["/api/parlays"] });
+                  toast({ title: "Parlay created", description: `${ticket.legs.length} legs @ ${Number(ticket.combinedOdds).toFixed(2)}x` });
+                } catch (e: any) {
+                  toast({ title: "Failed to create parlay", description: e?.message || "Try again", variant: "destructive" });
+                }
+              }}
+            />
           </div>
         </SheetContent>
       </Sheet>
