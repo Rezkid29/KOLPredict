@@ -190,8 +190,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ message: "Username already exists" });
       }
 
-      // Create new user
-      const user = await storage.createUser({ username });
+      let referrerId: string | undefined = undefined;
+      const ref = req.session.referrerId as string | undefined;
+      if (ref) {
+        const refUser = await storage.getUser(ref);
+        if (refUser) referrerId = refUser.id;
+      }
+      const user = await storage.createUser({ username, referrerId });
 
       // Create user profile
       await storage.ensureUserProfile(user.id);
@@ -243,11 +248,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   app.post("/api/auth/guest", async (req, res) => {
     try {
       const guestUsername = `Guest_${Date.now()}`;
-      const user = await storage.createUser({
-        username: guestUsername,
-        authProvider: "guest",
-        isGuest: true,
-      });
+      let referrerId: string | undefined = undefined;
+      const ref = req.session.referrerId as string | undefined;
+      if (ref) {
+        const refUser = await storage.getUser(ref);
+        if (refUser) referrerId = refUser.id;
+      }
+      const user = await storage.createUser({ username: guestUsername, authProvider: "guest", isGuest: true, referrerId });
 
       // Create user profile
       await storage.ensureUserProfile(user.id);
@@ -3026,6 +3033,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       res.status(500).json({ message: "Failed to delete FAQ" });
+    }
+  });
+
+  // Get current user's referral link (session or explicit userId)
+  app.get("/api/referrals/link", async (req, res) => {
+    try {
+      const userId = (req.session.userId as string) || (req.query.userId as string);
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const host = req.headers.host;
+      if (!host) {
+        return res.status(500).json({ message: "Unable to construct referral link" });
+      }
+      const baseUrl = `${proto}://${host}`;
+      const link = `${baseUrl}/?ref=${userId}`;
+      res.json({ link });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to generate referral link" });
     }
   });
 

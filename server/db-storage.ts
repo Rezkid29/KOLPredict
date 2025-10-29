@@ -593,6 +593,8 @@ export class DbStorage implements IStorage {
 
       // Platform fee configuration (2% by default, can be set via environment)
       const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || "0.02");
+      // Referral commission configuration (1% by default), credited as extra balance to referrer
+      const REFERRAL_PERCENTAGE = parseFloat(process.env.REFERRAL_PERCENTAGE || "0.01");
 
       let betAmount: number;
       let sharesAmount: number;
@@ -858,6 +860,39 @@ export class DbStorage implements IStorage {
         .update(users)
         .set({ balance: newBalance })
         .where(eq(users.id, params.userId));
+
+      // STEP 6.5: Pay referral commission (applies only to buy orders)
+      if (params.action === "buy" && REFERRAL_PERCENTAGE > 0) {
+        // user was selected earlier in the tx and contains referrerId if present
+        const referredBy = (user as any).referrerId as string | undefined;
+        if (referredBy && referredBy !== user.id) {
+          const commission = betAmount * REFERRAL_PERCENTAGE;
+          if (commission > 0) {
+            // Lock referrer row and credit balance
+            const [referrer] = await tx
+              .select()
+              .from(users)
+              .where(eq(users.id, referredBy))
+              .for('update')
+              .limit(1);
+
+            if (referrer) {
+              const refBal = parseFloat(referrer.balance);
+              const refNewBal = (refBal + commission).toFixed(2);
+              await tx.update(users).set({ balance: refNewBal }).where(eq(users.id, referredBy));
+
+              // Record ledger entry for referrer
+              await tx.insert(transactions).values({
+                userId: referredBy,
+                type: "referral_commission",
+                amount: commission.toFixed(2),
+                balanceAfter: refNewBal,
+                description: `Referral commission (${(REFERRAL_PERCENTAGE * 100).toFixed(2)}%) from bet ${createdBet.id}`,
+              });
+            }
+          }
+        }
+      }
 
       // STEP 7: Update user stats
       // Only update totalProfit if it's a sell and profit is calculated

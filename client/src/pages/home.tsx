@@ -68,6 +68,7 @@ export default function Home() {
     queryKey: ["/api/user"],
   });
 
+
   const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
     queryKey: ["/api/positions/user"],
     enabled: !!user,

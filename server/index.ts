@@ -31,6 +31,7 @@ declare module 'express-session' {
     userId?: string;
     walletAddress?: string;
     twitterId?: string;
+    referrerId?: string;
   }
 }
 
@@ -58,6 +59,15 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+// Capture referral code from query string on first visit
+app.use((req, _res, next) => {
+  const ref = (req.query.ref as string) || undefined;
+  if (ref && !req.session.userId && !req.session.referrerId) {
+    req.session.referrerId = ref;
+  }
+  next();
+});
 
 app.get("/healthz", (_req, res) => {res.status(200).send("ok");});
 

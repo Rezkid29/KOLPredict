@@ -26,9 +26,12 @@ import {
   Users,
   Trophy,
   Activity,
-  Edit
+  Edit,
+  Copy,
+  Check
 } from "lucide-react";
-import type { BetWithMarket, User, PositionWithMarket, MarketWithKol, UserProfile, Activity as ActivityType, Achievement, UserAchievement } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import type { BetWithMarket, User, PositionWithMarket, MarketWithKol, UserProfile, Activity as ActivityType, Achievement, UserAchievement, Transaction } from "@shared/schema";
 import logoImage from "/favicon.png";
 
 export default function Profile() {
@@ -38,11 +41,29 @@ export default function Profile() {
   const [selectedMarket, setSelectedMarket] = useState<MarketWithKol | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
     queryKey: ["/api/user"],
   });
+
+  // Referral link (session endpoint with fallback to client-built link)
+  const { data: referral } = useQuery<{ link: string } | null>({
+    queryKey: ["/api/referrals/link"],
+    enabled: !!currentUser && (username === "me" || username === currentUser?.username),
+    queryFn: async () => {
+      const res = await fetch(`/api/referrals/link`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+  const referralLink = referral?.link ?? (
+    typeof window !== "undefined" && currentUser?.id
+      ? `${window.location.origin}/?ref=${currentUser.id}`
+      : undefined
+  );
 
   // Determine if viewing own profile
   const isOwnProfile = username === "me" || username === currentUser?.username;
@@ -92,6 +113,19 @@ export default function Profile() {
   const { data: userPositions = [] } = useQuery<PositionWithMarket[]>({
     queryKey: ["/api/positions/user"],
     enabled: isOwnProfile,
+  });
+
+  const { data: transactions = [] } = useQuery<Transaction[]>({
+    queryKey: ["/api/wallet/transactions", profileData?.user.id],
+    enabled: isOwnProfile && !!profileData?.user.id,
+    queryFn: async () => {
+      if (!profileData?.user.id) return [] as Transaction[];
+      const res = await fetch(`/api/wallet/transactions?userId=${profileData.user.id}&limit=1000`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
   });
 
   // Fetch activities
@@ -280,6 +314,7 @@ export default function Profile() {
   
   const activeBets = bets.filter(b => b.status === "pending" || b.status === "open");
   const totalInvested = activeBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
+  const referralEarnings = transactions.reduce((sum, t) => sum + (t.type === "referral_commission" ? parseFloat(t.amount as unknown as string) : 0), 0);
 
   const formatTime = (date: Date | string) => {
     const d = new Date(date);
@@ -349,6 +384,66 @@ export default function Profile() {
                     </Button>
                   )}
                 </div>
+
+              {/* Invite & Earn Card */}
+              <Card className="p-6 hover-elevate transition-all border-border/60 mb-6">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <h2 className="text-lg font-semibold">Invite & earn 1%</h2>
+                    {referralLink && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(referralLink);
+                              setInviteCopied(true);
+                              setTimeout(() => setInviteCopied(false), 1500);
+                              toast({ title: "Referral link copied" });
+                            } catch (_) {
+                              toast({ title: "Copy failed", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          {inviteCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {inviteCopied ? "Copied" : "Copy Link"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-sm text-muted-foreground">
+                    Share your link. When your referrals place BUY orders, you earn 1% of their trade amount as extra PTS.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={referralLink ?? "Sign in to get your link"}
+                      className="bg-background/50 border-border/60 text-xs sm:text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={async () => {
+                        if (!referralLink) return;
+                        try {
+                          await navigator.clipboard.writeText(referralLink);
+                          setInviteCopied(true);
+                          setTimeout(() => setInviteCopied(false), 1500);
+                          toast({ title: "Referral link copied" });
+                        } catch (_) {
+                          toast({ title: "Copy failed", variant: "destructive" });
+                        }
+                      }}
+                    >
+                      {inviteCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
                 {profileData.profile.bio ? (
                   <p className="text-muted-foreground mb-4 max-w-lg" data-testid="text-bio">
                     {profileData.profile.bio}
@@ -610,7 +705,7 @@ export default function Profile() {
           {isOwnProfile && (
             <TabsContent value="portfolio">
               {/* Portfolio Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
                 <Card className="p-6 hover-elevate transition-all border-border/60">
                   <div className="flex items-center gap-4">
                     <div className="p-3.5 rounded-xl bg-primary/10 ring-1 ring-primary/20">
@@ -648,6 +743,20 @@ export default function Profile() {
                       <p className="text-sm text-muted-foreground font-medium mb-1">Total Invested</p>
                       <p className="text-2xl font-bold tabular-nums" data-testid="text-portfolio-invested">
                         {totalInvested.toFixed(2)} PTS
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-6 hover-elevate transition-all border-border/60">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3.5 rounded-xl bg-success/10 ring-1 ring-success/20">
+                      <TrendingUp className="h-6 w-6 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium mb-1">Referral Earnings</p>
+                      <p className="text-2xl font-bold tabular-nums" data-testid="text-portfolio-referrals">
+                        +{referralEarnings.toFixed(2)} PTS
                       </p>
                     </div>
                   </div>

@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   totalBets: integer("total_bets").notNull().default(0),
   totalWins: integer("total_wins").notNull().default(0),
   totalProfit: decimal("total_profit", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  referrerId: varchar("referrer_id").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

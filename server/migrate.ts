@@ -40,6 +40,9 @@ export async function runMigrations() {
         total_profit DECIMAL(10, 2) NOT NULL DEFAULT 0.00
       );
 
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS referrer_id VARCHAR REFERENCES users(id);
+
       CREATE TABLE IF NOT EXISTS kols (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
