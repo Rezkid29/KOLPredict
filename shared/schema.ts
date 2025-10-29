@@ -348,6 +348,7 @@ export type PositionWithMarket = Position & { market: MarketWithKol };
 export type LeaderboardEntry = {
   userId: string;
   username: string | null;
+  avatarUrl: string | null;
   totalProfit: string;
   totalBets: number;
   totalWins: number;

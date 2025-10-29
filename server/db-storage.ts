@@ -940,11 +940,13 @@ export class DbStorage implements IStorage {
       .select({
         userId: users.id,
         username: users.username,
+        avatarUrl: userProfiles.avatarUrl,
         totalProfit: users.totalProfit,
         totalBets: users.totalBets,
         totalWins: users.totalWins,
       })
       .from(users)
+      .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
       .where(sql`${users.totalBets} > 0`)
       .orderBy(desc(users.totalProfit), desc(users.totalWins), desc(users.totalBets));
 

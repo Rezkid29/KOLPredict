@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Navbar } from "@/components/navbar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Trophy, Medal, Award, TrendingUp, Target } from "lucide-react";
 import type { LeaderboardEntry, User } from "@shared/schema";
 
@@ -164,6 +164,9 @@ export default function Leaderboard() {
                           <Link href={`/profile/${entry.username ?? ""}`}>
                             <div className="flex items-center gap-3 cursor-pointer hover-elevate active-elevate-2 rounded-lg -m-2 p-2 transition-all">
                               <Avatar className="h-11 w-11 ring-2 ring-border/50 group-hover:ring-primary/30 transition-all">
+                                {entry.avatarUrl ? (
+                                  <AvatarImage src={entry.avatarUrl} alt={entry.username ?? "User"} />
+                                ) : null}
                                 <AvatarFallback className="bg-primary/10 text-primary font-semibold text-base">
                                   {entry.username?.[0]?.toUpperCase() ?? "U"}
                                 </AvatarFallback>
