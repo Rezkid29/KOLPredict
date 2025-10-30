@@ -6,6 +6,9 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").unique(),
+  passwordHash: text("password_hash"),
+  passwordUpdatedAt: timestamp("password_updated_at"),
+  lastLoginAt: timestamp("last_login_at"),
   walletAddress: text("wallet_address").unique(),
   authProvider: text("auth_provider").notNull().default("username"),
   isGuest: boolean("is_guest").notNull().default(false),
@@ -261,6 +264,8 @@ export const insertPlatformFeeSchema = createInsertSchema(platformFees).omit({
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
+  passwordUpdatedAt: true,
+  lastLoginAt: true,
   balance: true,
   solanaBalance: true,
   solanaDepositAddress: true,

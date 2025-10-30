@@ -45,6 +45,8 @@ export interface IStorage {
   updateUserSolanaBalance(id: string, solanaBalance: string): Promise<void>;
   updateUserDepositAddress(id: string, address: string): Promise<void>;
   updateUserStats(id: string, totalBets: number, totalWins: number, totalProfit: string): Promise<void>;
+  updateUserPassword(id: string, passwordHash: string, passwordUpdatedAt?: Date): Promise<void>;
+  updateUserLastLogin(id: string, timestamp?: Date): Promise<void>;
 
   // KOL methods
   getKol(id: string): Promise<Kol | undefined>;
@@ -253,6 +255,9 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       username: "trader1",
       walletAddress: null,
+      passwordHash: null,
+      passwordUpdatedAt: null,
+      lastLoginAt: null,
       authProvider: "username",
       isGuest: false,
       twitterId: null,
@@ -399,6 +404,21 @@ export class MemStorage implements IStorage {
     return this.users.get(id);
   }
 
+  async updateUserPassword(id: string, passwordHash: string, passwordUpdatedAt: Date = new Date()): Promise<void> {
+    const user = this.users.get(id);
+    if (!user) return;
+    user.passwordHash = passwordHash;
+    user.passwordUpdatedAt = passwordUpdatedAt;
+    this.users.set(id, user);
+  }
+
+  async updateUserLastLogin(id: string, timestamp: Date = new Date()): Promise<void> {
+    const user = this.users.get(id);
+    if (!user) return;
+    user.lastLoginAt = timestamp;
+    this.users.set(id, user);
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(
       (user) => user.username === username,
@@ -433,6 +453,9 @@ export class MemStorage implements IStorage {
       ...insertUser,
       id,
       referrerId: insertUser.referrerId ?? null,
+      passwordHash: insertUser.passwordHash ?? null,
+      passwordUpdatedAt: insertUser.passwordHash ? new Date() : null,
+      lastLoginAt: null,
       balance: "1000.00",
       solanaDepositAddress: null,
       solanaBalance: "0.000000000",

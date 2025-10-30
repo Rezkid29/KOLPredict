@@ -64,7 +64,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
 
 export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
   const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [registerUsername, setRegisterUsername] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [walletDetected, setWalletDetected] = useState(true);
   const { toast } = useToast();
@@ -85,10 +87,20 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
       return;
     }
 
+    if (!loginPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter your password",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await apiRequest("POST", "/api/auth/login", {
-        username: loginUsername,
+        username: loginUsername.trim(),
+        password: loginPassword,
       });
 
       if (response.ok) {
@@ -106,6 +118,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
           onSuccess(data.userId);
           onClose();
           setLoginUsername("");
+          setLoginPassword("");
         } else {
           toast({
             title: "Error",
@@ -143,7 +156,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
       return;
     }
 
-    if (registerUsername.length < 3) {
+    if (registerUsername.trim().length < 3) {
       toast({
         title: "Error",
         description: "Username must be at least 3 characters",
@@ -152,10 +165,29 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
       return;
     }
 
+    if (!registerPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter a password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (registerPassword.length < 8) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await apiRequest("POST", "/api/auth/register", {
-        username: registerUsername,
+        username: registerUsername.trim(),
+        password: registerPassword,
       });
 
       if (response.ok) {
@@ -173,6 +205,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
           onSuccess(data.userId);
           onClose();
           setRegisterUsername("");
+          setRegisterPassword("");
         } else {
           toast({
             title: "Error",
@@ -435,6 +468,18 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                     data-testid="input-login-username"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="login-password">Password</Label>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    data-testid="input-login-password"
+                  />
+                </div>
                 <Button 
                   onClick={handleLogin} 
                   disabled={loading}
@@ -462,7 +507,22 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                     data-testid="input-register-username"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Minimum 3 characters. You'll start with 1000 PTS.
+                    Username must be at least 3 characters.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="register-password">Password</Label>
+                  <Input
+                    id="register-password"
+                    type="password"
+                    placeholder="Create a password"
+                    value={registerPassword}
+                    onChange={(e) => setRegisterPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                    data-testid="input-register-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum 8 characters.
                   </p>
                 </div>
                 <Button 

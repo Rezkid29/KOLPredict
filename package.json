@@ -10,6 +10,7 @@
     "seed": "NODE_ENV=production node dist/seed-entry.js",
     "scrape": "NODE_ENV=production node dist/worker.js",
     "check": "tsc",
+    "test": "vitest run",
     "db:push": "drizzle-kit push",
     "export:handles": "tsx server/tools/export-twitter-handles.ts"
   },
@@ -56,6 +57,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/node-cron": "^3.0.11",
     "@vitest/ui": "^4.0.2",
+    "bcryptjs": "^2.4.3",
     "antd": "^5.27.6",
     "bs58": "^6.0.0",
     "class-variance-authority": "^0.7.1",

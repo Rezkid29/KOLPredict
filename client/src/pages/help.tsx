@@ -82,7 +82,7 @@ export default function Help() {
                 <li>Top‑Rank Maintain: deeper inside top‑N → higher YES probability</li>
                 <li>Rank Improvement: fewer steps required → higher YES probability</li>
                 <li>Win‑Loss Ratio Maintain: margin above threshold → higher YES probability</li>
-                <li>Follower Growth: neutral baseline (50/50)</li>
+                <li>*COMING SOON* Follower Growth: neutral baseline (50/50)</li>
               </ul>
             </div>
           </div>
@@ -97,7 +97,9 @@ export default function Help() {
             <div className="text-center text-muted-foreground">
               <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium mb-1">No FAQs available</p>
-              <p className="text-sm">FAQs will be added soon</p>
+              <p className="text-sm">Real Solana Integration coming soon! </p>
+              <p className="text-sm">Real time tutorial below </p>
+              <p className="text-sm">https://x.com/KOLPredict/status/1983702395847876844</p>
             </div>
           </Card>
         ) : (

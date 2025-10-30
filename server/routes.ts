@@ -15,6 +15,7 @@ import { addDays } from "date-fns";
 import rateLimit from "express-rate-limit";
 import { achievementChecker } from "./achievement-checker";
 import { requireAuth, getUserIdFromSession } from "./auth-middleware";
+import bcrypt from "bcryptjs";
 import { 
   validateMessage, 
   validateThreadTitle, 
@@ -179,17 +180,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Authentication endpoints
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { username } = req.body;
+      const { username, password } = req.body as { username?: string; password?: string };
 
-      if (!username || username.length < 3) {
+      if (!username || typeof username !== "string" || username.trim().length < 3) {
         return res.status(400).json({ message: "Username must be at least 3 characters" });
       }
 
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+      if (!password || typeof password !== "string" || password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
       }
+
+      const existingUser = await storage.getUserByUsername(username.trim());
+      if (existingUser) {
+        return res.status(409).json({ message: "Username already exists" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
 
       let referrerId: string | undefined = undefined;
       const ref = req.session.referrerId as string | undefined;
@@ -197,17 +203,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const refUser = await storage.getUser(ref);
         if (refUser) referrerId = refUser.id;
       }
+
       const user = await storage.createUser(
         insertUserSchema.parse({
-          username,
+          username: username.trim(),
+          passwordHash,
           ...(referrerId ? { referrerId } : {}),
         })
       );
 
-      // Create user profile
       await storage.ensureUserProfile(user.id);
 
-      // Set session and save it
       req.session.userId = user.id;
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => {
@@ -216,26 +222,41 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       });
 
-      res.json({ userId: user.id, username: user.username });
+      res.json({
+        userId: user.id,
+        username: user.username,
+        balance: Number(user.balance),
+      });
     } catch (error) {
+      console.error("Registration error:", error);
       res.status(500).json({ message: "Failed to create user" });
     }
   });
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username } = req.body;
+      const { username, password } = req.body as { username?: string; password?: string };
 
-      if (!username) {
+      if (!username || typeof username !== "string") {
         return res.status(400).json({ message: "Username is required" });
       }
 
-      const user = await storage.getUserByUsername(username);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      if (!password || typeof password !== "string") {
+        return res.status(400).json({ message: "Password is required" });
       }
 
-      // Set session and save it
+      const user = await storage.getUserByUsername(username.trim());
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordMatches) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      await storage.updateUserLastLogin(user.id);
+
       req.session.userId = user.id;
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => {
@@ -244,8 +265,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       });
 
-      res.json({ userId: user.id, username: user.username });
+      res.json({
+        userId: user.id,
+        username: user.username,
+        balance: Number(user.balance),
+        lastLoginAt: user.lastLoginAt ?? new Date(),
+      });
     } catch (error) {
+      console.error("Login error:", error);
       res.status(500).json({ message: "Failed to login" });
     }
   });

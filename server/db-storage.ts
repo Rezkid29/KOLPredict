@@ -155,6 +155,20 @@ export class DbStorage implements IStorage {
     await db.update(users).set({ totalBets, totalWins, totalProfit }).where(eq(users.id, id));
   }
 
+  async updateUserPassword(id: string, passwordHash: string, passwordUpdatedAt: Date = new Date()): Promise<void> {
+    await db
+      .update(users)
+      .set({ passwordHash, passwordUpdatedAt })
+      .where(eq(users.id, id));
+  }
+
+  async updateUserLastLogin(id: string, timestamp: Date = new Date()): Promise<void> {
+    await db
+      .update(users)
+      .set({ lastLoginAt: timestamp })
+      .where(eq(users.id, id));
+  }
+
   // KOL methods
   async getKol(id: string): Promise<Kol | undefined> {
     const result = await db.select().from(kols).where(eq(kols.id, id)).limit(1);

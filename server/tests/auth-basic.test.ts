@@ -3,13 +3,14 @@ import { describe, it, expect, beforeAll } from "vitest";
 describe("Username and Guest Authentication", () => {
   const API_BASE = "http://localhost:5000";
   const testUsername = `testuser_${Date.now()}`;
+  const testPassword = "Password123!";
 
   describe("AUTH-USER-001: Register New User", () => {
     it("should register a new user with valid username", async () => {
       const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: testUsername }),
+        body: JSON.stringify({ username: testUsername, password: testPassword }),
       });
 
       expect(response.status).toBe(200);
@@ -18,13 +19,14 @@ describe("Username and Guest Authentication", () => {
       expect(data).toHaveProperty("username", testUsername);
       expect(data).toHaveProperty("balance");
       expect(data.balance).toBe(1000); // Starting balance
+      expect(data).not.toHaveProperty("passwordHash");
     });
 
     it("should reject username shorter than 3 characters", async () => {
       const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "ab" }),
+        body: JSON.stringify({ username: "ab", password: "shortpwd" }),
       });
 
       expect(response.status).toBe(400);
@@ -49,7 +51,7 @@ describe("Username and Guest Authentication", () => {
       const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "" }),
+        body: JSON.stringify({ username: "", password: "whatever123" }),
       });
 
       expect(response.status).toBe(400);
@@ -68,13 +70,14 @@ describe("Username and Guest Authentication", () => {
       const data = await response.json();
       expect(data).toHaveProperty("userId");
       expect(data.username).toBe(testUsername);
+      expect(data).toHaveProperty("lastLoginAt");
     });
 
     it("should reject non-existent username", async () => {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "nonexistentuser999" }),
+        body: JSON.stringify({ username: "nonexistentuser999", password: "Password123!" }),
       });
 
       expect(response.status).toBe(404);

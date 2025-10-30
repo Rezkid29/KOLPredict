@@ -5,14 +5,14 @@ export class ValidationError extends Error {
   }
 }
 
-const MAX_MESSAGE_LENGTH = 2000;
+const MAX_MESSAGE_LENGTH = 1000;
 const MAX_THREAD_TITLE_LENGTH = 200;
-const MAX_THREAD_CONTENT_LENGTH = 10000;
+const MAX_THREAD_CONTENT_LENGTH = 5000;
 const MAX_COMMENT_LENGTH = 2000;
 const MAX_BIO_LENGTH = 500;
 
 export function validateMessage(content: string): { valid: boolean; error?: string } {
-  if (!content || typeof content !== 'string') {
+  if (typeof content !== 'string') {
     return { valid: false, error: "Message content is required" };
   }
 
@@ -29,7 +29,7 @@ export function validateMessage(content: string): { valid: boolean; error?: stri
 }
 
 export function validateThreadTitle(title: string): { valid: boolean; error?: string } {
-  if (!title || typeof title !== 'string') {
+  if (typeof title !== 'string') {
     return { valid: false, error: "Thread title is required" };
   }
 
@@ -50,7 +50,7 @@ export function validateThreadTitle(title: string): { valid: boolean; error?: st
 }
 
 export function validateThreadContent(content: string): { valid: boolean; error?: string } {
-  if (!content || typeof content !== 'string') {
+  if (typeof content !== 'string') {
     return { valid: false, error: "Thread content is required" };
   }
 
@@ -67,7 +67,7 @@ export function validateThreadContent(content: string): { valid: boolean; error?
 }
 
 export function validateComment(content: string): { valid: boolean; error?: string } {
-  if (!content || typeof content !== 'string') {
+  if (typeof content !== 'string') {
     return { valid: false, error: "Comment content is required" };
   }
 
@@ -98,12 +98,12 @@ export function validateBio(bio: string): { valid: boolean; error?: string } {
 }
 
 export function validateCategory(category: string, allowedCategories: string[]): { valid: boolean; error?: string } {
-  if (!category || typeof category !== 'string') {
+  if (typeof category !== 'string' || category.length === 0) {
     return { valid: false, error: "Category is required" };
   }
 
   if (!allowedCategories.includes(category)) {
-    return { valid: false, error: `Category must be one of: ${allowedCategories.join(', ')}` };
+    return { valid: false, error: `Invalid category. Allowed categories: ${allowedCategories.join(', ')}` };
   }
 
   return { valid: true };
@@ -129,5 +129,5 @@ export function sanitizeInput(input: string): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Remove control characters
 }
 
-export const FORUM_CATEGORIES = ['general', 'strategies', 'kols', 'markets'] as const;
+export const FORUM_CATEGORIES = ['general', 'markets', 'predictions', 'kols'] as const;
 export type ForumCategory = typeof FORUM_CATEGORIES[number];

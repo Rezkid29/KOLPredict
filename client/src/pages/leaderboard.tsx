@@ -31,19 +31,19 @@ export default function Leaderboard() {
   };
 
   const getTierBadge = (rank: number) => {
-    if (rank <= 3) {
+    if (rank <= 5) {
       return <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 font-semibold">Legendary</Badge>;
     }
-    if (rank <= 5) {
+    if (rank <= 10) {
       return <Badge className="bg-purple-500/20 text-purple-500 border-purple-500/30 font-semibold">Elite</Badge>;
     }
-    if (rank <= 10) {
+    if (rank <= 15) {
       return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30 font-semibold">Rising</Badge>;
     }
-    if (rank <= 15) {
+    if (rank <= 20) {
       return <Badge className="bg-green-500/20 text-green-500 border-green-500/30 font-semibold">Growing</Badge>;
     }
-    if (rank <= 20) {
+    if (rank <= 30) {
       return <Badge className="bg-slate-500/20 text-slate-500 border-slate-500/30 font-semibold">Rookie</Badge>;
     }
     return null;
