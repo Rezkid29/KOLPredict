@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, lt, sql } from "drizzle-orm";
 import ws from "ws";
 
 // Custom error types for proper HTTP status code handling
@@ -1388,6 +1388,35 @@ export class DbStorage implements IStorage {
       .where(eq(transactions.userId, userId))
       .orderBy(desc(transactions.createdAt))
       .limit(limit);
+  }
+
+  async getUserTransactionsInRange(userId: string, from: Date, to: Date): Promise<Transaction[]> {
+    return await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          gte(transactions.createdAt, from),
+          lte(transactions.createdAt, to)
+        )
+      )
+      .orderBy(asc(transactions.createdAt));
+  }
+
+  async getLastTransactionBefore(userId: string, before: Date): Promise<Transaction | undefined> {
+    const result = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          lt(transactions.createdAt, before)
+        )
+      )
+      .orderBy(desc(transactions.createdAt))
+      .limit(1);
+    return result[0];
   }
 
   // KOL metrics history methods

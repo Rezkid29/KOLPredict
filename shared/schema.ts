@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, real, jsonb, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -107,6 +107,19 @@ export const positions = pgTable("positions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const portfolioSnapshots = pgTable("portfolio_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  bucketAt: timestamp("bucket_at", { withTimezone: true }).notNull(),
+  cashBalance: decimal("cash_balance", { precision: 18, scale: 2 }).notNull(),
+  equityBalance: decimal("equity_balance", { precision: 18, scale: 2 }).notNull(),
+  holdingsJson: jsonb("holdings_json"),
+  source: text("source").notNull().default("on_demand"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  userBucketIdx: uniqueIndex("portfolio_snapshots_user_bucket_idx").on(table.userId, table.bucketAt),
+}));
 
 // Parlay (Bundles) tables
 export const parlayTickets = pgTable("parlay_tickets", {
@@ -647,6 +660,11 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertPortfolioSnapshotSchema = createInsertSchema(portfolioSnapshots).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertAchievementSchema = createInsertSchema(achievements).omit({
   id: true,
   createdAt: true,
@@ -694,6 +712,9 @@ export type ForumCommentVote = typeof forumCommentVotes.$inferSelect;
 
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+export type InsertPortfolioSnapshot = z.infer<typeof insertPortfolioSnapshotSchema>;
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type Achievement = typeof achievements.$inferSelect;

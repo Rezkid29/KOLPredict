@@ -12,6 +12,7 @@ import { BetModal } from "@/components/bet-modal";
 import { EditBioModal } from "@/components/edit-bio-modal";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient as globalQueryClient } from "@/lib/queryClient";
+import { PortfolioBalanceChart, type BalanceHistoryResponse, type PortfolioTimeframeKey } from "@/components/portfolio-balance-chart";
 import { 
   Wallet, 
   TrendingUp, 
@@ -42,6 +43,7 @@ export default function Profile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [balanceRange, setBalanceRange] = useState<PortfolioTimeframeKey>("1M");
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -124,6 +126,22 @@ export default function Profile() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
+  });
+
+  const {
+    data: balanceHistory,
+    isLoading: balanceHistoryLoading,
+    error: balanceHistoryError,
+  } = useQuery<BalanceHistoryResponse>({
+    queryKey: ["/api/users/me/balance-history", balanceRange],
+    enabled: isOwnProfile,
+    queryFn: async () => {
+      const res = await fetch(`/api/users/me/balance-history?range=${balanceRange}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch balance history");
       return res.json();
     },
   });
@@ -704,6 +722,15 @@ export default function Profile() {
           {/* Portfolio Tab (only for own profile) */}
           {isOwnProfile && (
             <TabsContent value="portfolio">
+              <Card className="p-6 hover-elevate transition-all border-border/60 mb-6">
+                <PortfolioBalanceChart
+                  range={balanceRange}
+                  onRangeChange={(nextRange) => setBalanceRange(nextRange)}
+                  data={balanceHistory}
+                  isLoading={balanceHistoryLoading}
+                  error={balanceHistoryError instanceof Error ? balanceHistoryError : null}
+                />
+              </Card>
               {/* Portfolio Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
                 <Card className="p-6 hover-elevate transition-all border-border/60">

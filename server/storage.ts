@@ -123,6 +123,8 @@ export interface IStorage {
   // Transactions
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getUserTransactions(userId: string, limit?: number): Promise<Transaction[]>;
+  getUserTransactionsInRange(userId: string, from: Date, to: Date): Promise<Transaction[]>;
+  getLastTransactionBefore(userId: string, before: Date): Promise<Transaction | undefined>;
 
   // KOL metrics history
   createKolMetricsHistory(history: InsertKolMetricsHistory): Promise<KolMetricsHistory>;
@@ -238,6 +240,7 @@ export class MemStorage implements IStorage {
   private solanaWithdrawals: Map<string, SolanaWithdrawal>;
   private platformFees: Map<string, PlatformFee>;
   private manualReviewQueue: Array<{ id: string; marketId: string; marketType: string; reason: string; createdAt: Date }>;
+  private transactions: Transaction[];
 
   constructor() {
     this.users = new Map();
@@ -253,6 +256,7 @@ export class MemStorage implements IStorage {
     this.platformFees = new Map();
     this.parlayTickets = new Map();
     this.manualReviewQueue = [];
+    this.transactions = [];
     this.initializeMockData();
   }
 
@@ -1127,11 +1131,32 @@ export class MemStorage implements IStorage {
       id,
       createdAt: new Date(),
     };
+    this.transactions.push(transaction);
     return transaction;
   }
 
   async getUserTransactions(userId: string, limit: number = 50): Promise<Transaction[]> {
-    return [];
+    return this.transactions
+      .filter((tx) => tx.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+  }
+
+  async getUserTransactionsInRange(userId: string, from: Date, to: Date): Promise<Transaction[]> {
+    return this.transactions
+      .filter((tx) => tx.userId === userId)
+      .filter((tx) => {
+        const createdAt = new Date(tx.createdAt).getTime();
+        return createdAt >= from.getTime() && createdAt <= to.getTime();
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  async getLastTransactionBefore(userId: string, before: Date): Promise<Transaction | undefined> {
+    return this.transactions
+      .filter((tx) => tx.userId === userId)
+      .filter((tx) => new Date(tx.createdAt).getTime() < before.getTime())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }
 
   // KOL metrics history methods (stub - not persisted in memory)

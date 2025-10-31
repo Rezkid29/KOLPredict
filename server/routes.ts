@@ -1496,6 +1496,119 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Get portfolio balance history for the current user
+  app.get("/api/users/me/balance-history", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const rangeParam = typeof req.query.range === "string" ? req.query.range.toUpperCase() : "1M";
+      const VALID_RANGES = new Set(["1D", "1W", "1M", "3M", "1Y", "ALL"]);
+      const range = VALID_RANGES.has(rangeParam) ? rangeParam : "1M";
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const now = new Date();
+      const millisecondsInDay = 24 * 60 * 60 * 1000;
+
+      let from = new Date(now);
+      switch (range) {
+        case "1D":
+          from = new Date(now.getTime() - 1 * millisecondsInDay);
+          break;
+        case "1W":
+          from = new Date(now.getTime() - 7 * millisecondsInDay);
+          break;
+        case "1M":
+          from = new Date(now.getTime() - 30 * millisecondsInDay);
+          break;
+        case "3M":
+          from = new Date(now.getTime() - 90 * millisecondsInDay);
+          break;
+        case "1Y":
+          from = new Date(now.getTime() - 365 * millisecondsInDay);
+          break;
+        case "ALL":
+          from = new Date(0);
+          break;
+        default:
+          from = new Date(now.getTime() - 30 * millisecondsInDay);
+      }
+
+      const transactionsInRange = await storage.getUserTransactionsInRange(userId, from, now);
+      const lastBefore = await storage.getLastTransactionBefore(userId, from);
+
+      const parseBalance = (value: unknown): number => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : 0;
+      };
+
+      const points: Array<{ timestamp: string; balance: number }> = [];
+
+      const baselineBalance = lastBefore
+        ? parseBalance(lastBefore.balanceAfter)
+        : transactionsInRange.length > 0
+          ? parseBalance(transactionsInRange[0].balanceAfter)
+          : parseBalance(user.balance);
+
+      const baselineTimestamp = lastBefore
+        ? from
+        : transactionsInRange.length > 0
+          ? new Date(transactionsInRange[0].createdAt)
+          : from;
+
+      const pushPoint = (date: Date, balance: number) => {
+        const timestamp = date.toISOString();
+        const roundedBalance = Number(balance.toFixed(2));
+        if (points.length > 0) {
+          const last = points[points.length - 1];
+          if (last.timestamp === timestamp && last.balance === roundedBalance) {
+            return;
+          }
+        }
+        points.push({ timestamp, balance: roundedBalance });
+      };
+
+      pushPoint(baselineTimestamp, baselineBalance);
+
+      for (const tx of transactionsInRange) {
+        const balanceAfter = parseBalance(tx.balanceAfter);
+        const txDate = new Date(tx.createdAt);
+        if (txDate.getTime() < baselineTimestamp.getTime()) {
+          continue;
+        }
+        pushPoint(txDate, balanceAfter);
+      }
+
+      const currentBalance = parseBalance(user.balance);
+      pushPoint(now, currentBalance);
+
+      if (points.length === 1) {
+        // Duplicate the single point so the chart can render a flat line
+        const duplicateTime = new Date(now.getTime() - 60 * 1000);
+        pushPoint(duplicateTime < baselineTimestamp ? baselineTimestamp : duplicateTime, baselineBalance);
+        points.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      }
+
+      const firstBalance = points[0]?.balance ?? currentBalance;
+      const lastBalance = points[points.length - 1]?.balance ?? currentBalance;
+
+      const changeValue = Number((lastBalance - firstBalance).toFixed(2));
+      const changePercent = firstBalance === 0 ? 0 : Number(((changeValue / firstBalance) * 100).toFixed(2));
+
+      res.json({
+        range,
+        points,
+        changeValue,
+        changePercent,
+      });
+    } catch (error) {
+      console.error("Error fetching balance history:", error);
+      res.status(500).json({ message: "Failed to fetch balance history" });
+    }
+  });
+
   // Manual trigger for KOL metrics update
   app.post("/api/admin/update-metrics", async (req, res) => {
     try {
