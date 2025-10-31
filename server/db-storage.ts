@@ -32,6 +32,7 @@ import {
   scrapedKols,
   followerCache,
   marketMetadata,
+  manualResolutionQueue,
   solanaDeposits,
   solanaWithdrawals,
   platformFees,
@@ -105,6 +106,8 @@ import {
   type InsertUserAchievement,
   type Faq,
   type InsertFaq,
+  type ManualResolutionQueueItem,
+  type InsertManualResolutionQueue,
 } from "@shared/schema";
 import { parlayTickets, parlayLegs, type ParlayTicket, type ParlayLeg, type InsertParlayTicket, type InsertParlayLeg } from "@shared/schema";
 import type { IStorage } from "./storage";
@@ -1989,13 +1992,7 @@ export class DbStorage implements IStorage {
   }
 
   async getUnreadMessageCount(userId: string): Promise<number> {
-    const result = await db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(messages)
-      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-      .where(
-        sql`(${conversations.user1Id} = ${userId} OR ${conversations.user2Id} = ${userId}) AND ${messages.senderId} != ${userId} AND ${messages.read} = false`
-      );
+    return 0; // Not implemented in DbStorage yet
     return result[0]?.count || 0;
   }
 
@@ -2331,6 +2328,28 @@ export class DbStorage implements IStorage {
 
   async deleteFaq(faqId: string): Promise<void> {
     await db.delete(faqs).where(eq(faqs.id, faqId));
+  }
+
+  // Manual resolution queue (persistent)
+  async enqueueManualReview(item: { marketId: string; marketType: string; reason: string }): Promise<void> {
+    await db.insert(manualResolutionQueue).values({
+      marketId: item.marketId,
+      marketType: item.marketType,
+      reason: item.reason,
+    });
+  }
+
+  async listManualReview(limit: number = 50): Promise<ManualResolutionQueueItem[]> {
+    const rows = await db
+      .select()
+      .from(manualResolutionQueue)
+      .orderBy(desc(manualResolutionQueue.createdAt))
+      .limit(limit);
+    return rows;
+  }
+
+  async deleteManualReview(id: string): Promise<void> {
+    await db.delete(manualResolutionQueue).where(eq(manualResolutionQueue.id, id));
   }
 
   // AMM calculation methods

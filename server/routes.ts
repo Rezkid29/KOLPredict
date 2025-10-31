@@ -69,6 +69,64 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   };
 
+  // Manual review queue - list unresolved items
+  app.get("/api/admin/manual-review", async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+      const items = await storage.listManualReview(isNaN(limit) ? 50 : limit);
+      res.json({ items });
+    } catch (error) {
+      console.error("Error listing manual review items:", error);
+      res.status(500).json({ message: "Failed to list manual review items" });
+    }
+  });
+
+  // Manual resolve a specific market from the queue
+  app.post("/api/admin/manual-review/:marketId/resolve", async (req, res) => {
+    try {
+      const marketId = req.params.marketId;
+      const { outcome, reason } = req.body as { outcome?: "yes" | "no"; reason?: string };
+
+      if (outcome !== "yes" && outcome !== "no") {
+        return res.status(400).json({ message: "Outcome must be 'yes' or 'no'" });
+      }
+
+      const market = await storage.getMarket(marketId);
+      if (!market) {
+        return res.status(404).json({ message: "Market not found" });
+      }
+
+      if (!market.isLive || market.outcome !== "pending") {
+        return res.status(400).json({ message: "Market is not eligible for manual resolution" });
+      }
+
+      // Resolve market and settle bets
+      await storage.resolveMarket(marketId, outcome);
+      const settled = await storage.settleBetsTransactional(marketId, outcome);
+      try {
+        await storage.settleParlaysForMarket(marketId, outcome);
+      } catch (e) {
+        console.error("Error settling parlays for market", marketId, e);
+      }
+
+      // Remove any queue entries for this market
+      try {
+        const items = await storage.listManualReview(200);
+        const toDelete = items.filter(i => i.marketId === marketId);
+        for (const item of toDelete) {
+          await storage.deleteManualReview(item.id);
+        }
+      } catch (e) {
+        console.error("Failed to prune manual review queue for market", marketId, e);
+      }
+
+      res.json({ message: "Market manually resolved", marketId, outcome, settledBets: settled, note: reason || null });
+    } catch (error) {
+      console.error("Error manually resolving market:", error);
+      res.status(500).json({ message: "Failed to manually resolve market" });
+    }
+  });
+
   wss.on('connection', (ws) => {
     console.log('WebSocket client connected');
 

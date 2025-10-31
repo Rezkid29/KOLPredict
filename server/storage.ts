@@ -217,6 +217,11 @@ export interface IStorage {
   getFaqs(category?: string): Promise<Faq[]>;
   updateFaq(faqId: string, updates: Partial<Pick<Faq, 'question' | 'answer' | 'category' | 'order'>>): Promise<Faq>;
   deleteFaq(faqId: string): Promise<void>;
+
+  // Manual resolution queue
+  enqueueManualReview(item: { marketId: string; marketType: string; reason: string }): Promise<void>;
+  listManualReview(limit?: number): Promise<Array<{ id: string; marketId: string; marketType: string; reason: string; createdAt: Date }>>;
+  deleteManualReview(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -232,6 +237,7 @@ export class MemStorage implements IStorage {
   private solanaDeposits: Map<string, SolanaDeposit>;
   private solanaWithdrawals: Map<string, SolanaWithdrawal>;
   private platformFees: Map<string, PlatformFee>;
+  private manualReviewQueue: Array<{ id: string; marketId: string; marketType: string; reason: string; createdAt: Date }>;
 
   constructor() {
     this.users = new Map();
@@ -240,12 +246,13 @@ export class MemStorage implements IStorage {
     this.bets = new Map();
     this.positions = new Map();
     this.comments = new Map();
-    this.scrapedKols = [];
+    this.parlayTickets = new Map();
     this.followerCache = new Map();
     this.solanaDeposits = new Map();
     this.solanaWithdrawals = new Map();
     this.platformFees = new Map();
     this.parlayTickets = new Map();
+    this.manualReviewQueue = [];
     this.initializeMockData();
   }
 

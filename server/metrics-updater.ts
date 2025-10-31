@@ -1,6 +1,9 @@
 import { dbStorage as storage } from "./db-storage";
 import { socialMediaClient } from "./social-api-client";
-import type { Kol } from "@shared/schema";
+import { KOLScraperV2 } from "./kol-scraper-v2";
+import { KOLDataParser } from "./kol-data-parser";
+import { logResolutionEvent } from "./logger";
+import type { Kol, ScrapedKol, InsertScrapedKol } from "@shared/schema";
 
 export class MetricsUpdater {
   private updateInterval: NodeJS.Timeout | null = null;
@@ -8,6 +11,82 @@ export class MetricsUpdater {
   private consecutiveFailures = 0;
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
   private readonly RETRY_DELAY_MS = 5000;
+
+  private normalizeIdentifier(value?: string | null): string | null {
+    if (!value) return null;
+    return value.replace(/^@/, "").trim().toLowerCase();
+  }
+
+  private buildLeaderboardMap(rows: ScrapedKol[]): Map<string, ScrapedKol> {
+    const map = new Map<string, ScrapedKol>();
+    for (const row of rows) {
+      const usernameKey = this.normalizeIdentifier(row.username);
+      if (usernameKey) {
+        map.set(usernameKey, row);
+      }
+
+      if (row.xHandle) {
+        const handleKey = this.normalizeIdentifier(row.xHandle);
+        if (handleKey) {
+          map.set(handleKey, row);
+        }
+      }
+    }
+    return map;
+  }
+
+  private findLeaderboardEntry(map: Map<string, ScrapedKol>, kol: Kol): ScrapedKol | undefined {
+    const handleKey = this.normalizeIdentifier(kol.handle);
+    if (handleKey) {
+      const hit = map.get(handleKey);
+      if (hit) return hit;
+    }
+
+    const nameKey = this.normalizeIdentifier(kol.name);
+    if (nameKey) {
+      const hit = map.get(nameKey);
+      if (hit) return hit;
+    }
+
+    return undefined;
+  }
+
+  private async fetchLatestLeaderboard(limit: number = 100): Promise<{
+    map: Map<string, ScrapedKol>;
+    sample: string[];
+    rowCount: number;
+  }> {
+    const scraper = new KOLScraperV2();
+    try {
+      await scraper.init();
+      const rawEntries = await scraper.scrapeLeaderboard();
+      const timestamp = new Date();
+
+      const parsed: InsertScrapedKol[] = rawEntries.slice(0, limit).map((entry) => {
+        const normalized = KOLDataParser.parseRawKOLData(entry.summary);
+        return {
+          ...normalized,
+          scrapedAt: timestamp,
+        };
+      });
+
+      if (parsed.length === 0) {
+        return { map: new Map(), sample: [], rowCount: 0 };
+      }
+
+      const inserted = await storage.createScrapedKols(parsed);
+      const map = this.buildLeaderboardMap(inserted);
+      const sample = inserted
+        .slice(0, Math.min(10, inserted.length))
+        .map((row) => row.username);
+
+      return { map, sample, rowCount: inserted.length };
+    } finally {
+      await scraper
+        .close()
+        .catch((error) => console.warn("Failed to close KOL scraper:", error));
+    }
+  }
 
   async updateAllKolMetrics(): Promise<void> {
     if (this.isUpdating) {
@@ -21,7 +100,52 @@ export class MetricsUpdater {
     let successCount = 0;
     let failureCount = 0;
 
+    let leaderboardMap = new Map<string, ScrapedKol>();
+    let scrapeSummaryLogged = false;
+
     try {
+      try {
+        const fetched = await this.fetchLatestLeaderboard();
+        leaderboardMap = fetched.map;
+        if (fetched.rowCount > 0) {
+          logResolutionEvent({
+            type: "FETCH_SCRAPE_SUMMARY",
+            rowCount: fetched.rowCount,
+            scrapedUsernamesSample: fetched.sample,
+            scrapeAgeHours: 0,
+          });
+          scrapeSummaryLogged = true;
+        }
+      } catch (scrapeError) {
+        console.error("Failed to scrape latest leaderboard data:", scrapeError);
+      }
+
+      if (!scrapeSummaryLogged) {
+        try {
+          const fallbackRows = await storage.getLatestScrapedKols(100);
+          leaderboardMap = this.buildLeaderboardMap(fallbackRows);
+          if (fallbackRows.length > 0) {
+            const sample = fallbackRows
+              .slice(0, Math.min(10, fallbackRows.length))
+              .map((row) => row.username);
+            const newest = fallbackRows.reduce((acc, row) =>
+              row.scrapedAt > acc.scrapedAt ? row : acc,
+            fallbackRows[0]);
+            const ageMs = Date.now() - newest.scrapedAt.getTime();
+            const ageHours = Math.round((ageMs / 36e5) * 10) / 10;
+            logResolutionEvent({
+              type: "FETCH_SCRAPE_SUMMARY",
+              rowCount: fallbackRows.length,
+              scrapedUsernamesSample: sample,
+              scrapeAgeHours: ageHours,
+            });
+            scrapeSummaryLogged = true;
+          }
+        } catch (fallbackError) {
+          console.error("Failed to load fallback leaderboard data:", fallbackError);
+        }
+      }
+
       let kols: Kol[];
       try {
         kols = await storage.getAllKols();
@@ -41,7 +165,7 @@ export class MetricsUpdater {
       
       for (const kol of kols) {
         try {
-          await this.updateKolMetrics(kol);
+          await this.updateKolMetrics(kol, leaderboardMap);
           successCount++;
         } catch (error) {
           failureCount++;
@@ -71,7 +195,7 @@ export class MetricsUpdater {
     }
   }
 
-  async updateKolMetrics(kol: Kol): Promise<void> {
+  async updateKolMetrics(kol: Kol, leaderboardMap: Map<string, ScrapedKol>): Promise<void> {
     // Validate KOL data before processing
     if (!kol.id || !kol.name) {
       throw new Error(`Invalid KOL data: missing required fields`);
@@ -108,10 +232,22 @@ export class MetricsUpdater {
       throw new Error(`Invalid engagement rate (NaN or Infinite)`);
     }
     
+    const leaderboardEntry = this.findLeaderboardEntry(leaderboardMap, kol);
+
     const hasChanged = 
       kol.followers !== metrics.followers ||
       parseFloat(kol.engagementRate) !== metrics.engagementRate ||
       kol.trending !== metrics.trending;
+
+    const hasLeaderboardChanges = leaderboardEntry ? (
+      (kol.kolscanRank ?? null) !== (leaderboardEntry.rank !== null && leaderboardEntry.rank !== undefined ? leaderboardEntry.rank.toString() : null) ||
+      (kol.kolscanWins ?? null) !== (leaderboardEntry.wins ?? null) ||
+      (kol.kolscanLosses ?? null) !== (leaderboardEntry.losses ?? null) ||
+      (kol.kolscanSolGain ?? null) !== (leaderboardEntry.solGain ?? null) ||
+      (kol.kolscanUsdGain ?? null) !== (leaderboardEntry.usdGain ?? null) ||
+      (kol.lastScrapedAt ? kol.lastScrapedAt.getTime() : null) !== (leaderboardEntry.scrapedAt ? leaderboardEntry.scrapedAt.getTime() : null) ||
+      kol.scrapedFromKolscan !== true
+    ) : false;
 
     try {
       // Always record metrics history for time-series analysis
@@ -122,16 +258,35 @@ export class MetricsUpdater {
         engagementRate: metrics.engagementRate.toString(),
         trending: metrics.trending,
         trendingPercent: metrics.trendingPercent?.toString() || null,
+        leaderboardRank: leaderboardEntry?.rank ?? null,
+        leaderboardWins: leaderboardEntry?.wins ?? null,
+        leaderboardLosses: leaderboardEntry?.losses ?? null,
+        leaderboardSolGain: leaderboardEntry?.solGain ?? null,
+        leaderboardUsdGain: leaderboardEntry?.usdGain ?? null,
       });
 
       // Only update KOL record if metrics have changed
-      if (hasChanged) {
-        await storage.updateKol(kol.id, {
+      if (hasChanged || hasLeaderboardChanges) {
+        const updates: Partial<Omit<Kol, 'id'>> = {
           followers: metrics.followers,
           engagementRate: metrics.engagementRate.toString(),
           trending: metrics.trending,
           trendingPercent: metrics.trendingPercent?.toString() || null,
-        });
+        };
+
+        if (leaderboardEntry) {
+          updates.kolscanRank = leaderboardEntry.rank !== null && leaderboardEntry.rank !== undefined ? leaderboardEntry.rank.toString() : null;
+          updates.kolscanWins = leaderboardEntry.wins ?? null;
+          updates.kolscanLosses = leaderboardEntry.losses ?? null;
+          updates.kolscanSolGain = leaderboardEntry.solGain ?? null;
+          updates.kolscanUsdGain = leaderboardEntry.usdGain ?? null;
+          updates.lastScrapedAt = leaderboardEntry.scrapedAt;
+          updates.scrapedFromKolscan = true;
+        } else if (!kol.scrapedFromKolscan) {
+          updates.scrapedFromKolscan = kol.scrapedFromKolscan;
+        }
+
+        await storage.updateKol(kol.id, updates);
 
         console.log(`Updated ${kol.name}: ${kol.followers} -> ${metrics.followers} followers, ${kol.engagementRate}% -> ${metrics.engagementRate}% engagement`);
       } else {

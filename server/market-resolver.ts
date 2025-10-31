@@ -3,6 +3,7 @@ import { socialMediaClient } from "./social-api-client";
 import { xApiClient } from "./x-api-client";
 import { KOLScraperV2 } from "./kol-scraper-v2";
 import { KOLDataParser, type RawKOLData } from "./kol-data-parser";
+import { logResolutionEvent, newRunId } from "./logger";
 import type { Market, Bet, Kol, ScrapedKol } from "@shared/schema";
 
 export interface MarketResolution {
@@ -18,12 +19,71 @@ export class MarketResolver {
   private consecutiveFailures = 0;
   private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
+  private normalizeUsername(name?: string | null): string {
+    return (name || '').trim().toLowerCase();
+  }
+
+  private getMaxLookupRows(): number {
+    const envVal = process.env.RESOLUTION_MAX_LOOKUP_ROWS;
+    const n = envVal ? parseInt(envVal, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 100;
+  }
+
+  private async findKolDataForPair(
+    kolA: string,
+    kolB: string
+  ): Promise<{
+    kolAData?: ScrapedKol;
+    kolBData?: ScrapedKol;
+    rowCount: number;
+    retryCount: number;
+    scrapedSample: string[];
+  }> {
+    const maxRows = this.getMaxLookupRows();
+    const wantA = this.normalizeUsername(kolA);
+    const wantB = this.normalizeUsername(kolB);
+
+    let retryCount = 0;
+
+    // First attempt
+    const fresh = await this.getFreshKolData(maxRows);
+    const sample = fresh.slice(0, Math.min(10, fresh.length)).map(k => this.normalizeUsername(k.username));
+    let kolAData = fresh.find(k => this.normalizeUsername(k.username) === wantA);
+    let kolBData = fresh.find(k => this.normalizeUsername(k.username) === wantB);
+
+    if (!kolAData || !kolBData) {
+      // Retry once using the scraper again (lightweight retry) and log
+      retryCount = 1;
+      logResolutionEvent({
+        type: 'SCRAPE_TRIGGERED',
+        decision: 'retry_missing_kol',
+        scrapedUsernamesSample: sample,
+        rowCount: fresh.length,
+      });
+      const fresh2 = await this.getFreshKolData(maxRows);
+      const fresh2Norm = fresh2.map(k => ({ norm: this.normalizeUsername(k.username), k }));
+      kolAData = fresh2Norm.find(x => x.norm === wantA)?.k || kolAData;
+      kolBData = fresh2Norm.find(x => x.norm === wantB)?.k || kolBData;
+      logResolutionEvent({
+        type: 'SCRAPE_RETRY_RESULT',
+        retryCount,
+        scrapedUsernamesSample: fresh2.slice(0, Math.min(10, fresh2.length)).map(k => this.normalizeUsername(k.username)),
+        rowCount: fresh2.length,
+      });
+      return { kolAData, kolBData, rowCount: fresh2.length, retryCount, scrapedSample: sample };
+    }
+
+    return { kolAData, kolBData, rowCount: fresh.length, retryCount, scrapedSample: sample };
+  }
+
   private async getFreshKolData(limit: number = 20): Promise<ScrapedKol[]> {
     const dedicatedScraper = new KOLScraperV2();
     try {
       console.log('🔄 Performing on-demand scrape for fresh KOL data...');
       await dedicatedScraper.init();
+      const scrapeStartedAt = new Date();
       const freshData = await dedicatedScraper.scrapeLeaderboard();
+      const scrapeCompletedAt = new Date();
       console.log(`✅ Retrieved ${freshData.length} fresh KOL entries from kolscan.io`);
 
       // Log the structured data for debugging
@@ -40,6 +100,18 @@ export class MarketResolver {
           scrapedAt: new Date(),
         };
       }));
+
+      // Structured resolution log summary
+      const sample = freshData.slice(0, Math.min(10, freshData.length)).map((k: any) => {
+        const parsed = KOLDataParser.parseRawKOLData(k.summary);
+        return (parsed.username || "").toString();
+      });
+      logResolutionEvent({
+        type: 'FETCH_SCRAPE_SUMMARY',
+        rowCount: freshData.length,
+        scrapedUsernamesSample: sample,
+        scrapeAgeHours: 0, // fresh scrape
+      });
 
       return freshData.slice(0, limit).map((kol: { summary: RawKOLData; profileUrl: string | null }) => {
         const parsed = KOLDataParser.parseRawKOLData(kol.summary);
@@ -82,9 +154,12 @@ export class MarketResolver {
 
     this.isResolving = true;
     console.log("Checking for expired markets...");
+    const runId = newRunId();
+    logResolutionEvent({ type: 'RESOLUTION_RUN_START', runId });
 
     let successCount = 0;
     let failureCount = 0;
+    let missingKolCount = 0;
     const resolutions: MarketResolution[] = [];
 
     try {
@@ -125,6 +200,9 @@ export class MarketResolver {
             if (resolution) {
               resolutions.push(resolution);
               successCount++;
+              if (typeof resolution.reason === 'string' && resolution.reason.includes('missing latest leaderboard data')) {
+                missingKolCount++;
+              }
             } else {
               failureCount++;
             }
@@ -154,6 +232,16 @@ export class MarketResolver {
         this.stopAutoResolution();
       }
 
+      logResolutionEvent({
+        type: 'RESOLUTION_SUMMARY',
+        runId,
+        totals: {
+          processed: resolutions.length + failureCount,
+          successes: successCount,
+          failures: failureCount,
+          missingKolCount,
+        },
+      });
       return resolutions;
     } catch (error) {
       console.error("Unexpected error in market resolution:", error);
@@ -572,17 +660,69 @@ export class MarketResolver {
   }
 
   private async resolveRankFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await this.getFreshKolData(20);
-
-    const kolAData = latestKols.find(k => k.username === metadata.kolA);
-    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    const { kolAData, kolBData, rowCount, retryCount, scrapedSample } = await this.findKolDataForPair(metadata.kolA, metadata.kolB);
 
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for rank flippening market`);
-      return {
-        outcome: "no",
-        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
-      };
+      // Winner-by-default if exactly one present
+      if ((kolAData && !kolBData) || (!kolAData && kolBData)) {
+        const outcome: "yes" | "no" = kolAData ? "yes" : "no";
+        const winner = kolAData ? metadata.kolA : metadata.kolB;
+        logResolutionEvent({
+          type: 'AUTO_WIN_APPLIED',
+          marketType: 'rank_flippening',
+          metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)],
+          scrapedUsernamesSample: scrapedSample,
+          rowCount,
+          retryCount,
+          decision: 'auto_win_single_present',
+          reason: `${winner} present in scrape; opponent missing`,
+        });
+        return {
+          outcome,
+          reason: `${winner} present in latest leaderboard; opponent missing. Auto-resolving in favor of present KOL.`,
+        };
+      }
+
+      // Metadata fallback if both missing and prior ranks exist
+      const rA = Number(metadata.currentRankA);
+      const rB = Number(metadata.currentRankB);
+      if (Number.isFinite(rA) && Number.isFinite(rB)) {
+        const outcome: "yes" | "no" = rA < rB ? "yes" : "no";
+        logResolutionEvent({
+          type: 'FALLBACK_METADATA_APPLIED',
+          marketType: 'rank_flippening',
+          metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)],
+          decision: 'metadata_rank_compare',
+          reason: `Used prior ranks ${rA} vs ${rB}`,
+        });
+        return {
+          outcome,
+          reason: `${metadata.kolA} rank ${rA} vs ${metadata.kolB} rank ${rB} (using prior metadata).`,
+        };
+      }
+
+      // Manual review if still indeterminate
+      try {
+        await storage.enqueueManualReview({
+          marketId: (metadata.marketId || metadata.market_id || ''),
+          marketType: 'rank_flippening',
+          reason: 'both_missing_no_metadata',
+        });
+      } catch (e) {
+        console.error('Failed to enqueue manual review (rank_flippening):', e);
+      }
+      logResolutionEvent({
+        type: 'MISSING_KOL_DATA',
+        marketType: 'rank_flippening',
+        metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)],
+        scrapedUsernamesSample: scrapedSample,
+        rowCount,
+        retryCount,
+        reason: 'both_missing_no_metadata',
+        decision: 'manual_review',
+      });
+      return { outcome: "no", reason: 'Manual review required: rank flippening both KOLs missing' } as any;
     }
 
     const rankA = kolAData.rank || 999;
@@ -693,17 +833,43 @@ export class MarketResolver {
   }
 
   private async resolveSolGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await this.getFreshKolData(20);
-
-    const kolAData = latestKols.find(k => k.username === metadata.kolA);
-    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    const { kolAData, kolBData, rowCount, retryCount, scrapedSample } = await this.findKolDataForPair(metadata.kolA, metadata.kolB);
 
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for SOL gain flippening market`);
-      return {
-        outcome: "no",
-        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
-      };
+      if ((kolAData && !kolBData) || (!kolAData && kolBData)) {
+        const outcome: "yes" | "no" = kolAData ? "yes" : "no";
+        const winner = kolAData ? metadata.kolA : metadata.kolB;
+        logResolutionEvent({
+          type: 'AUTO_WIN_APPLIED',
+          marketType: 'sol_gain_flippening',
+          metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)],
+          scrapedUsernamesSample: scrapedSample,
+          rowCount,
+          retryCount,
+          decision: 'auto_win_single_present',
+          reason: `${winner} present in scrape; opponent missing`,
+        });
+        return { outcome, reason: `${winner} present in latest leaderboard; opponent missing. Auto-resolving in favor of present KOL.` };
+      }
+      const sA = Number(metadata.currentSolA);
+      const sB = Number(metadata.currentSolB);
+      if (Number.isFinite(sA) && Number.isFinite(sB)) {
+        const outcome: "yes" | "no" = sA > sB ? "yes" : "no";
+        logResolutionEvent({ type: 'FALLBACK_METADATA_APPLIED', marketType: 'sol_gain_flippening', decision: 'metadata_sol_compare', reason: `Used prior SOL ${sA} vs ${sB}` });
+        return { outcome, reason: `${metadata.kolA} SOL ${sA} vs ${metadata.kolB} SOL ${sB} (using prior metadata).` };
+      }
+      try {
+        await storage.enqueueManualReview({
+          marketId: (metadata.marketId || metadata.market_id || ''),
+          marketType: 'sol_gain_flippening',
+          reason: 'both_missing_no_metadata',
+        });
+      } catch (e) {
+        console.error('Failed to enqueue manual review (sol_gain_flippening):', e);
+      }
+      logResolutionEvent({ type: 'MISSING_KOL_DATA', marketType: 'sol_gain_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, reason: 'both_missing_no_metadata', decision: 'manual_review' });
+      return { outcome: "no", reason: 'Manual review required: sol gain flippening both KOLs missing' } as any;
     }
 
     const solGainA = this.parseSolGain(kolAData.solGain);
@@ -716,17 +882,34 @@ export class MarketResolver {
   }
 
   private async resolveUsdGainFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await this.getFreshKolData(20);
-
-    const kolAData = latestKols.find(k => k.username === metadata.kolA);
-    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    const { kolAData, kolBData, rowCount, retryCount, scrapedSample } = await this.findKolDataForPair(metadata.kolA, metadata.kolB);
 
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for USD gain flippening market`);
-      return {
-        outcome: "no",
-        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
-      };
+      if ((kolAData && !kolBData) || (!kolAData && kolBData)) {
+        const outcome: "yes" | "no" = kolAData ? "yes" : "no";
+        const winner = kolAData ? metadata.kolA : metadata.kolB;
+        logResolutionEvent({ type: 'AUTO_WIN_APPLIED', marketType: 'usd_gain_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, decision: 'auto_win_single_present', reason: `${winner} present in scrape; opponent missing` });
+        return { outcome, reason: `${winner} present in latest leaderboard; opponent missing. Auto-resolving in favor of present KOL.` };
+      }
+      const uA = Number(metadata.currentUsd);
+      const uB = Number(metadata.currentUsdB || metadata.currentUsd2 || null);
+      if (Number.isFinite(uA) && Number.isFinite(uB)) {
+        const outcome: "yes" | "no" = uA > uB ? "yes" : "no";
+        logResolutionEvent({ type: 'FALLBACK_METADATA_APPLIED', marketType: 'usd_gain_flippening', decision: 'metadata_usd_compare', reason: `Used prior USD ${uA} vs ${uB}` });
+        return { outcome, reason: `${metadata.kolA} USD ${uA} vs ${metadata.kolB} USD ${uB} (using prior metadata).` };
+      }
+      try {
+        await storage.enqueueManualReview({
+          marketId: (metadata.marketId || metadata.market_id || ''),
+          marketType: 'usd_gain_flippening',
+          reason: 'both_missing_no_metadata',
+        });
+      } catch (e) {
+        console.error('Failed to enqueue manual review (usd_gain_flippening):', e);
+      }
+      logResolutionEvent({ type: 'MISSING_KOL_DATA', marketType: 'usd_gain_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, reason: 'both_missing_no_metadata', decision: 'manual_review' });
+      return { outcome: "no", reason: 'Manual review required: usd gain flippening both KOLs missing' } as any;
     }
 
     const usdGainA = this.parseUsdGain(kolAData.usdGain);
@@ -739,17 +922,37 @@ export class MarketResolver {
   }
 
   private async resolveWinRateFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await this.getFreshKolData(20);
-
-    const kolAData = latestKols.find(k => k.username === metadata.kolA);
-    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    const { kolAData, kolBData, rowCount, retryCount, scrapedSample } = await this.findKolDataForPair(metadata.kolA, metadata.kolB);
 
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for win rate flippening market`);
-      return {
-        outcome: "no",
-        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
-      };
+      if ((kolAData && !kolBData) || (!kolAData && kolBData)) {
+        const outcome: "yes" | "no" = kolAData ? "yes" : "no";
+        const winner = kolAData ? metadata.kolA : metadata.kolB;
+        logResolutionEvent({ type: 'AUTO_WIN_APPLIED', marketType: 'winrate_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, decision: 'auto_win_single_present', reason: `${winner} present in scrape; opponent missing` });
+        return { outcome, reason: `${winner} present in latest leaderboard; opponent missing. Auto-resolving in favor of present KOL.` };
+      }
+      // Metadata fallback via currentWinsLossesA/B
+      const prevA = this.parseWinsLosses(metadata.currentWinsLossesA);
+      const prevB = this.parseWinsLosses(metadata.currentWinsLossesB);
+      const rateA = this.calculateWinRate(prevA.wins, prevA.losses);
+      const rateB = this.calculateWinRate(prevB.wins, prevB.losses);
+      if (Number.isFinite(rateA) && Number.isFinite(rateB)) {
+        const outcome: "yes" | "no" = rateA > rateB ? "yes" : "no";
+        logResolutionEvent({ type: 'FALLBACK_METADATA_APPLIED', marketType: 'winrate_flippening', decision: 'metadata_winrate_compare', reason: `Used prior winrates ${rateA} vs ${rateB}` });
+        return { outcome, reason: `${metadata.kolA} prior winrate ${(rateA*100).toFixed(1)}% vs ${metadata.kolB} ${(rateB*100).toFixed(1)}% (metadata).` };
+      }
+      try {
+        await storage.enqueueManualReview({
+          marketId: (metadata.marketId || metadata.market_id || ''),
+          marketType: 'winrate_flippening',
+          reason: 'both_missing_no_metadata',
+        });
+      } catch (e) {
+        console.error('Failed to enqueue manual review (winrate_flippening):', e);
+      }
+      logResolutionEvent({ type: 'MISSING_KOL_DATA', marketType: 'winrate_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, reason: 'both_missing_no_metadata', decision: 'manual_review' });
+      return { outcome: "no", reason: 'Manual review required: winrate flippening both KOLs missing' } as any;
     }
 
     const winRateA = this.calculateWinRate(kolAData.wins, kolAData.losses);
@@ -764,17 +967,37 @@ export class MarketResolver {
   }
 
   private async resolveWinLossRatioFlippeningMarket(metadata: any): Promise<{ outcome: "yes" | "no"; reason: string }> {
-    const latestKols = await this.getFreshKolData(20);
-
-    const kolAData = latestKols.find(k => k.username === metadata.kolA);
-    const kolBData = latestKols.find(k => k.username === metadata.kolB);
+    const { kolAData, kolBData, rowCount, retryCount, scrapedSample } = await this.findKolDataForPair(metadata.kolA, metadata.kolB);
 
     if (!kolAData || !kolBData) {
       console.warn(`Missing KOL data for win/loss ratio flippening market`);
-      return {
-        outcome: "no",
-        reason: `Market could not be resolved - missing latest leaderboard data for ${!kolAData ? metadata.kolA : metadata.kolB}`
-      };
+      if ((kolAData && !kolBData) || (!kolAData && kolBData)) {
+        const outcome: "yes" | "no" = kolAData ? "yes" : "no";
+        const winner = kolAData ? metadata.kolA : metadata.kolB;
+        logResolutionEvent({ type: 'AUTO_WIN_APPLIED', marketType: 'winloss_ratio_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, decision: 'auto_win_single_present', reason: `${winner} present in scrape; opponent missing` });
+        return { outcome, reason: `${winner} present in latest leaderboard; opponent missing. Auto-resolving in favor of present KOL.` };
+      }
+      // Metadata fallback via currentWinsLossesA/B ratios
+      const prevA = this.parseWinsLosses(metadata.currentWinsLossesA);
+      const prevB = this.parseWinsLosses(metadata.currentWinsLossesB);
+      const ratioA = this.calculateWinLossRatio(prevA.wins, prevA.losses);
+      const ratioB = this.calculateWinLossRatio(prevB.wins, prevB.losses);
+      if (Number.isFinite(ratioA) && Number.isFinite(ratioB)) {
+        const outcome: "yes" | "no" = ratioA > ratioB ? "yes" : "no";
+        logResolutionEvent({ type: 'FALLBACK_METADATA_APPLIED', marketType: 'winloss_ratio_flippening', decision: 'metadata_ratio_compare', reason: `Used prior ratios ${ratioA} vs ${ratioB}` });
+        return { outcome, reason: `${metadata.kolA} prior W/L ratio ${ratioA.toFixed(3)} vs ${metadata.kolB} ${ratioB.toFixed(3)} (metadata).` };
+      }
+      try {
+        await storage.enqueueManualReview({
+          marketId: (metadata.marketId || metadata.market_id || ''),
+          marketType: 'winloss_ratio_flippening',
+          reason: 'both_missing_no_metadata',
+        });
+      } catch (e) {
+        console.error('Failed to enqueue manual review (winloss_ratio_flippening):', e);
+      }
+      logResolutionEvent({ type: 'MISSING_KOL_DATA', marketType: 'winloss_ratio_flippening', metadataKols: [this.normalizeUsername(metadata.kolA), this.normalizeUsername(metadata.kolB)], scrapedUsernamesSample: scrapedSample, rowCount, retryCount, reason: 'both_missing_no_metadata', decision: 'manual_review' });
+      return { outcome: "no", reason: 'Manual review required: win/loss ratio flippening both KOLs missing' } as any;
     }
 
     const ratioA = this.calculateWinLossRatio(kolAData.wins, kolAData.losses);

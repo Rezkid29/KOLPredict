@@ -24,6 +24,15 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Manual resolution queue for markets requiring operator action
+export const manualResolutionQueue = pgTable("manual_resolution_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketId: varchar("market_id").notNull().references(() => markets.id),
+  marketType: text("market_type").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const kols = pgTable("kols", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -150,6 +159,11 @@ export const kolMetricsHistory = pgTable("kol_metrics_history", {
   engagementRate: decimal("engagement_rate", { precision: 5, scale: 2 }).notNull(),
   trending: boolean("trending").notNull().default(false),
   trendingPercent: decimal("trending_percent", { precision: 5, scale: 2 }),
+  leaderboardRank: integer("leaderboard_rank"),
+  leaderboardWins: integer("leaderboard_wins"),
+  leaderboardLosses: integer("leaderboard_losses"),
+  leaderboardSolGain: decimal("leaderboard_sol_gain", { precision: 10, scale: 2 }),
+  leaderboardUsdGain: decimal("leaderboard_usd_gain", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -330,6 +344,11 @@ export const insertMarketMetadataSchema = createInsertSchema(marketMetadata).omi
   createdAt: true,
 });
 
+export const insertManualResolutionQueueSchema = createInsertSchema(manualResolutionQueue).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Parlay insert schemas
 export const insertParlayTicketSchema = createInsertSchema(parlayTickets).omit({
   id: true,
@@ -376,6 +395,8 @@ export type FollowerCacheEntry = typeof followerCache.$inferSelect;
 
 export type InsertMarketMetadata = z.infer<typeof insertMarketMetadataSchema>;
 export type MarketMetadata = typeof marketMetadata.$inferSelect;
+export type InsertManualResolutionQueue = z.infer<typeof insertManualResolutionQueueSchema>;
+export type ManualResolutionQueueItem = typeof manualResolutionQueue.$inferSelect;
 
 export type InsertParlayTicket = z.infer<typeof insertParlayTicketSchema>;
 export type ParlayTicket = typeof parlayTickets.$inferSelect;
