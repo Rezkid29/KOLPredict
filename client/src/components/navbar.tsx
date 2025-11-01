@@ -23,7 +23,8 @@ interface Notification {
   type: string;
   title: string;
   message: string;
-  isRead: boolean;
+  data?: string | null;
+  read: boolean;
   createdAt: string;
 }
 
@@ -51,14 +52,41 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      return await apiRequest(`/api/notifications/${notificationId}/read`, "POST");
+      await apiRequest("PUT", `/api/notifications/${notificationId}/read`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      await apiRequest("DELETE", `/api/notifications/${notificationId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", "/api/notifications/read-all");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const clearNotificationsMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/notifications");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -205,10 +233,38 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
               <div className="p-3 border-b border-border">
-                <p className="font-semibold">Notifications</p>
-                {unreadCount > 0 && (
-                  <p className="text-xs text-muted-foreground">{unreadCount} unread</p>
-                )}
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">Notifications</p>
+                    {unreadCount > 0 && (
+                      <p className="text-xs text-muted-foreground">{unreadCount} unread</p>
+                    )}
+                  </div>
+                  {notifications.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => markAllAsReadMutation.mutate()}
+                        disabled={markAllAsReadMutation.isPending}
+                        data-testid="button-mark-all-read"
+                      >
+                        Mark all
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => clearNotificationsMutation.mutate()}
+                        disabled={clearNotificationsMutation.isPending}
+                        data-testid="button-clear-notifications"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
               <ScrollArea className="max-h-96">
                 {notifications.length === 0 ? (
@@ -221,7 +277,7 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
                     {notifications.slice(0, 10).map((notification) => (
                       <DropdownMenuItem
                         key={notification.id}
-                        className={`p-3 cursor-pointer ${!notification.isRead ? "bg-primary/5" : ""}`}
+                        className={`p-3 cursor-pointer ${!notification.read ? "bg-primary/5" : ""}`}
                         onClick={() => markAsReadMutation.mutate(notification.id)}
                         data-testid={`notification-${notification.id}`}
                       >
@@ -232,9 +288,21 @@ export function Navbar({ balance = 1000, username, walletRef, userBadgeRef, tour
                             {format(new Date(notification.createdAt), "MMM d, h:mm a")}
                           </p>
                         </div>
-                        {!notification.isRead && (
+                        {!notification.read && (
                           <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 ml-2" />
                         )}
+                        <button
+                          type="button"
+                          className="ml-3 text-xs text-muted-foreground hover:text-destructive"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteNotificationMutation.mutate(notification.id);
+                          }}
+                          disabled={deleteNotificationMutation.isPending}
+                          data-testid={`notification-${notification.id}-clear`}
+                        >
+                          Clear
+                        </button>
                       </DropdownMenuItem>
                     ))}
                   </div>

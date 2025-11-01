@@ -210,8 +210,10 @@ export interface IStorage {
   // Notifications
   createNotification(notification: InsertNotification): Promise<Notification>;
   getUserNotifications(userId: string, limit?: number): Promise<Notification[]>;
-  markNotificationAsRead(notificationId: string): Promise<void>;
+  markNotificationAsRead(notificationId: string, userId: string): Promise<void>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(notificationId: string, userId: string): Promise<void>;
+  clearNotifications(userId: string): Promise<void>;
   getUnreadNotificationCount(userId: string): Promise<number>;
 
   // FAQs
@@ -1541,11 +1543,19 @@ export class MemStorage implements IStorage {
     throw new Error("MemStorage social methods not implemented - use DbStorage");
   }
 
-  async markNotificationAsRead(notificationId: string): Promise<void> {
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<void> {
     throw new Error("MemStorage social methods not implemented - use DbStorage");
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async deleteNotification(notificationId: string, userId: string): Promise<void> {
+    throw new Error("MemStorage social methods not implemented - use DbStorage");
+  }
+
+  async clearNotifications(userId: string): Promise<void> {
     throw new Error("MemStorage social methods not implemented - use DbStorage");
   }
 

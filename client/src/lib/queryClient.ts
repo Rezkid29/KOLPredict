@@ -20,6 +20,7 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: RequestInit,
 ): Promise<Response> {
   // For POST/PATCH requests, include userId in body
   let finalData = data;
@@ -35,6 +36,7 @@ export async function apiRequest(
     headers: finalData ? { "Content-Type": "application/json" } : {},
     body: finalData ? JSON.stringify(finalData) : undefined,
     credentials: "include",
+    ...options,
   });
 
   await throwIfResNotOk(res);

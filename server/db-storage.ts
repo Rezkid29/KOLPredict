@@ -1897,12 +1897,35 @@ export class DbStorage implements IStorage {
       .limit(limit);
   }
 
-  async markNotificationAsRead(notificationId: string): Promise<void> {
-    await db.update(notifications).set({ read: true }).where(eq(notifications.id, notificationId));
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<void> {
+    const result = await db
+      .update(notifications)
+      .set({ read: true })
+      .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+      .returning({ id: notifications.id });
+
+    if (result.length === 0) {
+      throw new NotFoundError("Notification not found");
+    }
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
     await db.update(notifications).set({ read: true }).where(eq(notifications.userId, userId));
+  }
+
+  async deleteNotification(notificationId: string, userId: string): Promise<void> {
+    const result = await db
+      .delete(notifications)
+      .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+      .returning({ id: notifications.id });
+
+    if (result.length === 0) {
+      throw new NotFoundError("Notification not found");
+    }
+  }
+
+  async clearNotifications(userId: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.userId, userId));
   }
 
   async getUnreadNotificationCount(userId: string): Promise<number> {

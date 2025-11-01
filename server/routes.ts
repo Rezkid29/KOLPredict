@@ -3142,15 +3142,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ message: "Notification ID is required" });
       }
 
-      // Verify the notification belongs to the authenticated user
-      const userNotifications = await storage.getUserNotifications(userId);
-      const notification = userNotifications.find(n => n.id === id);
-
-      if (!notification) {
-        return res.status(403).json({ message: "You do not have permission to mark this notification as read" });
-      }
-
-      await storage.markNotificationAsRead(id);
+      await storage.markNotificationAsRead(id, userId);
       res.json({ message: "Notification marked as read" });
     } catch (error) {
       console.error("Error marking notification as read:", error);
@@ -3185,6 +3177,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId!;
+
+      if (!id) {
+        return res.status(400).json({ message: "Notification ID is required" });
+      }
+
+      await storage.deleteNotification(id, userId);
+      res.json({ message: "Notification deleted" });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
+
+  app.delete("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+
+      await storage.clearNotifications(userId);
+      res.json({ message: "Notifications cleared" });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+
+      res.status(500).json({ message: "Failed to clear notifications" });
     }
   });
 
