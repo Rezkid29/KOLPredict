@@ -1,10 +1,11 @@
-import { dbStorage as storage } from "./db-storage";
+import { dbStorage as storage, type MarketWithKol as Market, type Kol, type ScrapedKol } from "./db-storage";
+import { metricsUpdater } from "./metrics-updater";
 import { socialMediaClient } from "./social-api-client";
 import { xApiClient } from "./x-api-client";
 import { KOLScraperV2 } from "./kol-scraper-v2";
 import { KOLDataParser, type RawKOLData } from "./kol-data-parser";
 import { logResolutionEvent, newRunId } from "./logger";
-import type { Market, Bet, Kol, ScrapedKol } from "@shared/schema";
+import type { Bet } from "@shared/schema";
 
 export interface MarketResolution {
   marketId: string;
@@ -177,6 +178,31 @@ export class MarketResolver {
 
       const now = new Date();
 
+      // Env-configurable pre-scrape window and freshness thresholds
+      const PRE_SCRAPE_WINDOW_MINUTES = parseInt(process.env.PRE_SCRAPE_WINDOW_MINUTES || "2", 10);
+      const FRESHNESS_MAX_AGE_MINUTES = parseInt(process.env.FRESHNESS_MAX_AGE_MINUTES || "10", 10);
+      const preScrapeCutoff = new Date(now.getTime() + PRE_SCRAPE_WINDOW_MINUTES * 60 * 1000);
+
+      // Determine if any markets are expiring very soon or already expired and pending
+      const needsPreScrape = markets.some((m) => {
+        if (!m.resolvesAt) return false;
+        const ra = new Date(m.resolvesAt);
+        if (isNaN(ra.getTime())) return false;
+        return m.isLive === true && m.outcome === "pending" && ra <= preScrapeCutoff;
+      });
+
+      if (needsPreScrape) {
+        try {
+          console.log("Pre-scraping KOL metrics before market resolution window...");
+          await metricsUpdater.updateAllKolMetrics();
+          console.log("Pre-scrape completed.");
+        } catch (e) {
+          console.warn("Pre-scrape failed; proceeding with best available data:", e);
+        }
+      }
+
+      let staleCount = 0;
+      let fallbackCount = 0;
       for (const market of markets) {
         try {
           // Validate market data
@@ -195,6 +221,30 @@ export class MarketResolver {
 
           if (market.isLive && market.outcome === "pending" && resolvesAt <= now) {
             console.log(`Resolving market: ${market.title} (${market.id})`);
+
+            // Per-market freshness fallback: if KOL data is stale, attempt single refresh
+            if (market.kol && market.kol.lastScrapedAt) {
+              const ageMs = now.getTime() - new Date(market.kol.lastScrapedAt).getTime();
+              const ageMin = Math.floor(ageMs / 60000);
+              if (ageMin > FRESHNESS_MAX_AGE_MINUTES) {
+                staleCount++;
+                try {
+                  const latest = await socialMediaClient.fetchKolMetrics(market.kol);
+                  if (latest) {
+                    await storage.updateKol(market.kol.id, {
+                      followers: latest.followers,
+                      engagementRate: latest.engagementRate.toString(),
+                      trending: latest.trending,
+                      trendingPercent: latest.trendingPercent?.toString() || null,
+                      lastScrapedAt: new Date(),
+                    });
+                    fallbackCount++;
+                  }
+                } catch (e) {
+                  console.warn(`Fallback refresh failed for KOL ${market.kol.id}:`, e);
+                }
+              }
+            }
 
             const resolution = await this.resolveMarket(market);
             if (resolution) {
@@ -217,6 +267,16 @@ export class MarketResolver {
       if (resolutions.length > 0) {
         console.log(`Market resolution completed: ${successCount} successful, ${failureCount} failed`);
         this.consecutiveFailures = 0;
+        logResolutionEvent({
+          type: 'RESOLUTION_RUN_SUMMARY',
+          runId,
+          resolved: successCount,
+          failed: failureCount,
+          staleCount,
+          fallbackCount,
+          preScrapeWindowMinutes: PRE_SCRAPE_WINDOW_MINUTES,
+          freshnessMaxAgeMinutes: FRESHNESS_MAX_AGE_MINUTES,
+        } as any);
       } else {
         console.log("No markets ready for resolution");
       }
@@ -1175,12 +1235,68 @@ export class MarketResolver {
     if (this.resolutionInterval) {
       clearInterval(this.resolutionInterval);
       this.resolutionInterval = null;
-      console.log("Auto-resolution stopped");
     }
   }
 
-  isAutoResolutionRunning(): boolean {
-    return this.resolutionInterval !== null;
+  // Safety net: ensure no market remains live and pending far past its resolve time.
+  async runSafetyNet(): Promise<void> {
+    try {
+      const overdueMinutes = parseInt(process.env.RESOLUTION_OVERDUE_CANCEL_MINUTES || "15", 10);
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - overdueMinutes * 60 * 1000);
+
+      let markets: Market[];
+      try {
+        markets = await storage.getAllMarketsWithKols();
+      } catch (error) {
+        console.error("SafetyNet: failed to load markets", error);
+        return;
+      }
+
+      const candidates = markets.filter((m) => {
+        if (!m.resolvesAt) return false;
+        const ra = new Date(m.resolvesAt);
+        if (isNaN(ra.getTime())) return false;
+        return m.isLive === true && m.outcome === 'pending' && ra < cutoff;
+      });
+
+      if (candidates.length === 0) return;
+
+      let resolved = 0;
+      let cancelled = 0;
+      for (const m of candidates) {
+        try {
+          const resolution = await this.resolveMarket(m);
+          if (resolution) {
+            resolved++;
+            continue;
+          }
+        } catch (e) {
+          // fall through to cancel/refund
+        }
+
+        try {
+          await storage.cancelMarket(m.id, `SafetyNet: overdue > ${overdueMinutes} min without successful resolution`);
+          await storage.refundMarket(m.id);
+          cancelled++;
+        } catch (e) {
+          console.error(`SafetyNet: failed to cancel/refund market ${m.id}`, e);
+        }
+      }
+
+      if (resolved > 0 || cancelled > 0) {
+        logResolutionEvent({
+          type: 'SAFETY_NET_SUMMARY',
+          overdueMinutes,
+          inspected: candidates.length,
+          resolved,
+          cancelled,
+        } as any);
+        console.log(`SafetyNet: inspected=${candidates.length} resolved=${resolved} cancelled=${cancelled}`);
+      }
+    } catch (error) {
+      console.error("SafetyNet: unexpected error", error);
+    }
   }
 
   async resolveAllMarkets(): Promise<MarketResolution[]> {

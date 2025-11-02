@@ -6,6 +6,7 @@ import { insertUserSchema } from "@shared/schema";
 import { seed } from "./seed";
 import { metricsUpdater } from "./metrics-updater";
 import { marketResolver } from "./market-resolver";
+import { metrics, metricsHandler } from "./metrics";
 import { socialMediaClient } from "./social-api-client";
 import { verifySolanaSignature, validateAuthMessage } from "./solana-auth";
 import { solanaWallet } from "./solana-wallet";
@@ -68,6 +69,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.error("Error broadcasting message:", error);
     }
   };
+
+  // Prometheus metrics endpoint
+  app.get("/metrics", metricsHandler);
 
   // Manual review queue - list unresolved items
   app.get("/api/admin/manual-review", async (req, res) => {
@@ -1634,6 +1638,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             resolution,
           });
         }
+        metrics.resolutionResolvedTotal.inc();
       }
 
       res.json({
@@ -1848,7 +1853,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       if (wasAutoResolutionRunning) {
-        marketResolver.startAutoResolution(5);
+        marketResolver.startAutoResolution(1);
         console.log('▶️  Auto-resolution resumed (5-minute intervals continue)');
       }
 
@@ -3389,9 +3394,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.log("Starting automatic KOL metrics updates...");
     metricsUpdater.startAutoUpdate(30);
 
-    // Start automatic market resolution every 5 minutes
+    // Start automatic market resolution every 1 minute for near-real-time settlement
     console.log("Starting automatic market resolution...");
-    marketResolver.startAutoResolution(5);
+    marketResolver.startAutoResolution(1);
+
+    // Start safety-net to handle overdue markets
+    console.log("Starting market resolution safety-net...");
+    setInterval(() => {
+      marketResolver.runSafetyNet();
+    }, 60 * 1000);
 
     // Start daily scheduler for scraping and market generation
     console.log("Starting daily scheduler...");
